@@ -1,0 +1,9 @@
+<IfModule mod_mime.c>
+    AddType application/octet-stream .shard1
+    AddType application/octet-stream .shard2
+    AddType application/json .json
+</IfModule>
+<IfModule mod_headers.c>
+    Header set Access-Control-Allow-Origin "*"
+    Header set Access-Control-Allow-Methods "GET, OPTIONS"
+</IfModule>
