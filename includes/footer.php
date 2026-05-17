@@ -202,9 +202,20 @@ window.getAiResponse = function(q) {
 </script>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<!-- SweetAlert2 for modern popups -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
 <!-- Face API library for Web-based Face Recognition -->
 <script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
 <script defer src="<?php echo htmlspecialchars(asset_url('js/face_recognition.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
 <script defer src="<?php echo htmlspecialchars(asset_url('js/main.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
+<script defer src="<?php echo htmlspecialchars(asset_url('js/cards.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
+<script defer src="<?php echo htmlspecialchars(asset_url('js/ratings.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    if (document.getElementById('lang-switcher-header')) {
+        renderLangSwitcher('lang-switcher-header');
+    }
+});
+</script>
 </body>
 </html>

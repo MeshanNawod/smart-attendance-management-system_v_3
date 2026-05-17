@@ -7,6 +7,8 @@
 require '../includes/auth.php';
 require '../includes/db.php';
 
+requireCsrfIfMutating();
+
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 

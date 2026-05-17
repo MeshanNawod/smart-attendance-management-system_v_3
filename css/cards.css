@@ -1,0 +1,293 @@
+/* ================================================================
+   CARDS.CSS — Dashboard Card Components
+   Palette: Maroon #a11e17 | Gold #fcd40d | White #ffffff
+   ================================================================ */
+
+/* ─── STAT CARD VARIATIONS ──────────────────────────────────────── */
+/* Base .stat-card and .card are defined in style.css (single source of truth) */
+
+/* Maroon stat card */
+.stat-card-maroon {
+  background: linear-gradient(135deg, #a11e17 0%, #8b1510 100%);
+  box-shadow: 0 8px 24px rgba(161,30,23,0.22);
+}
+.stat-card-maroon:hover {
+  box-shadow: 0 14px 32px rgba(161,30,23,0.30);
+}
+
+/* Gold stat card */
+.stat-card-gold {
+  background: linear-gradient(135deg, #fcd40d 0%, #e8c00c 100%);
+  box-shadow: 0 8px 24px rgba(252,212,13,0.28);
+}
+.stat-card-gold:hover {
+  box-shadow: 0 14px 32px rgba(252,212,13,0.38);
+}
+
+/* White stat card */
+.stat-card-white {
+  background: #ffffff;
+  border: 1.5px solid #f0e8e8;
+  box-shadow: 0 4px 16px rgba(161,30,23,0.06);
+}
+
+/* Decorative blob */
+.stat-blob {
+  position: absolute;
+  right: -24px;
+  bottom: -24px;
+  width: 110px;
+  height: 110px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0.08;
+  background: #fff;
+}
+
+.stat-blob-sm {
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  width: 55px;
+  height: 55px;
+  border-radius: 50%;
+  pointer-events: none;
+  opacity: 0.08;
+  background: #fff;
+}
+
+/* Stat icon circle */
+.stat-icon-circle {
+  width: 58px;
+  height: 58px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.stat-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 1.3px;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+
+.stat-value {
+  font-size: 2.2rem;
+  font-weight: 800;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -1px;
+}
+
+.stat-sub {
+  font-size: 0.72rem;
+  margin-top: 4px;
+  opacity: 0.55;
+}
+
+/* ─── SIDEBAR CARD HEADERS ───────────────────────────────────── */
+.card-header-maroon {
+  background: linear-gradient(135deg, #a11e17 0%, #8b1510 100%);
+  border-bottom: none;
+  padding: 0.55rem 0.85rem;
+  border-radius: 12px 12px 0 0;
+}
+
+.card-header-gold {
+  background: linear-gradient(135deg, #fcd40d 0%, #e8c00c 100%);
+  border-bottom: none;
+  padding: 0.55rem 0.85rem;
+  border-radius: 12px 12px 0 0;
+}
+
+.card-header-dark {
+  background: linear-gradient(135deg, #1e293b 0%, #2d3a4a 100%);
+  border-bottom: none;
+  padding: 0.55rem 0.85rem;
+  border-radius: 12px 12px 0 0;
+}
+
+.card-header-gold {
+  background: linear-gradient(135deg, #ffd30a 0%, #e6b800 100%);
+  border-bottom: none;
+  padding: 0.55rem 0.85rem;
+  border-radius: 12px 12px 0 0;
+}
+
+/* ─── LIVE LOGS CARD ─────────────────────────────────────────── */
+.logs-card {
+  border-radius: 12px;
+  border: 1.5px solid #f0e8e8;
+  box-shadow: 0 4px 16px rgba(161,30,23,0.06);
+  overflow: visible;
+}
+.logs-card .table-responsive {
+  border-radius: 0 0 12px 12px;
+}
+
+.logs-card-header {
+  background: #fff;
+  border-bottom: 1.5px solid #f0e8e8;
+  padding: 0.6rem 1rem;
+}
+
+.logs-filter-bar {
+  background: #fdf8f8;
+  border-bottom: 1px solid #f0e8e8;
+  padding: 0.5rem 0.75rem;
+}
+
+.logs-filter-bar .form-control,
+.logs-filter-bar .form-select {
+  font-size: 0.82rem;
+  border-color: #e0d0d0;
+  border-radius: 7px;
+}
+
+.logs-filter-bar .form-control:focus,
+.logs-filter-bar .form-select:focus {
+  border-color: rgba(161,30,23,0.4);
+  box-shadow: 0 0 0 3px rgba(161,30,23,0.08);
+}
+
+.logs-body {
+  max-height: 65vh;
+  min-height: 300px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: #fff;
+}
+
+/* ─── SIDEBAR CARD ───────────────────────────────────────────── */
+.sidebar-card {
+  border-radius: 12px;
+  border: none;
+  margin-bottom: 12px;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(161,30,23,0.07);
+}
+
+.sidebar-card .card-body {
+  padding: 0.75rem;
+  background: #fff;
+}
+
+/* ─── SECTION LABEL ──────────────────────────────────────────── */
+.section-label {
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.9px;
+  color: #64748b;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.section-label i {
+  color: #a11e17;
+}
+
+/* ─── ACTION BUTTONS ─────────────────────────────────────────── */
+.btn-maroon {
+  background: linear-gradient(135deg, #a11e17, #8b1510);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(161,30,23,0.25);
+  transition: box-shadow 150ms ease, transform 150ms ease;
+}
+.btn-maroon:hover {
+  box-shadow: 0 4px 14px rgba(161,30,23,0.35);
+  transform: translateY(-1px);
+  color: #fff;
+}
+
+.btn-gold {
+  background: linear-gradient(135deg, #fcd40d, #e8c00c);
+  color: #1e293b;
+  border: none;
+  border-radius: 8px;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(252,212,13,0.25);
+  transition: box-shadow 150ms ease, transform 150ms ease;
+}
+.btn-gold:hover {
+  box-shadow: 0 4px 14px rgba(252,212,13,0.4);
+  transform: translateY(-1px);
+  color: #1e293b;
+}
+
+.btn-outline-maroon {
+  border: 1.5px solid #a11e17;
+  color: #a11e17;
+  background: transparent;
+  border-radius: 8px;
+  font-weight: 600;
+  transition: background 150ms ease, color 150ms ease;
+}
+.btn-outline-maroon:hover {
+  background: #a11e17;
+  color: #fff;
+}
+
+/* ─── SECTION DIVIDER ────────────────────────────────────────── */
+.section-divider {
+  height: 1px;
+  background: linear-gradient(90deg, rgba(161,30,23,0.1), transparent);
+  margin: 8px 0;
+}
+
+/* ─── DEVICE SELECTOR PANEL ──────────────────────────────────── */
+.device-panel {
+  background: #fdf8f8;
+  border: 1px solid #f0e8e8;
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  margin-bottom: 10px;
+}
+
+/* ─── TIMER DISPLAY ──────────────────────────────────────────── */
+.timer-display {
+  background: #fff8f8;
+  border: 1px dashed rgba(161,30,23,0.3);
+  border-radius: 8px;
+  padding: 5px 8px;
+  font-size: 0.78rem;
+}
+
+/* ─── CONFIG PANEL ───────────────────────────────────────────── */
+.config-panel {
+  background: #f8fafc;
+  border: 1px solid #e8ecf0;
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+}
+
+/* ─── BADGE ACTIVE LECTURE ───────────────────────────────────── */
+.badge-gold {
+  background: #fcd40d;
+  color: #1e293b;
+  font-weight: 700;
+  border-radius: 20px;
+}
+
+/* ─── STAT CARD HOVER RIPPLE ─────────────────────────────────── */
+@keyframes cardRipple {
+  from { transform: scale(0.95); opacity: 0.6; }
+  to   { transform: scale(1.1);  opacity: 0; }
+}
+
+.stat-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+}

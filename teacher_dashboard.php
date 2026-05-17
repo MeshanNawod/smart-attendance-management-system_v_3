@@ -1,6 +1,7 @@
 <?php
 require_once 'includes/auth.php';
 require_once 'includes/db.php';
+require_once 'includes/helpers.php';
 
 if (!isTeacher()) {
     if (isAdmin()) { header('Location: index.php'); exit; }
@@ -29,9 +30,7 @@ try {
             $department = $tInfo['department'] ?? '';
             $teacherEmail = $tInfo['email'] ?? '';
             $phone = $tInfo['phone'] ?? '';
-            $nameForInitials = preg_replace('/^(Prof|Dr|Mr|Mrs|Ms|Sir|Madam)\.?\s*/i', '', trim($teacherName));
-            $parts = explode(' ', $nameForInitials);
-            $initials = strtoupper(substr($parts[0], 0, 1) . (isset($parts[1]) ? substr($parts[1], 0, 1) : ''));
+            $initials = getInitials($teacherName);
             if (!empty($tInfo['profile_photo']) && file_exists(__DIR__ . '/' . $tInfo['profile_photo'])) {
                 $profilePhoto = '/' . $tInfo['profile_photo'];
             }
@@ -56,15 +55,7 @@ try {
 } catch (PDOException $e) {
     $myCourses = [];
     $discoveredDevices = [];
-    $cleanName = preg_replace('/^(Prof|Dr|Mr|Mrs|Ms|Sir|Madam)\.?\s*/i', '', trim($teacherName));
-    $p2 = explode(' ', $cleanName);
-    $initials = strtoupper(substr($p2[0], 0, 1) . (isset($p2[1]) ? substr($p2[1], 0, 1) : ''));
-} catch (PDOException $e) {
-    $myCourses = [];
-    $discoveredDevices = [];
-    $cleanName = preg_replace('/^(Prof|Dr|Mr|Mrs|Ms|Sir|Madam)\.?\s*/i', '', trim($teacherName));
-    $p2 = explode(' ', $cleanName);
-    $initials = strtoupper(substr($p2[0], 0, 1) . (isset($p2[1]) ? substr($p2[1], 0, 1) : ''));
+    $initials = getInitials($teacherName);
 }
 
 $csrf = $_SESSION['csrf_token'] ?? '';
@@ -90,31 +81,30 @@ $editAvatarHtml = $profilePhoto
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     <link rel="stylesheet" href="<?php echo htmlspecialchars(asset_url('css/style.css'), ENT_QUOTES, 'UTF-8'); ?>">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(asset_url('css/tables.css'), ENT_QUOTES, 'UTF-8'); ?>">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(asset_url('css/cards.css'), ENT_QUOTES, 'UTF-8'); ?>">
     <style>
-        body { background: #f8fafc; }
-        .teacher-hero { background: linear-gradient(135deg, #1e40af 0%, #3b82f6 50%, #60a5fa 100%); border-radius: 20px !important; color: #fff; position: relative; overflow: hidden; }
-        .teacher-hero::before { content: ''; position: absolute; top: -50%; right: -20%; width: 400px; height: 400px; background: rgba(255,255,255,0.06); border-radius: 50% !important; }
-        .teacher-hero::after { content: ''; position: absolute; bottom: -30%; left: -10%; width: 300px; height: 300px; background: rgba(255,255,255,0.04); border-radius: 50% !important; }
-        .avatar-ring { width: 80px; height: 80px; border-radius: 50% !important; overflow: hidden !important; padding: 3px; background: rgba(255,255,255,0.3); position: relative; cursor: pointer; }
-        .avatar-ring img { width: 100%; height: 100%; border-radius: 50% !important; object-fit: cover; border: 2px solid #fff; }
-        .avatar-ring .initials-avatar { width: 100%; height: 100%; border-radius: 50% !important; background: rgba(255,255,255,0.9); display: flex; align-items: center; justify-content: center; font-size: 1.6rem; font-weight: 800; color: #1e40af; border: 2px solid #fff; }
-        .avatar-ring .cam-overlay { position: absolute; bottom: 0; right: 0; width: 26px; height: 26px; background: #fff; border-radius: 50% !important; display: flex; align-items: center; justify-content: center; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
-        .avatar-ring .cam-overlay i { font-size: 12px; color: #1e40af; }
-        .stat-card { border-radius: 16px !important; overflow: hidden !important; border: 1px solid #e2e8f0; background: #fff; transition: transform 0.2s, box-shadow 0.2s; }
-        .stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.06); }
-        .stat-select { border-radius: 50px !important; }
-        .ls-wide { letter-spacing: 0.04em; }
-        .start-hero { border-radius: 16px !important; overflow: hidden !important; border: 2px solid #e2e8f0; background: #fff; }
-        .start-hero:focus-within { border-color: #3b82f6; box-shadow: 0 4px 16px rgba(59,130,246,0.1); }
-        .log-row { border-bottom: 1px solid #f1f5f9; padding: 0.6rem 0; }
+        body { background: #fdfdfd; }
+        .teacher-hero { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; color: #1e293b; }
+        .avatar-ring { width: 70px; height: 70px; border-radius: 50%; overflow: hidden; padding: 2px; background: #e2e8f0; position: relative; cursor: pointer; }
+        .avatar-ring img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; border: 2px solid #fff; }
+        .avatar-ring .initials-avatar { width: 100%; height: 100%; border-radius: 50%; background: #f8fafc; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; font-weight: 600; color: #a11e17; border: 2px solid #fff; }
+        .avatar-ring .cam-overlay { position: absolute; bottom: 0; right: 0; width: 22px; height: 22px; background: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; border: 1px solid #e2e8f0; }
+        .avatar-ring .cam-overlay i { font-size: 10px; color: #64748b; }
+        .stat-select { border-radius: 4px; border: 1px solid #e2e8f0; }
+        .ls-wide { letter-spacing: 0.02em; }
+        .start-hero { border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; background: #fff; position: relative; }
+        .start-hero h5 { color: #1e293b; }
+        #btn-start { background: #a11e17; border: none; border-radius: 4px; }
+        #btn-start:hover { background: #8b1510; }
+        .log-row { border-bottom: 1px solid #f8fafc; padding: 0.6rem 0; }
         .log-row:last-child { border-bottom: none; }
-        .course-item { border-radius: 14px !important; overflow: hidden !important; border: 1px solid #e2e8f0; background: #fff; }
-        .course-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.06); }
-        .course-item .progress { border-radius: 50px !important; overflow: hidden; }
-        .course-item .progress-bar { border-radius: 50px !important; }
-        .nav-tabs .nav-link { border: none; color: #64748b; font-weight: 600; padding: 0.75rem 1.25rem; }
-        .nav-tabs .nav-link.active { color: #1e40af; border-bottom: 3px solid #1e40af; background: transparent; }
-        .badge-pill { border-radius: 50px !important; }
+        .course-item { border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; background: #fff; }
+        .course-item .progress { border-radius: 4px; overflow: hidden; }
+        .course-item .progress-bar { border-radius: 4px; }
+        .nav-tabs .nav-link { border: none; color: #64748b; font-weight: 500; padding: 0.75rem 1rem; border-radius: 0; }
+        .nav-tabs .nav-link.active { color: #a11e17; border-bottom: 2px solid #a11e17; background: transparent; }
+        .badge-pill { border-radius: 4px; }
         #ai-assistant-container { display: none !important; }
     </style>
 </head>
@@ -138,63 +128,88 @@ $editAvatarHtml = $profilePhoto
             <?php if ($department): ?> &bull; <i class="bi bi-building me-1"></i><?php echo htmlspecialchars($department); ?><?php endif; ?>
             <?php if ($phone): ?> &bull; <i class="bi bi-telephone me-1"></i><?php echo htmlspecialchars($phone); ?><?php endif; ?></p>
         </div>
-        <div class="col-auto">
-            <button class="btn btn-sm btn-outline-light rounded-pill px-3" data-bs-toggle="modal" data-bs-target="#editModal"><i class="bi bi-pencil me-1"></i>Edit Profile</button>
+        <div class="col-auto text-end">
+            <div class="mb-2">
+                <strong class="clock-time" id="teacher-clock" style="font-size:1.5rem;font-variant-numeric:tabular-nums;">--:--:--</strong>
+                <br><span class="text-muted small" id="teacher-date">---</span>
+            </div>
+            <button class="btn btn-sm btn-outline-secondary rounded px-3" data-bs-toggle="modal" data-bs-target="#editModal"><i class="bi bi-pencil me-1"></i>Edit Profile</button>
         </div>
     </div>
 </div>
 
+<script>
+function updateTeacherClock() {
+    var now = new Date();
+    document.getElementById('teacher-clock').textContent = now.toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+    document.getElementById('teacher-date').textContent = now.toLocaleDateString('en-GB', {weekday:'long',day:'numeric',month:'long',year:'numeric'});
+}
+updateTeacherClock();
+setInterval(updateTeacherClock, 1000);
+</script>
+
 <div class="row g-3 mb-4">
     <div class="col-md-4">
-        <div class="stat-card p-3 h-100">
+        <div class="stat-card bg-primary bg-gradient text-white h-100 shadow p-4 d-flex flex-column justify-content-center position-relative">
             <div class="d-flex align-items-center gap-3">
-                <div class="rounded-circle bg-primary bg-opacity-10 p-3"><i class="bi bi-journal-bookmark text-primary fs-4"></i></div>
+                <div class="rounded-circle bg-white bg-opacity-25 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 64px; height: 64px;">
+                    <i class="bi bi-journal-bookmark-fill fs-2"></i>
+                </div>
                 <div>
-                    <div class="text-muted small text-uppercase fw-semibold ls-wide">My Courses</div>
-                    <div class="display-6 fw-bold mb-0"><?php echo count($myCourses); ?></div>
+                    <h6 class="text-uppercase fw-semibold mb-1 opacity-75 tracking-wide ls-wide" style="font-size: 0.75rem;">My Courses</h6>
+                    <h2 class="display-5 fw-bolder mb-0"><?php echo count($myCourses); ?></h2>
                 </div>
             </div>
         </div>
     </div>
     <div class="col-md-4">
-        <div class="stat-card p-3 h-100">
+        <div class="stat-card bg-white h-100 shadow border-0 p-4 d-flex flex-column justify-content-center position-relative">
+            <div class="position-absolute top-0 end-0 mt-3 me-3">
+                <select id="filter-student-course" class="form-select form-select-sm text-muted fw-bold shadow-sm select-transparent" style="width:auto; max-width:130px; border:1px solid #e2e8f0; border-radius:50px; font-size: 0.7rem; padding-top: 0.1rem; padding-bottom: 0.1rem;" onchange="refreshStats()">
+                    <option value="">All Courses</option>
+                    <?php foreach ($myCourses as $c): ?>
+                    <option value="<?php echo htmlspecialchars($c['course_code']); ?>"><?php echo htmlspecialchars($c['course_code']); ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
             <div class="d-flex align-items-center gap-3">
-                <div class="rounded-circle bg-success bg-opacity-10 p-3"><i class="bi bi-people text-success fs-4"></i></div>
+                <div class="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0" style="width: 64px; height: 64px; background: rgba(255,211,10,0.15);">
+                    <i class="bi bi-people-fill fs-2" style="color:#ffd30a;"></i>
+                </div>
                 <div>
-                    <div class="text-muted small text-uppercase fw-semibold ls-wide">Total Students</div>
-                    <div class="display-6 fw-bold mb-0" id="stat-students">—</div>
+                    <h6 class="text-uppercase fw-semibold mb-1 text-secondary tracking-wide ls-wide" style="font-size: 0.75rem;">Total Students</h6>
+                    <h2 class="display-5 fw-bolder mb-0 text-dark" id="stat-students">—</h2>
                 </div>
             </div>
-            <select id="filter-student-course" class="form-select form-select-sm mt-2 stat-select border-secondary" onchange="refreshStats()">
-                <option value="">All Courses</option>
-                <?php foreach ($myCourses as $c): ?>
-                <option value="<?php echo htmlspecialchars($c['course_code']); ?>"><?php echo htmlspecialchars($c['course_code']); ?></option>
-                <?php endforeach; ?>
-            </select>
         </div>
     </div>
     <div class="col-md-4">
-        <div class="stat-card p-3 h-100">
+        <div class="stat-card h-100 shadow p-4 d-flex flex-column justify-content-center position-relative" style="background:linear-gradient(135deg,#ffd30a,#e6b800);">
+            <div class="position-absolute top-0 end-0 mt-3 me-3">
+                <select id="filter-today-course" class="form-select form-select-sm text-dark fw-bold shadow-none select-transparent" style="width:auto; max-width:130px; border:1px solid #e2e8f0; border-radius:4px; font-size: 0.7rem; padding-top: 0.1rem; padding-bottom: 0.1rem;" onchange="refreshStats()">
+                    <option value="" class="text-dark">All Courses</option>
+                    <?php foreach ($myCourses as $c): ?>
+                    <option value="<?php echo htmlspecialchars($c['course_code']); ?>" class="text-dark"><?php echo htmlspecialchars($c['course_code']); ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
             <div class="d-flex align-items-center gap-3">
-                <div class="rounded-circle bg-info bg-opacity-10 p-3"><i class="bi bi-calendar-check text-info fs-4"></i></div>
+                <div class="rounded-circle bg-white bg-opacity-25 d-flex align-items-center justify-content-center flex-shrink-0" style="width: 64px; height: 64px;">
+                    <i class="bi bi-calendar-check-fill fs-2"></i>
+                </div>
                 <div>
-                    <div class="text-muted small text-uppercase fw-semibold ls-wide">Today's Scans</div>
-                    <div class="display-6 fw-bold mb-0" id="stat-today">—</div>
+                    <h6 class="text-uppercase fw-semibold mb-1 opacity-75 tracking-wide ls-wide" style="font-size: 0.75rem;">Today's Scans</h6>
+                    <h2 class="display-5 fw-bolder mb-0" id="stat-today">—</h2>
                 </div>
             </div>
-            <select id="filter-today-course" class="form-select form-select-sm mt-2 stat-select border-secondary" onchange="refreshStats()">
-                <option value="">All Courses</option>
-                <?php foreach ($myCourses as $c): ?>
-                <option value="<?php echo htmlspecialchars($c['course_code']); ?>"><?php echo htmlspecialchars($c['course_code']); ?></option>
-                <?php endforeach; ?>
-            </select>
         </div>
     </div>
 </div>
 
 <div class="text-center mb-4">
     <div class="start-hero p-4 d-inline-block" style="min-width: 500px; max-width: 700px; width: 100%;">
-        <h5 class="fw-bold text-primary mb-3"><i class="bi bi-broadcast me-2"></i>Start Lecture Session</h5>
+        <h5 class="fw-bold mb-1"><i class="bi bi-broadcast me-2"></i>Start Lecture Session</h5>
+        <p class="text-muted small mb-3" style="font-size:0.78rem;">University of Peradeniya &mdash; Attendance broadcasting to hardware nodes</p>
         <div class="row g-2 align-items-center justify-content-center">
             <div class="col-sm-4">
                 <label class="form-label small fw-semibold text-muted mb-1">Course</label>
@@ -225,8 +240,8 @@ $editAvatarHtml = $profilePhoto
                 <input type="number" id="start-timer-custom" class="form-control form-control-sm mt-1" placeholder="Minutes" min="1" max="480" style="display:none;">
             </div>
             <div class="col-sm-3 d-flex align-items-end gap-1">
-                <button class="btn btn-success fw-bold w-100 py-2" id="btn-start" onclick="startLecture()"><i class="bi bi-play-fill me-1"></i>Start</button>
-                <button class="btn btn-danger fw-bold py-2 px-3" id="btn-end" onclick="endLecture()" style="display:none;"><i class="bi bi-stop-fill"></i></button>
+                <button class="btn btn-success fw-bold w-100 py-2 btn-hover-lift btn-hover-shine btn-hover-ripple" id="btn-start" onclick="startLecture()"><i class="bi bi-play-fill me-1"></i>Start</button>
+                <button class="btn btn-danger fw-bold py-2 px-3 btn-hover-lift btn-hover-shine btn-hover-ripple" id="btn-end" onclick="endLecture()" style="display:none;"><i class="bi bi-stop-fill"></i></button>
             </div>
         </div>
         <div class="form-check form-switch mt-2 justify-content-center d-flex">
@@ -238,16 +253,19 @@ $editAvatarHtml = $profilePhoto
 </div>
 
 <ul class="nav nav-tabs mb-3" id="teacherTabs" role="tablist">
-    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-logs"><i class="bi bi-clock-history me-1"></i>Attendance Logs</button></li>
-    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-absent"><i class="bi bi-person-x me-1 text-danger"></i>Absent Students</button></li>
-    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-courses"><i class="bi bi-book me-1"></i>My Courses</button></li>
-    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-enroll"><i class="bi bi-person-plus me-1"></i>Enroll Students</button></li>
-    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-attendance"><i class="bi bi-bar-chart me-1"></i>Attendance %</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-live"><i class="bi bi-broadcast me-1 text-success"></i><span class="live-indicator live-active align-middle me-1" style="width:8px;height:8px;vertical-align:middle;"></span><span data-i18n="live_logs">Live</span></button></li>
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-logs"><i class="bi bi-clock-history me-1"></i><span data-i18n="attendance_logs">Attendance Logs</span></button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-absent"><i class="bi bi-person-x me-1 text-danger"></i><span data-i18n="absent_students">Absent Students</span></button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-courses"><i class="bi bi-book me-1"></i><span data-i18n="my_courses">My Courses</span></button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-enroll"><i class="bi bi-person-plus me-1"></i><span data-i18n="enroll_students">Enroll Students</span></button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-attendance"><i class="bi bi-bar-chart me-1"></i><span data-i18n="attendance_percentage">Attendance %</span></button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-forum"><i class="bi bi-star me-1"></i><span data-i18n="ratings_forum">Ratings & Forum</span></button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-sections"><i class="bi bi-layers me-1"></i><span data-i18n="section_history">Section History</span></button></li>
 </ul>
 
 <div class="row g-3 mb-4" id="upcoming-section">
     <div class="col-12">
-        <div class="card border-0 shadow-sm">
+        <div class="card border-0 shadow-none" style="border: 1px solid #e2e8f0 !important;">
             <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
                 <strong class="small"><i class="bi bi-calendar-event me-1"></i>Today's Scheduled Courses</strong>
                 <span class="badge bg-primary" id="upcoming-count">0</span>
@@ -262,19 +280,38 @@ $editAvatarHtml = $profilePhoto
 </div>
 
 <div class="tab-content">
+    <div class="tab-pane fade" id="tab-live">
+        <div class="card border-0 shadow-none">
+            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                <strong class="small text-success"><i class="bi bi-broadcast me-1"></i>Live Attendance Feed</strong>
+                <div>
+                    <span class="badge bg-success me-2" id="live-count">0</span>
+                    <button class="btn btn-sm btn-outline-success" onclick="toggleLivePolling()" id="btn-live-toggle"><i class="bi bi-pause-fill me-1"></i>Pause</button>
+                </div>
+            </div>
+            <div class="card-body p-0" style="max-height:600px;overflow-y:auto;">
+                <div id="live-container" class="px-3">
+                    <div class="text-center text-muted py-5"><i class="bi bi-arrow-clockwise spin fs-4"></i><br>Listening...</div>
+                </div>
+            </div>
+        </div>
+    </div>
     <div class="tab-pane fade show active" id="tab-logs">
-        <div class="card border-0 shadow-sm">
+        <div class="card border-0 shadow-none" style="border: 1px solid #e2e8f0 !important;">
             <div class="card-header bg-white py-2">
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <strong class="small"><i class="bi bi-funnel me-1"></i>Filters</strong>
-                    <button class="btn btn-sm btn-outline-primary" onclick="fetchLogs()"><i class="bi bi-arrow-clockwise me-1"></i>Refresh</button>
+                    <div class="d-flex gap-1">
+                        <button class="btn btn-sm btn-outline-success" onclick="downloadCsv()"><i class="bi bi-download me-1"></i>CSV</button>
+                        <button class="btn btn-sm btn-outline-primary" onclick="fetchLogs()"><i class="bi bi-arrow-clockwise me-1"></i>Refresh</button>
+                    </div>
                 </div>
             </div>
             <div class="card-body py-2">
                 <div class="row g-2">
                     <div class="col-md-4"><input type="text" id="log-search" class="form-control form-control-sm" placeholder="Search student..." oninput="fetchLogs()"></div>
                     <div class="col-md-3"><select id="log-course" class="form-select form-select-sm" onchange="fetchLogs()"><option value="">All Courses</option><?php foreach ($myCourses as $c): ?><option value="<?php echo htmlspecialchars($c['course_code']); ?>"><?php echo htmlspecialchars($c['course_code']); ?></option><?php endforeach; ?></select></div>
-                    <div class="col-md-2"><input type="date" id="log-date" class="form-control form-control-sm" value="<?php echo date('Y-m-d'); ?>" onchange="fetchLogs()"></div>
+                    <div class="col-md-2"><input type="date" id="log-date" class="form-control form-control-sm" onchange="fetchLogs()"></div>
                 </div>
             </div>
             <div class="card-body p-0" style="max-height:500px;overflow-y:auto;">
@@ -286,7 +323,7 @@ $editAvatarHtml = $profilePhoto
     </div>
 
     <div class="tab-pane fade" id="tab-absent">
-        <div class="card border-0 shadow-sm">
+        <div class="card border-0 shadow-none" style="border: 1px solid #e2e8f0 !important;">
             <div class="card-body">
                 <div class="row g-2 mb-3">
                     <div class="col-md-5">
@@ -321,7 +358,7 @@ $editAvatarHtml = $profilePhoto
     </div>
 
     <div class="tab-pane fade" id="tab-attendance">
-        <div class="card border-0 shadow-sm">
+        <div class="card border-0 shadow-none" style="border: 1px solid #e2e8f0 !important;">
             <div class="card-header bg-white py-2">
                 <strong class="small"><i class="bi bi-bar-chart me-1"></i>Student Attendance by Course</strong>
             </div>
@@ -334,7 +371,7 @@ $editAvatarHtml = $profilePhoto
     </div>
 
     <div class="tab-pane fade" id="tab-enroll">
-        <div class="card border-0 shadow-sm">
+        <div class="card border-0 shadow-none" style="border: 1px solid #e2e8f0 !important;">
             <div class="card-header bg-white py-2">
                 <strong class="small"><i class="bi bi-person-plus me-1"></i>Enroll Students in Your Courses</strong>
             </div>
@@ -362,6 +399,60 @@ $editAvatarHtml = $profilePhoto
                 <h6 class="small fw-bold"><i class="bi bi-people me-1"></i>Currently Enrolled</h6>
                 <div id="enrolled-list" style="max-height:250px;overflow-y:auto;">
                     <div class="text-center text-muted py-3 small">Select a course to view enrolled students.</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="tab-pane fade" id="tab-forum">
+        <div class="row g-3">
+            <div class="col-md-5">
+                <div class="card border-0 shadow-none h-100" style="border: 1px solid #e2e8f0 !important;">
+                    <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                        <strong class="small"><i class="bi bi-star me-1"></i>Course Ratings</strong>
+                    </div>
+                    <div class="card-body" style="max-height:400px;overflow-y:auto;" id="teacher-ratings-list">
+                        <div class="text-center text-muted py-3 small"><i class="bi bi-arrow-clockwise spin me-1"></i>Loading...</div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-7">
+                <div class="card border-0 shadow-none h-100" style="border: 1px solid #e2e8f0 !important;">
+                    <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                        <strong class="small"><i class="bi bi-chat-dots me-1"></i>Course Discussion Forum</strong>
+                        <div id="lang-switcher-teacher-forum"></div>
+                    </div>
+                    <div class="card-body p-0">
+                        <div class="p-3 border-bottom">
+                            <select id="teacher-forum-course" class="form-select form-select-sm" onchange="switchTeacherForumCourse()">
+                                <option value="">Select a course...</option>
+                                <?php foreach ($myCourses as $c): ?>
+                                <option value="<?php echo htmlspecialchars($c['course_code']); ?>"><?php echo htmlspecialchars($c['course_code']); ?> — <?php echo htmlspecialchars($c['course_name']); ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                        <div class="px-3 py-2 border-bottom">
+                            <div class="input-group input-group-sm">
+                                <input type="text" class="form-control" id="teacher-comment-text" placeholder="Write a comment..." onkeydown="if(event.key==='Enter')submitTeacherComment()">
+                                <button class="btn btn-primary btn-sm" onclick="submitTeacherComment()"><i class="bi bi-send"></i></button>
+                            </div>
+                        </div>
+                        <div id="teacher-comments-container" style="max-height:350px;overflow-y:auto;">
+                            <div class="text-center text-muted py-4 small">Select a course to view discussion.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="tab-pane fade" id="tab-sections">
+        <div class="card border-0 shadow-none" style="border:1px solid #e2e8f0 !important;border-radius:10px;">
+            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center" style="border-radius:10px 10px 0 0;">
+                <strong class="small"><i class="bi bi-layers me-1"></i>Section History</strong>
+                <button class="btn btn-sm btn-outline-danger" onclick="clearSectionHistory()"><i class="bi bi-trash me-1"></i>Clear All</button>
+            </div>
+            <div class="card-body p-0">
+                <div id="section-history-container" style="max-height:500px;overflow-y:auto;">
+                    <div class="text-center text-muted py-5 small"><em>No completed sections yet. Sections are saved when you end a lecture.</em></div>
                 </div>
             </div>
         </div>
@@ -402,7 +493,6 @@ $editAvatarHtml = $profilePhoto
     </div>
 </div>
 
-<?php require 'includes/footer.php'; ?>
 <script>
 const MY_COURSES = <?php echo $courseData; ?>;
 const DEVICES = <?php echo $devicesJson; ?>;
@@ -467,32 +557,51 @@ function fetchLogs(){
     var date = document.getElementById('log-date').value;
     var url = '/csc2052/api/teacher.php?action=teacher_logs';
     if (course) url += '&course=' + encodeURIComponent(course);
+    // Only add date filter if explicitly set
     if (date) url += '&date=' + encodeURIComponent(date);
     if (search) url += '&search=' + encodeURIComponent(search);
+    console.log('Fetching logs from:', url);
     fetch(url)
-        .then(function(r){return r.json();})
+        .then(function(r){ 
+            console.log('Response status:', r.status);
+            return r.json(); 
+        })
         .then(function(data) {
+            console.log('Response data:', data);
             var el = document.getElementById('log-container');
             if (!data.logs || data.logs.length === 0){
-                el.innerHTML = '<div class="text-center text-muted py-5"><i class="bi bi-inbox fs-1 d-block mb-2"></i><p class="mb-0 small">No records for selected filters.</p></div>';
+                el.innerHTML = '<div class="text-center text-muted py-5">';
+                if (date || course || search) {
+                    el.innerHTML += '<i class="bi bi-inbox fs-1 d-block mb-2"></i>' +
+                                    '<p class="mb-0 small">No records for selected filters.</p>' +
+                                    '<p class="small text-muted mt-2">Try adjusting the date, course, or search filters.</p>';
+                } else {
+                    el.innerHTML += '<p class="mb-0 small">No attendance records found.</p>';
+                }
+                el.innerHTML += '</div>';
                 return;
             }
-            var h = '';
+            // Use table style matching student dashboard
+            var h = '<table class="table table-hover table-sm mb-0 align-middle"><thead class="table-light"><tr>' +
+                        '<th>Student</th><th>Course</th><th>Time</th><th>Method</th></tr></thead><tbody>';
             data.logs.forEach(function(log) {
                 var t = new Date(log.timestamp.replace(' ','T'));
-                var modBadge = (log.modality==='fingerprint')?'bg-success':(log.modality==='rfid')?'bg-info':(log.modality==='face')?'bg-warning text-dark':'bg-secondary';
-                h += '<div class="log-row d-flex align-items-center gap-3">'+
-                    '<div class="flex-grow-1">'+
-                        '<strong class="small">'+esc(log.student_no)+'</strong> <span class="text-muted small">'+esc(log.student_name||'')+'</span>'+
-                        '<div class="text-muted small">'+esc(log.course_code||'')+' &bull; '+esc(log.device_name || log.device_id || 'Web')+'</div>'+
-                    '</div>'+
-                    '<span class="badge '+modBadge+' badge-pill">'+esc(log.modality||'manual')+'</span>'+
-                    '<span class="text-muted small">'+t.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})+'</span>'+
-                '</div>';
+                var d = t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
+                var time = t.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+                var badge = (log.modality==='fingerprint')?'bg-success':(log.modality==='rfid')?'bg-info':(log.modality==='face')?'bg-warning text-dark':'bg-secondary';
+                h += '<tr><td><strong class="small" data-att-tooltip="' + esc(log.student_no) + '">' + esc(log.student_no) + '</strong> <span class="text-muted small">' + esc(log.student_name||'') + '</span></td>' +
+                        '<td><span class="badge bg-light">' + esc(log.course_code||'') + '</span> <span class="text-muted small">' + esc(log.device_name || log.device_id || 'Web') + '</span></td>' +
+                        '<td class="small">' + d + '</td>' +
+                        '<td><span class="badge ' + badge + ' badge-pill">' + esc(log.modality||'manual') + '</span></td>' +
+                    '</tr>';
             });
+            h += '</tbody></table>';
             el.innerHTML = h;
         })
-        .catch(function(){ document.getElementById('log-container').innerHTML = '<div class="text-center text-danger py-4 small"><i class="bi bi-exclamation-triangle me-1"></i>Failed to load logs.</div>'; });
+        .catch(function(err){ 
+            console.error('Fetch error:', err);
+            document.getElementById('log-container').innerHTML = '<div class="text-center text-danger py-4 small"><i class="bi bi-exclamation-triangle me-1"></i>Failed to load logs: ' + err + '</div>'; 
+        });
 }
 
 function checkAbsent(){
@@ -509,7 +618,7 @@ function checkAbsent(){
                 btn.disabled = true;
             } else {
                 var h = '<table class="table table-sm mb-0 small"><thead class="table-light"><tr><th>Student No</th><th>Name</th><th>Status</th></tr></thead><tbody>';
-                data.students.forEach(function(s){ h += '<tr><td>'+esc(s.student_no)+'</td><td>'+esc(s.student_name||'')+'</td><td><span class="badge bg-danger badge-pill">Absent</span></td></tr>'; });
+                data.students.forEach(function(s){ h += '<tr><td><span data-att-tooltip="'+esc(s.student_no)+'">'+esc(s.student_no)+'</span></td><td>'+esc(s.student_name||'')+'</td><td><span class="badge bg-danger badge-pill">Absent</span></td></tr>'; });
                 h += '</tbody></table>';
                 el.innerHTML = h;
                 btn.disabled = false;
@@ -521,11 +630,20 @@ function emailAbsent(){
     var course = document.getElementById('absent-course').value;
     var date = document.getElementById('absent-date').value;
     if (!course) return;
-    if (!confirm('Send email to all absent students for '+course+'?')) return;
-    var fd = new FormData(); fd.append('action','send_absent_email'); fd.append('course_code',course); fd.append('date',date);
-    fetch('/csc2052/api/teacher.php',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(data){
-        if (data.status==='success'){ alert('Sent to '+data.sent+' students.'); checkAbsent(); }
-        else alert('Failed: '+(data.message||''));
+    Swal.fire({
+        title: 'Send Absentee Report?',
+        text: 'This will email all absent students for ' + course + '.',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#3b82f6',
+        confirmButtonText: 'Yes, Send Emails'
+    }).then((result) => {
+        if (!result.isConfirmed) return;
+        var fd = new FormData(); fd.append('action','send_absent_email'); fd.append('course_code',course); fd.append('date',date);
+        fetch('/csc2052/api/teacher.php',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(data){
+            if (data.status==='success'){ alert('Sent to '+data.sent+' students.'); checkAbsent(); }
+            else alert('Failed: '+(data.message||''));
+        });
     });
 }
 
@@ -547,7 +665,7 @@ function startLecture(){
     if(timer) fd.append('timer_minutes',timer);
     if(autoStart) fd.append('auto_start','1');
 
-    fetch('/csc2052/api/teacher.php',{method:'POST',body:fd})
+    fetch('/csc2052/api/teacher.php',{method:'POST', headers: {'X-CSRF-TOKEN': getCsrf()}, body: fd })
         .then(function(r){return r.json();})
         .then(function(data){
             if(data.status==='success'){
@@ -564,21 +682,29 @@ function startLecture(){
 function endLecture(){
     var course = document.getElementById('start-course').value;
     if (!course){ alert('Select the course to end.'); return; }
-    if (!confirm('End lecture for '+course+'?')) return;
-    var msg = document.getElementById('start-msg');
-    msg.innerHTML = '<span class="text-primary"><i class="bi bi-arrow-clockwise spin me-1"></i>Ending...</span>';
-
-    var fd = new FormData(); fd.append('action','end_course_session'); fd.append('course_code',course);
-    fetch('/csc2052/api/teacher.php',{method:'POST',body:fd})
-        .then(function(r){return r.json();})
-        .then(function(data){
-            if(data.status==='success'){
-                msg.innerHTML = '<span class="text-danger fw-bold"><i class="bi bi-stop-circle me-1"></i>Ended '+esc(course)+'</span>';
-                document.getElementById('btn-start').style.display = '';
-                document.getElementById('btn-end').style.display = 'none';
-            } else msg.innerHTML = '<span class="text-danger">'+esc(data.message||'Failed')+'</span>';
-        })
-        .catch(function(){ msg.innerHTML = '<span class="text-danger">Network error.</span>'; });
+    Swal.fire({
+        title: 'End Lecture?',
+        text: 'Are you sure you want to end the lecture for ' + course + '?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'End Lecture'
+    }).then((result) => {
+        if (!result.isConfirmed) return;
+        var msg = document.getElementById('start-msg');
+        msg.innerHTML = '<span class="text-primary"><i class="bi bi-arrow-clockwise spin me-1"></i>Ending...</span>';
+        var fd = new FormData(); fd.append('action','end_course_session'); fd.append('course_code',course);
+        fetch('/csc2052/api/teacher.php',{method:'POST', headers: {'X-CSRF-TOKEN': getCsrf()}, body: fd })
+            .then(function(r){return r.json();})
+            .then(function(data){
+                if(data.status==='success'){
+                    msg.innerHTML = '<span class="text-success fw-bold"><i class="bi bi-check-circle me-1"></i>Ended '+esc(course)+'</span>';
+                    document.getElementById('btn-start').style.display = '';
+                    document.getElementById('btn-end').style.display = 'none';
+                } else msg.innerHTML = '<span class="text-danger">'+esc(data.message||'Failed')+'</span>';
+            })
+            .catch(function(){ msg.innerHTML = '<span class="text-danger">Network error.</span>'; });
+    });
 }
 
 function loadCourses(){
@@ -714,11 +840,20 @@ function searchEnrollStudents(){
 }
 
 function enrollStudent(studentNo, course){
-    if(!confirm('Enroll '+studentNo+' in '+course+'?')) return;
-    var fd = new FormData(); fd.append('action','enroll_student_course'); fd.append('student_no',studentNo); fd.append('course_code',course);
-    fetch('/csc2052/api/student.php',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(data){
-        if(data.status==='success'){ alert('Enrolled successfully.'); searchEnrollStudents(); }
-        else alert('Failed: '+(data.message||''));
+    Swal.fire({
+        title: 'Enroll Student?',
+        text: 'Enroll ' + studentNo + ' in ' + course + '?',
+        icon: 'question',
+        showCancelButton: true,
+        confirmButtonColor: '#10b981',
+        confirmButtonText: 'Enroll'
+    }).then((result) => {
+        if (!result.isConfirmed) return;
+        var fd = new FormData(); fd.append('action','enroll_student_course'); fd.append('student_no',studentNo); fd.append('course_code',course);
+        fetch('/csc2052/api/student.php',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(data){
+            if(data.status==='success'){ alert('Enrolled successfully.'); searchEnrollStudents(); }
+            else alert('Failed: '+(data.message||''));
+        });
     });
 }
 
@@ -748,11 +883,20 @@ function loadEnrolledList(course){
 }
 
 function unEnrollStudent(studentNo, course){
-    if(!confirm('Remove '+studentNo+' from '+course+'?')) return;
-    var fd = new FormData(); fd.append('action','unenroll_student_course'); fd.append('student_no',studentNo); fd.append('course_code',course);
-    fetch('/csc2052/api/student.php',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(data){
-        if(data.status==='success'){ loadEnrolledList(course); }
-        else alert('Failed: '+(data.message||''));
+    Swal.fire({
+        title: 'Remove Student?',
+        text: 'Remove ' + studentNo + ' from ' + course + '?',
+        icon: 'warning',
+        showCancelButton: true,
+        confirmButtonColor: '#ef4444',
+        confirmButtonText: 'Remove'
+    }).then((result) => {
+        if (!result.isConfirmed) return;
+        var fd = new FormData(); fd.append('action','unenroll_student_course'); fd.append('student_no',studentNo); fd.append('course_code',course);
+        fetch('/csc2052/api/student.php',{method:'POST',body:fd}).then(function(r){return r.json();}).then(function(data){
+            if(data.status==='success'){ loadEnrolledList(course); }
+            else alert('Failed: '+(data.message||''));
+        });
     });
 }
 
@@ -801,7 +945,7 @@ function loadAttendancePct(){
             });
             var pct = total > 0 ? Math.round(attended/total*100) : 0;
             var pctColor = pct >= 80 ? 'text-success' : (pct >= 50 ? 'text-warning' : 'text-danger');
-            rows += '<tr><td class="ps-3"><strong class="small">'+esc(sno)+'</strong><br><span class="text-muted small">'+esc(info.name||'')+'</span></td>'+cells+
+            rows += '<tr><td class="ps-3"><strong class="small" data-att-tooltip="'+esc(sno)+'">'+esc(sno)+'</strong><br><span class="text-muted small">'+esc(info.name||'')+'</span></td>'+cells+
                 '<td><span class="fw-bold '+pctColor+'">'+pct+'%</span></td></tr>';
         });
 
@@ -858,18 +1002,162 @@ function saveProfile(){
     }).catch(function(){ msg.innerHTML = '<span class="text-danger">Network error.</span>'; });
 }
 
-function esc(t){ var d=document.createElement('div'); d.textContent=t||''; return d.innerHTML; }
+function loadTeacherRatings() {
+    const el = document.getElementById('teacher-ratings-list');
+    const courses = MY_COURSES || [];
+    if (courses.length === 0) {
+        el.innerHTML = '<div class="text-center text-muted py-3 small">No courses assigned.</div>';
+        return;
+    }
+    let html = '';
+    courses.forEach(c => {
+        const summaryId = 'trating-summary-course-' + c.course_code;
+        html += '<div class="border-bottom pb-2 mb-2">' +
+            '<div class="d-flex justify-content-between align-items-center">' +
+                '<div><strong class="small">' + esc(c.course_code) + '</strong><br><span class="text-muted" style="font-size:0.75rem;">' + esc(c.course_name || '') + '</span></div>' +
+                '<div id="' + summaryId + '"><span class="text-muted small">—</span></div>' +
+            '</div>' +
+        '</div>';
+    });
+    el.innerHTML = html;
+    courses.forEach(c => {
+        loadRatingSummary('course', c.course_code);
+    });
+}
 
+function switchTeacherForumCourse() {
+    const sel = document.getElementById('teacher-forum-course');
+    const course = sel.value;
+    const container = document.getElementById('teacher-comments-container');
+    if (!course) {
+        container.innerHTML = '<div class="text-center text-muted py-4 small">Select a course to view discussion.</div>';
+        return;
+    }
+    loadComments('course', course, 'teacher-comments-container');
+}
+
+function submitTeacherComment() {
+    const sel = document.getElementById('teacher-forum-course');
+    const course = sel.value;
+    if (!course) { showToast('Select a course first', 'warning'); return; }
+    const input = document.getElementById('teacher-comment-text');
+    const body = input ? input.value.trim() : '';
+    if (!body || body.length < 2) { showToast('Comment too short', 'warning'); return; }
+    const fd = new FormData();
+    fd.append('action', 'submit_comment');
+    fd.append('target_type', 'course');
+    fd.append('target_id', course);
+    fd.append('body', body);
+    fetch('/csc2052/api/ratings.php', {
+        method: 'POST',
+        headers: { 'X-CSRF-TOKEN': getCsrf() },
+        body: fd
+    })
+        .then(r => r.json())
+        .then(data => {
+            if (data.status === 'success') {
+                if (input) input.value = '';
+                showToast('Comment posted!', 'success');
+                loadComments('course', course, 'teacher-comments-container');
+            } else {
+                showToast(data.message || 'Failed', 'error');
+            }
+        })
+        .catch(() => showToast('Network error', 'error'));
+}
+
+// Override
+window.loadCommentsForCurrent = function() {
+    const sel = document.getElementById('teacher-forum-course');
+    if (sel && sel.value) {
+        loadComments('course', sel.value, 'teacher-comments-container');
+    }
+};
+
+/* ─── LIVE ATTENDANCE POLLING ───────────────────────────────── */
+var livePollTimer = null;
+var livePollActive = true;
+
+function fetchLiveLogs() {
+    fetch('/csc2052/api/teacher.php?action=teacher_logs&limit=20')
+        .then(function(r){ return r.json(); })
+        .then(function(data) {
+            var el = document.getElementById('live-container');
+            if (!data.logs || data.logs.length === 0) {
+                el.innerHTML = '<div class="text-center text-muted py-5"><i class="bi bi-inbox fs-1 d-block mb-2"></i><p class="mb-0 small">No live attendance yet.</p></div>';
+                document.getElementById('live-count').textContent = '0';
+                return;
+            }
+            document.getElementById('live-count').textContent = data.logs.length;
+            var h = '<table class="table table-hover table-sm mb-0 align-middle"><thead class="table-light"><tr><th>#</th><th>Student</th><th>Course</th><th>Time</th></tr></thead><tbody>';
+            data.logs.forEach(function(log, i) {
+                var ts = (log.timestamp || '').replace(' ','T');
+                var t = ts ? new Date(ts) : new Date();
+                var time = t.toLocaleTimeString('en-GB', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+                var isNew = (Date.now() - t.getTime()) < 10000;
+                var rowClass = isNew ? 'table-success' : '';
+                h += '<tr class="' + rowClass + '"><td class="small text-muted">' + (i+1) + '</td>' +
+                    '<td><strong class="small">' + esc(log.student_no) + '</strong> <span class="text-muted small">' + esc(log.student_name||'') + '</span></td>' +
+                    '<td><span class="badge bg-light">' + esc(log.course_code||'') + '</span></td>' +
+                    '<td class="small text-muted">' + time + '</td></tr>';
+            });
+            h += '</tbody></table>';
+            el.innerHTML = h;
+        })
+        .catch(function() { /* silent */ });
+}
+
+function toggleLivePolling() {
+    livePollActive = !livePollActive;
+    var btn = document.getElementById('btn-live-toggle');
+    if (livePollActive) {
+        btn.innerHTML = '<i class="bi bi-pause-fill me-1"></i>Pause';
+        btn.className = 'btn btn-sm btn-outline-success';
+        livePollTimer = setInterval(fetchLiveLogs, 5000);
+        fetchLiveLogs();
+    } else {
+        btn.innerHTML = '<i class="bi bi-play-fill me-1"></i>Resume';
+        btn.className = 'btn btn-sm btn-outline-warning';
+        clearInterval(livePollTimer);
+        livePollTimer = null;
+    }
+}
+
+/* ─── CSV DOWNLOAD ──────────────────────────────────────────── */
+function downloadCsv() {
+    var course = document.getElementById('log-course').value;
+    var date = document.getElementById('log-date').value;
+    var url = '/csc2052/api/teacher.php?action=download_report';
+    if (course) url += '&course_code=' + encodeURIComponent(course);
+    if (date) url += '&date=' + encodeURIComponent(date);
+    window.open(url, '_blank');
+}
+
+/* ─── INIT ──────────────────────────────────────────────────── */
 refreshStats();
 fetchLogs();
 loadCourses();
 loadAttendancePct();
 loadUpcoming();
+fetchLiveLogs();
+livePollTimer = setInterval(fetchLiveLogs, 5000);
 
 document.addEventListener('DOMContentLoaded', function() {
     document.querySelector('[data-bs-target="#tab-attendance"]').addEventListener('shown.bs.tab', loadAttendancePct);
     document.querySelector('[data-bs-target="#tab-courses"]').addEventListener('shown.bs.tab', loadCourses);
     document.querySelector('[data-bs-target="#tab-logs"]').addEventListener('shown.bs.tab', fetchLogs);
+    document.querySelector('[data-bs-target="#tab-forum"]').addEventListener('shown.bs.tab', function() {
+        loadTeacherRatings();
+        renderLangSwitcher('lang-switcher-teacher-forum');
+    });
+    document.querySelector('[data-bs-target="#tab-sections"]')?.addEventListener('shown.bs.tab', function() {
+        renderSectionHistory();
+    });
     document.getElementById('enroll-course').addEventListener('change', function(){ loadEnrolledList(this.value); });
+    // Render section history if already visible
+    if (document.getElementById('section-history-container') && document.getElementById('tab-sections')?.classList.contains('show')) {
+        renderSectionHistory();
+    }
 });
 </script>
+<?php require 'includes/footer.php'; ?>

@@ -32,6 +32,19 @@ if (isset($_SESSION['role_locked']) && isset($_SESSION['user_role']) && $_SESSIO
     exit;
 }
 
+// ─── SESSION FINGERPRINTING ─────────────────────────────────────
+// Prevent session hijacking by tying the session to the User-Agent and IP.
+$fingerprint = md5(($_SERVER['HTTP_USER_AGENT'] ?? '') . ($_SERVER['REMOTE_ADDR'] ?? ''));
+if (isset($_SESSION['fingerprint']) && $_SESSION['fingerprint'] !== $fingerprint) {
+    session_unset();
+    session_destroy();
+    header('Location: /csc2052/login.php?reason=hijack');
+    exit;
+}
+if (!isset($_SESSION['fingerprint'])) {
+    $_SESSION['fingerprint'] = $fingerprint;
+}
+
 // Generate CSRF token if not present
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
@@ -45,6 +58,17 @@ function verifyCsrfToken() {
         header('Content-Type: application/json');
         echo json_encode(['status' => 'error', 'message' => 'CSRF token validation failed.']);
         exit;
+    }
+}
+
+/**
+ * Require CSRF validation for any mutating HTTP request (POST/PUT/DELETE/PATCH).
+ * Call this at the top of API endpoints that modify state.
+ */
+function requireCsrfIfMutating() {
+    $method = $_SERVER['REQUEST_METHOD'] ?? 'GET';
+    if (in_array(strtoupper($method), ['POST', 'PUT', 'DELETE', 'PATCH'], true)) {
+        verifyCsrfToken();
     }
 }
 
@@ -91,7 +115,10 @@ if (!headers_sent()) {
     header('X-Frame-Options: DENY');
     header('X-XSS-Protection: 0');
     header('Referrer-Policy: strict-origin-when-cross-origin');
-    header("Content-Security-Policy: default-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' http: https:;");
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+    header('X-Permitted-Cross-Domain-Policies: none');
+    header('Permissions-Policy: geolocation=(), microphone=(), camera=(self)');
+    header("Content-Security-Policy: default-src 'self' https://cdn.jsdelivr.net https://fonts.googleapis.com https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://cdn.jsdelivr.net https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://fonts.googleapis.com; font-src 'self' https://cdn.jsdelivr.net https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' http: https: https://*.firebaseio.com https://*.googleapis.com;");
 }
 
 // ─── Check for valid authenticated session ──────────────────────

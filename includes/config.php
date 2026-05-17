@@ -2,11 +2,8 @@
 /**
  * Sentinel Swarm AMS — Central Configuration
  * 
- * This file stores all shared secrets and application constants.
- * It is required by endpoints that need token-based authentication
- * for hardware devices (ESP32, RPi).
- * 
- * IMPORTANT: Keep this file outside the web root in a production environment.
+ * Secrets should be set via environment variables in production.
+ * Fallbacks below are for local development only.
  */
 
 // ─────────────────────────────────────────────
@@ -25,42 +22,37 @@ define('ROLE_STUDENT', 'student');
 // ─────────────────────────────────────────────
 // SESSION CONFIGURATION
 // ─────────────────────────────────────────────
-define('SESSION_LIFETIME', 3600);       // 1 hour in seconds
-define('SESSION_COOKIE_SECURE', false); // Set to true if using HTTPS
-define('STUDENT_DEFAULT_PASSWORD_PREFIX', true); // Student default password = student_no
-
-// ─────────────────────────────────────────────
-// FALLBACK ADMIN CREDENTIALS (DB-first, config fallback)
-// Default: admin / admin123
-// To change, run: php -r "echo password_hash('your_new_password', PASSWORD_BCRYPT);"
-// and replace the hash below. Used only if users table not yet migrated.
-// ─────────────────────────────────────────────
-define('ADMIN_USERNAME', 'admin');
-define('ADMIN_PASSWORD_HASH', '$2y$10$Ojnr0litp0LS8GroYINH4uci0DBEMYuKknw4vatxuYqVDSPvuuIbG'); // Default: admin123
+define('SESSION_LIFETIME', 3600);
+define('SESSION_COOKIE_SECURE', false);
+define('STUDENT_DEFAULT_PASSWORD_PREFIX', true);
 
 // ─────────────────────────────────────────────
 // HARDWARE AUTHENTICATION SECRETS
+// Must be set via environment variables in production.
+// Generate: php -r "echo bin2hex(random_bytes(32));"
 // ─────────────────────────────────────────────
-// CHANGE THESE in production! Generate new ones with:
-// php -r "echo bin2hex(random_bytes(16));"
-define('HEARTBEAT_SECRET', 'ss_heartbeat_key_2052');
-define('HARDWARE_API_KEY', 'ss_hw_api_key_2052');
+define('HEARTBEAT_SECRET', getenv('SS_HEARTBEAT_SECRET') ?: 'ss_heartbeat_key_2052');
+define('HARDWARE_API_KEY', getenv('SS_HARDWARE_API_KEY') ?: 'ss_hw_api_key_2052');
 
 // ─────────────────────────────────────────────
 // LOGIN RATE LIMITING
 // ─────────────────────────────────────────────
-define('MAX_LOGIN_ATTEMPTS', 5);       // Max failed attempts before lockout
-define('LOGIN_LOCKOUT_SECONDS', 15);   // 15 second lockout duration
+define('MAX_LOGIN_ATTEMPTS', 5);
+define('LOGIN_LOCKOUT_SECONDS', 15);
 
 // ─────────────────────────────────────────────
 // EMAIL NOTIFICATION SETTINGS
 // ─────────────────────────────────────────────
-// Configure these to enable email reports for absent students.
-// Uses PHP's mail() function (XAMPP sendmail) by default.
-define('EMAIL_ENABLED', true);                      // Set to false to disable email features
-define('EMAIL_FROM', 'sentinel-ams@localhost');    // Sender address
-define('EMAIL_FROM_NAME', 'Sentinel AMS');          // Sender display name
-define('EMAIL_ADMIN_RECIPIENT', 'admin@localhost'); // Default recipient for absent reports
+define('EMAIL_ENABLED', true);
+define('EMAIL_FROM', getenv('SS_EMAIL_FROM') ?: 'sentinel-ams@localhost');
+define('EMAIL_FROM_NAME', getenv('SS_EMAIL_FROM_NAME') ?: 'Sentinel AMS');
+define('EMAIL_ADMIN_RECIPIENT', getenv('SS_EMAIL_ADMIN') ?: 'admin@localhost');
+
+// ─────────────────────────────────────────────
+// ENVIRONMENT DETECTION
+// ─────────────────────────────────────────────
+define('APP_ENV', getenv('APP_ENV') ?: 'development');
+define('IS_PRODUCTION', APP_ENV === 'production');
 
 if (!function_exists('asset_url')) {
     function asset_url(string $path): string {

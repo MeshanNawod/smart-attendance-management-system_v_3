@@ -6,6 +6,8 @@
 require '../includes/auth.php';
 require '../includes/db.php';
 
+requireCsrfIfMutating();
+
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 
@@ -38,20 +40,27 @@ if ($method === 'GET' && ($action === 'list' || $action === '')) {
 // ─── POST: Save or update schedule ──────────────────────────────────
 if ($method === 'POST' && $action === 'save') {
     $id          = trim($_POST['id'] ?? '');
-    $courseCode  = trim($_POST['course_code'] ?? '');
+    $courseCode  = strtoupper(trim($_POST['course_code'] ?? ''));
     $dayOfWeek   = (int)($_POST['day_of_week'] ?? 1);
-    $startTime   = trim($_POST['start_time'] ?? '08:00');
-    $endTime     = trim($_POST['end_time'] ?? '10:00');
+    $startTime   = trim($_POST['start_time'] ?? '');
+    $endTime     = trim($_POST['end_time'] ?? '');
     $venue       = trim($_POST['venue'] ?? '');
     $deviceId    = trim($_POST['device_id'] ?? 'WEB_DASHBOARD');
     $autoStart   = isset($_POST['auto_start']) ? (int)$_POST['auto_start'] : 1;
     $emailThresh = (int)($_POST['email_threshold'] ?? 80);
     $emailOnEnd  = isset($_POST['email_on_end']) ? (int)$_POST['email_on_end'] : 1;
 
-    if (!$courseCode || $dayOfWeek < 1 || $dayOfWeek > 6 || !$startTime || !$endTime) {
-        http_response_code(400);
-        echo json_encode(['status' => 'error', 'message' => 'Missing required fields.']);
-        exit;
+    if (!$courseCode || !preg_match('/^[A-Z0-9_-]{1,50}$/', $courseCode)) {
+        http_response_code(400); echo json_encode(['status' => 'error', 'message' => 'Valid course code required.']); exit;
+    }
+    if ($dayOfWeek < 1 || $dayOfWeek > 6) {
+        http_response_code(400); echo json_encode(['status' => 'error', 'message' => 'Day must be 1-6.']); exit;
+    }
+    if (!preg_match('/^\d{2}:\d{2}$/', $startTime) || !preg_match('/^\d{2}:\d{2}$/', $endTime)) {
+        http_response_code(400); echo json_encode(['status' => 'error', 'message' => 'Times must be HH:MM format.']); exit;
+    }
+    if ($emailThresh < 0 || $emailThresh > 100) {
+        http_response_code(400); echo json_encode(['status' => 'error', 'message' => 'Threshold must be 0-100.']); exit;
     }
 
     try {

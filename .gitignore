@@ -1,0 +1,47 @@
+# ─── Runtime / Session Files ─────────────────────────────
+sessions/*
+!sessions/.gitkeep
+logs/*
+!logs/.gitkeep
+uploads/temp/*
+!uploads/.gitkeep
+!uploads/temp/.gitkeep
+
+# ─── Device / Hardware Status Files ──────────────────────
+devices_registry.json
+*.bin
+*.hex
+
+# ─── IDE / Editor Metadata ──────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# ─── Environment / Secrets ──────────────────────────────
+.env
+.env.local
+.env.production
+config.local.php
+
+# ─── Composer / Vendor (if used) ────────────────────────
+/vendor/
+composer.lock
+
+# ─── Node Modules (if used) ─────────────────────────────
+node_modules/
+package-lock.json
+yarn.lock
+
+# ─── Build / Cache ──────────────────────────────────────
+/cache/
+/tmp/
+*.cache
+
+# ─── OS Files ───────────────────────────────────────────
+Desktop.ini
+desktop.ini
+$RECYCLE.BIN/

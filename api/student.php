@@ -17,9 +17,11 @@ $is_hardware_call = !empty($hw_key) && hash_equals(HARDWARE_API_KEY, $hw_key);
 
 if (!$is_hardware_call) {
     require '../includes/auth.php';
+    requireCsrfIfMutating();
 }
 
 require '../includes/db.php';
+require '../includes/helpers.php';
 
 // ─── Utility: Safe JSON response ─────────────────────────────────
 function respond(string $status, string $message, int $http_code = 200): void {
@@ -53,20 +55,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'get_nex
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'get_all_courses') {
     header('Content-Type: application/json; charset=utf-8');
     try {
-        // Teachers only see their assigned courses
+        $teacherJoin = '';
+        $teacherFilter = '';
+        $params = [];
         if (function_exists('isTeacher') && isTeacher()) {
             $teacherId = $_SESSION['teacher_id'] ?? 0;
-            $stmt = $pdo->prepare(
-                "SELECT c.course_code, c.course_name FROM courses c
-                 JOIN teacher_courses tc ON c.course_code = tc.course_code
-                 WHERE tc.teacher_id = ?
-                 ORDER BY c.course_code ASC"
-            );
-            $stmt->execute([$teacherId]);
-        } else {
-            $stmt = $pdo->query("SELECT course_code, course_name FROM courses ORDER BY course_code ASC");
+            $teacherFilter = 'AND tc.teacher_id = ?';
+            $params[] = $teacherId;
         }
-        echo json_encode(['status' => 'success', 'courses' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
+        $stmt = $pdo->prepare("
+            SELECT c.course_code, c.course_name,
+                   GROUP_CONCAT(DISTINCT t.teacher_name ORDER BY t.teacher_name SEPARATOR ', ') AS teachers,
+                   ROUND(AVG(r.stars), 1) AS avg_rating,
+                   COUNT(DISTINCT r.id) AS rating_count
+            FROM courses c
+            LEFT JOIN teacher_courses tc ON c.course_code = tc.course_code
+            LEFT JOIN teachers t ON tc.teacher_id = t.id
+            LEFT JOIN ratings r ON r.target_type = 'course' AND r.target_id = c.course_code
+            WHERE 1=1 $teacherFilter
+            GROUP BY c.course_code, c.course_name
+            ORDER BY c.course_code ASC
+        ");
+        $stmt->execute($params);
+        $courses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        // Cast numeric fields
+        foreach ($courses as &$c) {
+            $c['avg_rating'] = $c['avg_rating'] ? (float)$c['avg_rating'] : null;
+            $c['rating_count'] = (int)$c['rating_count'];
+        }
+        echo json_encode(['status' => 'success', 'courses' => $courses]);
     } catch (PDOException $e) {
         error_log('[Student API] get_all_courses: ' . $e->getMessage());
         http_response_code(500);
@@ -197,8 +214,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'get_ema
         $params = [];
         if ($course) { $query .= " AND course_code = ?"; $params[] = $course; }
         if ($type) { $query .= " AND message_type = ?"; $params[] = $type; }
-        $query .= " ORDER BY sent_at DESC LIMIT ?";
-        $params[] = $limit;
+        $query .= " ORDER BY sent_at DESC LIMIT " . (int)$limit;
         
         $stmt = $pdo->prepare($query);
         $stmt->execute($params);
@@ -210,15 +226,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'get_ema
     exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST' || !isset($_POST['action'])) {
-    header('Content-Type: application/json; charset=utf-8');
-    http_response_code(400);
-    echo json_encode(['status' => 'error', 'message' => 'Invalid request.']);
-    exit;
-}
-
 header('Content-Type: application/json; charset=utf-8');
-$action = $_POST['action'];
+$rawAction = $_REQUEST['action'] ?? '';
+$action = preg_replace('/:\d+$/','',$rawAction);
 
 // ─── Helpers ──────────────────────────────────────────────────────
 function sanitizeStudentNo(string $val): string {
@@ -598,9 +608,8 @@ if ($action === 'delete_student') {
         $stmt->execute([$stu_no]);
         $deleted = $stmt->rowCount();
         
-        $pdo->commit();
-        
         if ($deleted > 0) {
+            $pdo->commit();
             respond('success', "Student {$stu_no} and related records deleted.");
         } else {
             $pdo->rollBack();
@@ -1212,7 +1221,7 @@ if ($action === 'send_absent_report_email') {
                 .box .num { font-size: 28px; font-weight: bold; }
                 .box .label { font-size: 12px; color: #666; text-transform: uppercase; }
                 .box.absent .num { color: #dc3545; }
-                .box.present .num { color: #198754; }
+                .box.present .num { color: #ffd30a; }
                 .box.total .num { color: #0d6efd; }
                 table { width: 100%; border-collapse: collapse; margin: 0; }
                 th { background: #343a40; color: #fff; padding: 10px 16px; text-align: left; font-size: 13px; }
@@ -1242,7 +1251,7 @@ if ($action === 'send_absent_report_email') {
                 }
                 $html .= "</tbody></table>";
             } else {
-                $html .= "<div style='padding: 24px; text-align: center; color: #198754; font-weight: bold; font-size: 16px;'>
+                $html .= "<div style='padding: 24px; text-align: center; color: #ffd30a; font-weight: bold; font-size: 16px;'>
                     ✓ All enrolled students were present!
                 </div>";
             }
@@ -1507,23 +1516,42 @@ if ($action === 'update_my_profile') {
     }
 
     try {
-        $userId = $_SESSION['user_id'] ?? null;
+        // Get or create user for this student
+        $stmt = $pdo->prepare("SELECT user_id FROM students WHERE student_no = ?");
+        $stmt->execute([$studentNo]);
+        $studentRow = $stmt->fetch(PDO::FETCH_ASSOC);
+        $userId = $studentRow['user_id'] ?? null;
+
         if (!$userId) {
-            $lookup = $pdo->prepare("SELECT user_id FROM students WHERE student_no = ?");
-            $lookup->execute([$studentNo]);
-            $userId = $lookup->fetchColumn();
+            // First-time setup: create a user record
+            $username = str_replace('/', '_', $studentNo);
+            $email = strtolower(str_replace('/', '', $studentNo)) . '@sci.pdn.ac.lk';
+            $stmt = $pdo->prepare("INSERT INTO users (username, email, role) VALUES (?, ?, 'student')");
+            $stmt->execute([$username, $email]);
+            $userId = $pdo->lastInsertId();
+            
+            // Link student to user
+            $stmt = $pdo->prepare("UPDATE students SET user_id = ? WHERE student_no = ?");
+            $stmt->execute([$userId, $studentNo]);
         }
 
-        if (!empty($newPassword) && $userId) {
-            if (empty($currentPassword)) {
-                echo json_encode(['status' => 'error', 'message' => 'Current password required to change.']); exit;
-            }
+        if (!empty($newPassword)) {
+            // Check if user has password hash
             $stmt = $pdo->prepare("SELECT password_hash FROM users WHERE id = ?");
             $stmt->execute([$userId]);
             $u = $stmt->fetch(PDO::FETCH_ASSOC);
-            if (!$u || !password_verify($currentPassword, $u['password_hash'])) {
-                echo json_encode(['status' => 'error', 'message' => 'Current password is incorrect.']); exit;
+            
+            // If user has a password hash, verify current password
+            if (!empty($u['password_hash'])) {
+                if (empty($currentPassword)) {
+                    echo json_encode(['status' => 'error', 'message' => 'Current password required to change.']); exit;
+                }
+                if (!password_verify($currentPassword, $u['password_hash'])) {
+                    echo json_encode(['status' => 'error', 'message' => 'Current password is incorrect.']); exit;
+                }
             }
+            // If no password hash (first-time setup), allow setting password directly
+            
             $hash = password_hash($newPassword, PASSWORD_BCRYPT);
             $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?")->execute([$hash, $userId]);
         }
@@ -1601,9 +1629,8 @@ if ($action === 'get_my_attendance') {
         "SELECT al.student_no, al.course_code, c.course_name, al.timestamp, al.modality
          FROM attendance_logs al
          LEFT JOIN courses c ON al.course_code = c.course_code
-         WHERE $where ORDER BY al.timestamp DESC LIMIT ?"
+         WHERE $where ORDER BY al.timestamp DESC LIMIT " . (int)$limit . ""
     );
-    $params[] = $limit;
     $stmt->execute($params);
     $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
     echo json_encode(['status' => 'success', 'logs' => $logs]);
@@ -1612,8 +1639,15 @@ if ($action === 'get_my_attendance') {
 
 // ─── Student Self-Service: Get My Courses ────────────────────────
 if ($action === 'get_my_courses') {
-    requireRole('student');
-    $studentNo = $_SESSION['student_no'] ?? $_SESSION['username'] ?? '';
+    // Allow students to see their own, teachers/admins to see any student's
+    if (isStudent()) {
+        $studentNo = $_SESSION['student_no'] ?? $_SESSION['username'] ?? '';
+    } else {
+        $studentNo = trim($_GET['student_no'] ?? '');
+        if (empty($studentNo)) {
+            echo json_encode(['status' => 'error', 'message' => 'student_no parameter required.']); exit;
+        }
+    }
     if (empty($studentNo)) {
         echo json_encode(['status' => 'error', 'message' => 'No student number.']); exit;
     }
@@ -1645,11 +1679,30 @@ if ($action === 'get_my_courses') {
         foreach ($courses as &$c) {
             $cc = $c['course_code'];
             $c['attended'] = $attendance[$cc] ?? 0;
-            $c['total_sessions'] = $totals[$cc] ?? 0;
+            $c['total_sessions'] = $totals[$c['course_code']] ?? 0;
             $c['percentage'] = $c['total_sessions'] > 0 ? round(($c['attended'] / $c['total_sessions']) * 100, 1) : 0;
         }
+        
+        // Validate course codes exist in courses table
+        $validCodes = $pdo->query("SELECT course_code FROM courses")->fetchAll(PDO::FETCH_COLUMN);
+        $validSet = array_flip($validCodes);
+        foreach ($courses as $key => $c) {
+            if (!isset($validSet[$c['course_code']])) {
+                error_log("[Student API] get_my_courses: Student $studentNo has enrollment in non-existent course: {$c['course_code']}");
+                // Optionally skip or keep; keeping for now
+            }
+        }
 
-        echo json_encode(['status' => 'success', 'courses' => $courses]);
+        // Compute overall attendance percentage across all courses
+        $sumAtt = 0; $sumTot = 0;
+        foreach ($courses as $cc) {
+            $sumAtt += (int)($cc['attended'] ?? 0);
+            $sumTot += (int)($cc['total_sessions'] ?? 0);
+        }
+        $overallPct = $sumTot > 0 ? round(($sumAtt / $sumTot) * 100, 1) : 0;
+        $tier = attendanceTier((float)$overallPct);
+
+        echo json_encode(['status' => 'success', 'courses' => $courses, 'tier' => $tier, 'overall' => $overallPct]);
     } catch (PDOException $e) {
         echo json_encode(['status' => 'error', 'message' => 'Database error: ' . $e->getMessage()]);
     }

@@ -6,6 +6,9 @@
 require_once '../includes/config.php';
 require_once '../includes/auth.php';
 require_once '../includes/db.php';
+require_once '../includes/helpers.php';
+
+requireCsrfIfMutating();
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -15,6 +18,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
     // List all teachers with their courses (admin only)
     if ($action === 'list') {
+        requireRole('admin');
         try {
             $stmt = $pdo->query(
                 "SELECT t.id, t.teacher_name, t.department, t.phone, t.profile_photo, u.email, u.is_active, u.last_login
@@ -238,39 +242,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     // Live attendance logs filtered by teacher's courses
     if ($action === 'teacher_logs') {
         $teacherId = $_SESSION['teacher_id'] ?? null;
-        if (!$teacherId) { echo json_encode(['logs' => []]); exit; }
+        if (!$teacherId) { 
+            error_log("[Teacher API] teacher_logs: No teacher_id in session");
+            apiResponse('error', 'Not authenticated as teacher.', ['logs' => []]); 
+            exit; 
+        }
         try {
             $stmt = $pdo->prepare("SELECT course_code FROM teacher_courses WHERE teacher_id = ?");
             $stmt->execute([$teacherId]);
             $courses = $stmt->fetchAll(PDO::FETCH_COLUMN);
-            if (empty($courses)) { echo json_encode(['logs' => []]); exit; }
-
+            if (empty($courses)) { 
+                error_log("[Teacher API] teacher_logs: No courses for teacher $teacherId");
+                apiResponse('success', 'No courses assigned.', ['logs' => []]); 
+                exit; 
+            }
+            
             $where = "a.course_code IN (" . implode(',', array_fill(0, count($courses), '?')) . ")";
             $params = $courses;
-
+            
             $student = trim($_GET['student'] ?? '');
             if ($student) { $where .= " AND (a.student_no LIKE ? OR s.student_name LIKE ?)"; $params[] = "%$student%"; $params[] = "%$student%"; }
-
+            
             $course = trim($_GET['course'] ?? '');
             if ($course) { $where .= " AND a.course_code = ?"; $params[] = $course; }
-
+            
             $date = trim($_GET['date'] ?? '');
             if ($date) { $where .= " AND DATE(a.timestamp) = ?"; $params[] = $date; }
-
+            
             $dateFrom = $_GET['date_from'] ?? '';
             if ($dateFrom) { $where .= " AND DATE(a.timestamp) >= ?"; $params[] = $dateFrom; }
-
+            
             $dateTo = $_GET['date_to'] ?? '';
             if ($dateTo) { $where .= " AND DATE(a.timestamp) <= ?"; $params[] = $dateTo; }
-
+            
             $sql = "SELECT a.student_no, a.timestamp, a.course_code, a.modality, a.device_name, s.student_name
                     FROM attendance_logs a
                     LEFT JOIN students s ON a.student_no = s.student_no
                     WHERE $where ORDER BY a.timestamp DESC LIMIT 100";
+            
+            error_log("[Teacher API] teacher_logs SQL: $sql");
+            error_log("[Teacher API] teacher_logs params: " . json_encode($params));
+            
             $stmt2 = $pdo->prepare($sql);
             $stmt2->execute($params);
-            echo json_encode(['logs' => $stmt2->fetchAll(PDO::FETCH_ASSOC)]);
-        } catch (PDOException $e) { echo json_encode(['logs' => []]); }
+            $logs = $stmt2->fetchAll(PDO::FETCH_ASSOC);
+            
+            error_log("[Teacher API] teacher_logs: Found " . count($logs) . " logs");
+            
+            echo json_encode(['status' => 'success', 'message' => '', 'logs' => $logs]);
+        } catch (PDOException $e) { 
+            error_log("[Teacher API] teacher_logs error: " . $e->getMessage());
+            apiError('Database error while fetching logs.', 500); 
+        }
         exit;
     }
 
@@ -311,24 +334,27 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $stmt->execute([$teacherId, $courseCode]);
             if (!$stmt->fetch()) { header('HTTP/1.1 403'); exit; }
 
+            $dateFilter = trim($_GET['date'] ?? '');
+            $dateFrom = $_GET['date_from'] ?? '';
+            $dateTo = $_GET['date_to'] ?? '';
+
             $where = "a.course_code = ?";
             $params = [$courseCode];
 
-            $dateFrom = $_GET['date_from'] ?? '';
+            if ($dateFilter) { $where .= " AND DATE(a.timestamp) = ?"; $params[] = $dateFilter; }
             if ($dateFrom) { $where .= " AND DATE(a.timestamp) >= ?"; $params[] = $dateFrom; }
-
-            $dateTo = $_GET['date_to'] ?? '';
             if ($dateTo) { $where .= " AND DATE(a.timestamp) <= ?"; $params[] = $dateTo; }
 
-            $sql = "SELECT a.student_no, s.student_name, a.timestamp, a.course_code, a.modality, a.device_id
+            $sql = "SELECT a.student_no, s.student_name, a.timestamp, a.course_code, a.modality, a.device_name
                     FROM attendance_logs a LEFT JOIN students s ON a.student_no = s.student_no
                     WHERE $where ORDER BY a.timestamp ASC";
             $stmt2 = $pdo->prepare($sql);
             $stmt2->execute($params);
             $rows = $stmt2->fetchAll(PDO::FETCH_ASSOC);
 
+            $fileDate = $dateFilter ?: date('Y-m-d');
             header('Content-Type: text/csv; charset=utf-8');
-            header("Content-Disposition: attachment; filename=report_{$courseCode}_{$date}.csv");
+            header("Content-Disposition: attachment; filename=report_{$courseCode}_{$fileDate}.csv");
             $out = fopen('php://output', 'w');
             fputcsv($out, ['Student No', 'Name', 'Timestamp', 'Course', 'Modality', 'Device']);
             foreach ($rows as $row) fputcsv($out, $row);
@@ -383,7 +409,7 @@ if ($action === 'mark_attendance') {
         $stmt2->execute([$studentNo]);
         if ($stmt2->fetch()) { echo json_encode(['status' => 'error', 'message' => 'Already marked present today.']); exit; }
 
-        $stmt3 = $pdo->prepare("INSERT INTO attendance_logs (student_no, device_id, timestamp, modality) VALUES (?, 'Teacher Portal', NOW(), 'manual')");
+        $stmt3 = $pdo->prepare("INSERT INTO attendance_logs (student_no, device_name, timestamp, modality) VALUES (?, 'Teacher Portal', NOW(), 'manual')");
         $stmt3->execute([$studentNo]);
         echo json_encode(['status' => 'success', 'message' => 'Attendance marked.']);
     } catch (PDOException $e) {
@@ -396,8 +422,9 @@ if ($action === 'mark_attendance') {
 if ($action === 'send_absent_email') {
     $teacherId = $_SESSION['teacher_id'] ?? null;
     $courseCode = strtoupper(trim($_POST['course_code'] ?? ''));
-    $date = $_POST['date'] ?? date('Y-m-d');
+    $date = trim($_POST['date'] ?? date('Y-m-d'));
     if (!$teacherId || !$courseCode) { echo json_encode(['status' => 'error', 'message' => 'Invalid request.']); exit; }
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date)) { echo json_encode(['status' => 'error', 'message' => 'Invalid date format.']); exit; }
     try {
         $stmt = $pdo->prepare("SELECT 1 FROM teacher_courses WHERE teacher_id = ? AND course_code = ?");
         $stmt->execute([$teacherId, $courseCode]);
@@ -673,6 +700,17 @@ if ($action === 'start_course_session') {
     }
 
     try {
+        // Ensure active_courses table exists
+        $pdo->exec("CREATE TABLE IF NOT EXISTS active_courses (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            course_code VARCHAR(50) NOT NULL,
+            teacher_id INT NOT NULL,
+            started_at DATETIME NOT NULL,
+            device_name VARCHAR(100) DEFAULT 'WEB_DASHBOARD',
+            timer_minutes INT DEFAULT 0,
+            UNIQUE KEY uk_active_course (course_code, teacher_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
         $stmt = $pdo->prepare("SELECT 1 FROM teacher_courses WHERE teacher_id = ? AND course_code = ?");
         $stmt->execute([$teacherId, $courseCode]);
         if (!$stmt->fetch()) { echo json_encode(['status' => 'error', 'message' => 'You do not teach this course.']); exit; }
@@ -681,7 +719,7 @@ if ($action === 'start_course_session') {
         $stmt->execute([$courseCode, $teacherId, $device, $timerMinutes, $device, $timerMinutes]);
         echo json_encode(['status' => 'success', 'message' => "Course $courseCode started on $device."]);
     } catch (PDOException $e) {
-        echo json_encode(['status' => 'error', 'message' => 'Failed to start course.']);
+        echo json_encode(['status' => 'error', 'message' => 'Failed to start course.', 'debug' => $e->getMessage()]);
     }
     exit;
 }

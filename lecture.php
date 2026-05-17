@@ -1,5 +1,5 @@
 <?php
-require 'includes/header_admin.php';
+require_once 'includes/header.php';
 
 $courses = [];
 $emailConfigEmail = defined('EMAIL_FROM') ? EMAIL_FROM : '';
@@ -291,6 +291,22 @@ try {
             </div>
         </div>
         
+        <!-- Email Presets Manager Card -->
+        <div class="card shadow-sm mb-4 border-0">
+            <div class="card-header bg-info text-white py-3 d-flex justify-content-between align-items-center">
+                <strong><i class="bi bi-bookmark-star me-2"></i>Email Templates &amp; Presets</strong>
+                <button class="btn btn-sm btn-light fw-semibold" onclick="openCustomEmailModal('blank')">
+                    <i class="bi bi-plus-circle me-1"></i>New Email Template
+                </button>
+            </div>
+            <div class="card-body bg-light">
+                <p class="text-muted small mb-3">Save email templates to quickly reuse when sending custom notifications. Presets are saved locally in your browser.</p>
+                <div id="email-presets-container">
+                    <div class="text-center text-muted py-2"><em>No presets saved yet. Compose an email and click "Save as Preset".</em></div>
+                </div>
+            </div>
+        </div>
+
         <!-- Custom Email Modal -->
         <div class="modal fade" id="customEmailModal" tabindex="-1">
             <div class="modal-dialog modal-lg">
@@ -301,6 +317,23 @@ try {
                     </div>
                     <div class="modal-body">
                         <input type="hidden" id="custom-email-source" value="">
+
+                        <!-- Preset loader inside modal -->
+                        <div class="mb-3 p-2 bg-light rounded border">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <label class="form-label small fw-bold text-muted mb-0"><i class="bi bi-bookmark me-1"></i>Presets:</label>
+                                <select id="modal-preset-select" class="form-select form-select-sm" style="max-width:220px;" onchange="loadEmailPreset(this.value)">
+                                    <option value="">— Load a preset —</option>
+                                </select>
+                                <button class="btn btn-sm btn-outline-success fw-semibold" onclick="saveEmailPreset()">
+                                    <i class="bi bi-bookmark-plus me-1"></i>Save as Preset
+                                </button>
+                                <button class="btn btn-sm btn-outline-danger fw-semibold" onclick="deleteEmailPreset(document.getElementById('modal-preset-select').value)">
+                                    <i class="bi bi-bookmark-x me-1"></i>Delete
+                                </button>
+                            </div>
+                        </div>
+
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Sender</label>
                             <select id="custom-email-sender" class="form-select">
@@ -316,16 +349,31 @@ try {
                         </div>
                         <div class="mb-3">
                             <label class="form-label fw-semibold">Message</label>
-                            <textarea id="custom-email-body" class="form-control" rows="6" placeholder="Type your message here..."></textarea>
-                            <div class="form-text">Use <code>{student_name}</code>, <code>{student_no}</code>, <code>{percentage}</code>, <code>{course}</code> as placeholders.</div>
+                            <div class="mb-2 d-flex gap-1 flex-wrap">
+                                <span class="badge bg-light border text-dark" style="cursor:pointer;" onclick="insertPlaceholder('{student_name}')">{student_name}</span>
+                                <span class="badge bg-light border text-dark" style="cursor:pointer;" onclick="insertPlaceholder('{student_no}')">{student_no}</span>
+                                <span class="badge bg-light border text-dark" style="cursor:pointer;" onclick="insertPlaceholder('{percentage}')">{percentage}</span>
+                                <span class="badge bg-light border text-dark" style="cursor:pointer;" onclick="insertPlaceholder('{course}')">{course}</span>
+                                <span class="badge bg-light border text-dark" style="cursor:pointer;" onclick="insertPlaceholder('{date}')">{date}</span>
+                                <small class="text-muted align-self-center ms-1">← Click to insert placeholder</small>
+                            </div>
+                            <textarea id="custom-email-body" class="form-control" rows="7" placeholder="Type your message here..."
+                                oninput="document.getElementById('email-body-chars').textContent=this.value.length"></textarea>
+                            <div class="d-flex justify-content-between mt-1">
+                                <small class="text-muted">Use placeholders above — they'll be auto-replaced per recipient.</small>
+                                <small class="text-muted"><span id="email-body-chars">0</span> chars</small>
+                            </div>
                         </div>
                         <div class="mb-2">
-                            <label class="form-label fw-semibold">Recipient Email</label>
+                            <label class="form-label fw-semibold">Recipient Email <small class="text-muted fw-normal">(override — leave blank to use selected students)</small></label>
                             <input type="email" id="custom-email-recipient" class="form-control" placeholder="recipient@example.com">
                         </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="button" class="btn btn-outline-success fw-semibold" onclick="saveEmailPreset()">
+                            <i class="bi bi-bookmark-plus me-1"></i>Save Preset
+                        </button>
                         <button type="button" class="btn btn-info text-white fw-semibold" id="btn-send-custom-email" onclick="sendCustomEmails()">
                             <i class="bi bi-send me-1"></i>Send Emails
                         </button>
@@ -338,3 +386,4 @@ try {
 </div>
 
 <?php require 'includes/footer.php'; ?>
+

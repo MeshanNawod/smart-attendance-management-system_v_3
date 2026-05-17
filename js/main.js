@@ -1,5 +1,33 @@
 let isCommandActive = false;
 
+// ─── OVERRIDE NATIVE ALERT TO USE SWEETALERT2 ──────────────────────
+window.alert = function(message) {
+    if (typeof Swal !== 'undefined') {
+        Swal.fire({
+            icon: 'warning',
+            title: 'Attention',
+            text: message,
+            confirmButtonColor: '#6366f1'
+        });
+    } else {
+        // Fallback to original or toast if SweetAlert2 is not loaded
+        showToast(message, 'warning');
+    }
+};
+
+window.highlightInvalidInput = function(elementId) {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    el.classList.add('is-invalid');
+    el.focus({ preventScroll: true }); // Prevent jumping to top before smooth scroll
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    
+    // Add a pulse animation class if defined in CSS, or just rely on Bootstrap's is-invalid
+    setTimeout(() => {
+        el.classList.remove('is-invalid');
+    }, 4000);
+};
+
 // ─── TOAST NOTIFICATION SYSTEM ─────────────────────────────────────
 window.showToast = function(message, type = 'info') {
     let container = document.getElementById('toast-container');
@@ -68,6 +96,7 @@ async function refreshDeviceList() {
         const data = await res.json();
         _discoveredDevices = data.devices || [];
         populateDeviceSelector();
+        populateStudentsDeviceSelector();
         renderDeviceManageTable();
     } catch(e) {
         console.warn('[Devices] Could not fetch device list:', e);
@@ -196,6 +225,112 @@ window.renameDevice = async function(ip, currentName) {
 // kept for backward compat - no longer needed but guard against errors
 window.toggleActionTargetIp = function() {};
 
+// ─── STUDENTS PAGE: DEVICE SELECTION GUARD ─────────────────────────
+/**
+ * requireDeviceForOTA() — must be called before any fingerprint OTA operation
+ * (Enroll Finger, Push Template).
+ * Returns true if a valid ESP32 is selected, false + shows toast if not.
+ */
+window.requireDeviceForOTA = function() {
+    // Check students-page selector first, then fall back to global selector
+    const stuSel = document.getElementById('students-device-select');
+    const globalSel = document.getElementById('action-target-device');
+
+    const stuVal = stuSel ? stuSel.value : '';
+    const globalVal = globalSel ? globalSel.value : '';
+
+    const hasDevice = (stuVal && stuVal !== '' && stuVal !== 'WEB_DASHBOARD')
+                   || (globalVal && globalVal !== '' && globalVal !== 'WEB_DASHBOARD' && globalVal !== '__loading__');
+
+    if (!hasDevice) {
+        showToast('⚠️ Please select an active ESP32 hardware device first (in the "Target Device" selector above).', 'warning');
+        // Flash the warning alert
+        const alertBanner = document.getElementById('students-device-required-alert');
+        if (alertBanner) {
+            alertBanner.style.transition = 'background 0.2s';
+            alertBanner.style.background = '#fff3cd';
+            setTimeout(() => alertBanner.style.background = '', 600);
+            alertBanner.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        }
+        // Flash the device select
+        if (stuSel) {
+            stuSel.style.boxShadow = '0 0 0 3px rgba(255,193,7,0.5)';
+            setTimeout(() => stuSel.style.boxShadow = '', 1200);
+        }
+        return false;
+    }
+    return true;
+};
+
+/**
+ * onStudentsDeviceChange() — called when user picks a device in the students page selector.
+ * Syncs to the global action-target-device and hides the warning banner.
+ */
+window.onStudentsDeviceChange = function(val) {
+    const statusBadge = document.getElementById('students-device-status');
+    const alertBanner = document.getElementById('students-device-required-alert');
+
+    if (val && val !== '') {
+        // Sync to global selector if available
+        const globalSel = document.getElementById('action-target-device');
+        if (globalSel) {
+            // Try to find matching option
+            const opts = [...globalSel.options];
+            const match = opts.find(o => o.value === val || o.value.includes(val));
+            if (match) globalSel.value = match.value;
+        }
+        // Update nav IP cache
+        if (val !== 'WEB_DASHBOARD') {
+            localStorage.setItem('esp_ip_cache', val);
+            const navIp = document.getElementById('esp-ip');
+            if (navIp) navIp.value = val;
+        }
+        if (statusBadge) {
+            statusBadge.className = 'badge bg-success';
+            statusBadge.textContent = val === 'WEB_DASHBOARD' ? 'Web Only' : 'Device Set ✓';
+        }
+        if (alertBanner) alertBanner.style.display = 'none';
+    } else {
+        if (statusBadge) {
+            statusBadge.className = 'badge bg-secondary';
+            statusBadge.textContent = 'None';
+        }
+        if (alertBanner) alertBanner.style.display = '';
+    }
+};
+
+/**
+ * populateStudentsDeviceSelector() — fills the students page device selector
+ * with discovered ESP32 nodes (excludes RPi).
+ */
+function populateStudentsDeviceSelector() {
+    const sel = document.getElementById('students-device-select');
+    if (!sel) return;
+
+    const currentVal = sel.value;
+    sel.innerHTML = '<option value="">⚠️ Select device first…</option>';
+
+    _discoveredDevices.forEach(dev => {
+        if (dev.type === 'rpi' || dev.blocked) return;
+        const opt = document.createElement('option');
+        opt.value = dev.ip;
+        opt.textContent = `${dev.online ? '🟢' : '🔴'} ${dev.name} (${dev.ip})`;
+        sel.appendChild(opt);
+    });
+
+    if (_discoveredDevices.filter(d => d.type !== 'rpi' && !d.blocked).length === 0) {
+        const opt = document.createElement('option');
+        opt.disabled = true;
+        opt.textContent = '— No ESP32 nodes detected —';
+        sel.appendChild(opt);
+    }
+
+    if (currentVal && [...sel.options].some(o => o.value === currentVal)) {
+        sel.value = currentVal;
+        onStudentsDeviceChange(currentVal);
+    }
+}
+
 // ─── INITIALIZATION ────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     const cachedIp = localStorage.getItem('esp_ip_cache');
@@ -205,6 +340,29 @@ document.addEventListener('DOMContentLoaded', () => {
         ipInput.addEventListener('input', (e) => {
             localStorage.setItem('esp_ip_cache', e.target.value.trim());
         });
+    }
+
+    // Live clock for dashboards
+    function tickClock() {
+        var n = new Date();
+        var c = document.getElementById('live-clock');
+        var d = document.getElementById('live-date');
+        if(c) c.textContent = n.toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit', second:'2-digit'});
+        if(d) d.textContent = n.toLocaleDateString('en-GB', {weekday:'long', year:'numeric', month:'short', day:'numeric'});
+    }
+    if (document.getElementById('live-clock')) {
+        tickClock();
+        setInterval(tickClock, 1000);
+    }
+
+    if (typeof window.bulkEnrollFromImages === 'function' && !window._bulkEnrollWrapped) {
+        const _origBulk = window.bulkEnrollFromImages;
+        window.bulkEnrollFromImages = async function(fi) {
+            const log = document.getElementById('bulk-upload-log');
+            if (log) { log.style.display = ''; log.classList.remove('d-none'); }
+            await _origBulk(fi);
+        };
+        window._bulkEnrollWrapped = true;
     }
 
     loadCourseDatalist();
@@ -234,6 +392,31 @@ document.addEventListener('DOMContentLoaded', () => {
             fetchLogs();
             if (typeof fetchTodayAttendance === 'function') fetchTodayAttendance();
         }, 5000);
+    }
+
+    // Admin secondary tabs (charts / ratings / forum)
+    if (document.getElementById('adminSecondaryTabs')) {
+        // Load charts on tab show
+        document.querySelector('[data-bs-target="#tab-charts"]')?.addEventListener('shown.bs.tab', () => {
+            loadCharts();
+            // Also initialize language switcher for admin forum if not done yet
+            if (document.getElementById('lang-switcher-admin-forum') && typeof renderLangSwitcher === 'function' && !document.getElementById('lang-switcher-admin-forum').hasChildNodes()) {
+                renderLangSwitcher('lang-switcher-admin-forum');
+            }
+        });
+        document.querySelector('[data-bs-target="#tab-ratings"]')?.addEventListener('shown.bs.tab', () => {
+            loadAdminRatingsBoard();
+            loadAdminRecentComments();
+        });
+        document.querySelector('[data-bs-target="#tab-forum"]')?.addEventListener('shown.bs.tab', () => {
+            if (document.getElementById('lang-switcher-admin-forum') && typeof renderLangSwitcher === 'function' && !document.getElementById('lang-switcher-admin-forum').hasChildNodes()) {
+                renderLangSwitcher('lang-switcher-admin-forum');
+            }
+        });
+        // Load charts immediately if the charts tab is active by default
+        if (document.getElementById('tab-charts')?.classList.contains('show')) {
+            loadCharts();
+        }
     }
 
     // Only load device settings if the elements exist
@@ -342,7 +525,8 @@ window.selectDropdownItem = function(itemEl, inputId, hiddenId, dropdownId) {
     const val = itemEl.getAttribute('data-value');
     const inputEl = document.getElementById(inputId);
     const hiddenEl = document.getElementById(hiddenId);
-    if (inputEl) inputEl.value = itemEl.textContent.trim();
+    // Use data-value for display so multi-line items show only course code
+    if (inputEl) inputEl.value = val;
     if (hiddenEl) hiddenEl.value = val;
     const dd = document.getElementById(dropdownId);
     if (dd) dd.classList.add('d-none');
@@ -383,6 +567,7 @@ function escapeHtml(unsafe) {
          .replace(/"/g, "&quot;")
          .replace(/'/g, "&#039;");
 }
+window.escapeHtml = escapeHtml;
 
 // Debounce function for search inputs
 function debounce(func, wait) {
@@ -542,9 +727,11 @@ function renderActiveLectures() {
         const lec = window.activeLectures[ip];
         const duration = lec.startTime ? Math.floor((Date.now() - lec.startTime) / 60000) + 'm ago' : '';
         const isDash = ip === 'WEB_DASHBOARD';
+        const sectionHtml = lec.section ? ` <span class="badge bg-info text-dark">${escapeHtml(lec.section)}</span>` : '';
         html += `<div class="d-flex justify-content-between align-items-center border-bottom py-1 small">
-            <span class="fw-bold text-truncate" style="max-width:120px;">${isDash ? 'Web Dashboard' : escapeHtml(lec.deviceName || ip)}</span>
+            <span class="fw-bold text-truncate" style="max-width:100px;">${isDash ? 'Web Dashboard' : escapeHtml(lec.deviceName || ip)}</span>
             <span class="badge bg-success mx-1">${escapeHtml(lec.course)}</span>
+            ${sectionHtml}
             <span class="text-muted small">${duration}</span>
             <button class="btn btn-xs btn-outline-danger py-0 px-1 ms-1" onclick="endLectureByDevice('${ip}')"><i class="bi bi-x"></i></button>
         </div>`;
@@ -612,7 +799,8 @@ window.startCourseToDevice = function() {
     }
     const endTime = timerMinutes > 0 ? Date.now() + timerMinutes * 60000 : null;
 
-    window.activeLectures[device] = { course: code, startTime: Date.now(), endTime: endTime, deviceName: deviceName };
+    const section = document.getElementById('lecture-section-input')?.value?.trim() || '';
+    window.activeLectures[device] = { course: code, startTime: Date.now(), endTime: endTime, deviceName: deviceName, section: section };
     localStorage.setItem('active_lectures', JSON.stringify(window.activeLectures));
 
     window.activeWebCourse = code;
@@ -631,6 +819,7 @@ window.startCourseToDevice = function() {
 
 window.applyTimerPreset = function(val) {
     const customInput = document.getElementById('lecture-timer-custom');
+    if (!customInput) return;
     if (val === 'custom') {
         customInput.style.display = '';
         customInput.focus();
@@ -833,6 +1022,7 @@ window.endLectureByDevice = function(deviceIp) {
     }
     
     const endedCourse = lec.course;
+    const endedSection = lec.section || '';
     
     delete window.activeLectures[deviceIp];
     localStorage.setItem('active_lectures', JSON.stringify(window.activeLectures));
@@ -843,7 +1033,7 @@ window.endLectureByDevice = function(deviceIp) {
         localStorage.removeItem('active_lecture_course');
         localStorage.removeItem('active_lecture_device');
     }
-    logToTerminal('[CMD] Ended lecture on ' + (lec.deviceName || deviceIp) + ': ' + endedCourse);
+    logToTerminal('[CMD] Ended lecture on ' + (lec.deviceName || deviceIp) + ': ' + endedCourse + (endedSection ? ' [' + endedSection + ']' : ''));
     refreshLectureButtons();
     renderActiveLectures();
     if (typeof fetchLogs === 'function') fetchLogs();
@@ -851,6 +1041,140 @@ window.endLectureByDevice = function(deviceIp) {
     if (typeof triggerEndOfCourseEmail === 'function') {
         triggerEndOfCourseEmail(endedCourse);
     }
+
+    // Save completed section to history
+    saveSectionHistory(endedCourse, endedSection, lec.startTime, Date.now(), lec.deviceName || deviceIp);
+
+    // Offer to start next section
+    if (endedSection) {
+        const nextBtn = document.getElementById('btn-next-section');
+        const sectionInput = document.getElementById('lecture-section-input');
+        if (nextBtn && sectionInput) {
+            sectionInput.value = endedSection;
+            nextBtn.style.display = '';
+            setTimeout(() => { if (nextBtn) nextBtn.style.display = 'none'; }, 10000);
+        }
+    }
+};
+
+/* ─── SECTION HISTORY ─────────────────────────────────────── */
+function getSectionHistory() {
+    try { return JSON.parse(localStorage.getItem('section_history') || '[]'); } catch (e) { return []; }
+}
+
+function saveSectionHistory(course, section, startTime, endTime, device) {
+    const history = getSectionHistory();
+    history.unshift({
+        id: Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+        course: course,
+        section: section || '',
+        startTime: startTime,
+        endTime: endTime,
+        device: device || 'WEB_DASHBOARD',
+        date: new Date().toISOString().split('T')[0]
+    });
+    // Keep last 200 entries
+    if (history.length > 200) history.length = 200;
+    localStorage.setItem('section_history', JSON.stringify(history));
+    renderSectionHistory();
+}
+
+function renderSectionHistory() {
+    const container = document.getElementById('section-history-container');
+    if (!container) return;
+    const history = getSectionHistory();
+    if (history.length === 0) {
+        container.innerHTML = '<div class="text-center text-muted py-5 small"><em>No completed sections yet. Sections are saved when you end a lecture.</em></div>';
+        return;
+    }
+    let html = '<table class="table table-hover table-sm mb-0"><thead class="table-light"><tr><th style="width:30px;"><input type="checkbox" id="select-all-sections" onchange="toggleAllSections(this)"></th><th>Course</th><th>Section</th><th>Start</th><th>End</th><th>Duration</th><th>Device</th><th></th></tr></thead><tbody>';
+    history.forEach((s, i) => {
+        const start = s.startTime ? new Date(s.startTime).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '-';
+        const end = s.endTime ? new Date(s.endTime).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '-';
+        const dur = s.startTime && s.endTime ? Math.round((s.endTime - s.startTime) / 60000) + 'm' : '-';
+        html += `<tr>
+            <td><input type="checkbox" class="section-checkbox" value="${s.id}"></td>
+            <td class="fw-bold small">${escapeHtml(s.course)}</td>
+            <td>${s.section ? '<span class="badge bg-info text-dark">' + escapeHtml(s.section) + '</span>' : '<span class="text-muted">-</span>'}</td>
+            <td class="small text-muted">${start}</td>
+            <td class="small text-muted">${end}</td>
+            <td class="small">${dur}</td>
+            <td class="small text-muted">${escapeHtml(s.device)}</td>
+            <td><button class="btn btn-xs btn-outline-primary py-0 px-1" onclick="downloadSectionCsv('${s.id}')" title="Download CSV"><i class="bi bi-download"></i></button></td>
+        </tr>`;
+    });
+    html += '</tbody></table>';
+    if (history.length > 0) {
+        html += '<div class="p-2 border-top d-flex justify-content-between align-items-center bg-light">';
+        html += '<span class="small text-muted"><span id="section-selected-count">0</span> selected</span>';
+        html += '<button class="btn btn-sm btn-outline-primary" onclick="downloadSelectedSections()"><i class="bi bi-download me-1"></i>Download Selected</button>';
+        html += '</div>';
+    }
+    container.innerHTML = html;
+}
+
+window.toggleAllSections = function(cb) {
+    document.querySelectorAll('.section-checkbox').forEach(c => c.checked = cb.checked);
+    updateSectionCount();
+};
+
+function updateSectionCount() {
+    const count = document.querySelectorAll('.section-checkbox:checked').length;
+    const el = document.getElementById('section-selected-count');
+    if (el) el.textContent = count;
+}
+
+// Listen for checkbox changes
+document.addEventListener('DOMContentLoaded', () => {
+    document.addEventListener('change', function(e) {
+        if (e.target.classList.contains('section-checkbox')) updateSectionCount();
+    });
+});
+
+window.downloadSectionCsv = function(id) {
+    const history = getSectionHistory();
+    const s = history.find(h => h.id === id);
+    if (!s) return;
+    const params = new URLSearchParams();
+    const startDate = s.startTime ? new Date(s.startTime).toISOString().replace('T', ' ').substring(0, 19) : '';
+    const endDate = s.endTime ? new Date(s.endTime).toISOString().replace('T', ' ').substring(0, 19) : '';
+    if (startDate) params.set('start_time', startDate);
+    if (endDate) params.set('end_time', endDate);
+    if (s.course) params.set('course_code', s.course);
+    params.set('columns', 'student_no,student_name,course_code,timestamp,modality,device');
+    window.location.href = '/csc2052/export_csv.php?' + params.toString();
+};
+
+window.downloadSelectedSections = function() {
+    const checked = document.querySelectorAll('.section-checkbox:checked');
+    if (checked.length === 0) { alert('Select at least one section to download.'); return; }
+    const history = getSectionHistory();
+    const selected = [];
+    checked.forEach(cb => {
+        const s = history.find(h => h.id === cb.value);
+        if (s) selected.push(s);
+    });
+    if (selected.length === 0) return;
+    // Merge time ranges
+    let minStart = Infinity, maxEnd = 0;
+    const courses = new Set();
+    selected.forEach(s => {
+        if (s.startTime && s.startTime < minStart) minStart = s.startTime;
+        if (s.endTime && s.endTime > maxEnd) maxEnd = s.endTime;
+        if (s.course) courses.add(s.course);
+    });
+    const params = new URLSearchParams();
+    if (minStart !== Infinity) params.set('start_time', new Date(minStart).toISOString().replace('T', ' ').substring(0, 19));
+    if (maxEnd !== 0) params.set('end_time', new Date(maxEnd).toISOString().replace('T', ' ').substring(0, 19));
+    if (courses.size === 1) params.set('course_code', [...courses][0]);
+    params.set('columns', 'student_no,student_name,course_code,timestamp,modality,device');
+    window.location.href = '/csc2052/export_csv.php?' + params.toString();
+};
+
+window.clearSectionHistory = function() {
+    if (!confirm('Clear all section history?')) return;
+    localStorage.removeItem('section_history');
+    renderSectionHistory();
 };
 
 // ─── AUTO EMAIL ON COURSE END ────────────────────────────────────────────
@@ -1160,7 +1484,8 @@ window.saveDeviceSettings = async function() {
 // ─── FINGERPRINT TEMPLATE TRANSFER ─────────────────────────────────
 window.downloadFingerprintTemplate = async function() {
     const slot = prompt('Enter fingerprint slot number to download (1-127):');
-    if (!slot || isNaN(slot) || slot < 1 || slot > 127) return;
+    const slotNum = Number(slot);
+    if (!slot || isNaN(slotNum) || slotNum < 1 || slotNum > 127) return;
     logToTerminal(`\n> TX: Requesting template for slot #${slot}...`);
     try {
         const sel = document.getElementById('action-target-device');
@@ -1183,7 +1508,8 @@ window.downloadFingerprintTemplate = async function() {
 window.uploadFingerprintTemplate = async function(fileInput) {
     if (!fileInput?.files?.length) return;
     const slot = prompt('Enter target slot number to upload into (1-127):');
-    if (!slot || isNaN(slot) || slot < 1 || slot > 127) { fileInput.value = ''; return; }
+    const slotNum = Number(slot);
+    if (!slot || isNaN(slotNum) || slotNum < 1 || slotNum > 127) { fileInput.value = ''; return; }
     const file = fileInput.files[0];
     const reader = new FileReader();
     reader.onload = async function(e) {
@@ -1331,7 +1657,10 @@ async function refreshAllCourseDropdowns() {
             data.courses.forEach(c => {
                 const opt = document.createElement('option');
                 opt.value = c.course_code;
-                opt.textContent = c.course_code + (c.course_name ? ' - ' + c.course_name : '');
+                let label = c.course_code + (c.course_name ? ' - ' + c.course_name : '');
+                if (c.teachers) label += ' [' + c.teachers + ']';
+                if (c.avg_rating) label += ' (' + c.avg_rating + '\u2605)';
+                opt.textContent = label;
                 sel.appendChild(opt);
             });
 
@@ -1346,7 +1675,14 @@ async function refreshAllCourseDropdowns() {
             { id: 'absent-course-dropdown', inputId: 'absent-course-search', hiddenId: 'absent-course-input', mode: 'select' },
             { id: 'analytics-course-dropdown', inputId: 'analytics-course-search', hiddenId: 'analytics-course-input', mode: 'select' },
             { id: 'export-course-dropdown', inputId: 'export-course-search', hiddenId: 'export-course-input', mode: 'select' },
+            { id: 'filter-course-dropdown', inputId: 'filter-course-search', hiddenId: 'filter-course-input', mode: 'select' },
+            { id: 'chart-course-dropdown', inputId: 'chart-course-search', hiddenId: 'chart-course-input', mode: 'select' },
         ];
+        // Wire chart course selection to load chart (listen on search input change event)
+        const chartCourseSearch = document.getElementById('chart-course-search');
+        if (chartCourseSearch) {
+            chartCourseSearch.addEventListener('change', loadCourseDetailChart);
+        }
         courseDropdowns.forEach(cfg => {
             const dd = document.getElementById(cfg.id);
             if (!dd) return;
@@ -1359,7 +1695,10 @@ async function refreshAllCourseDropdowns() {
                 const item = document.createElement('div');
                 item.className = 'searchable-dropdown-item';
                 item.setAttribute('data-value', c.course_code);
-                item.innerHTML = '<strong>' + escapeHtml(c.course_code) + '</strong>' + (c.course_name ? ' <span class="text-muted">- ' + escapeHtml(c.course_name) + '</span>' : '');
+                let sub = '';
+                if (c.teachers) sub += '<span class="text-muted" style="font-size:0.75rem;">' + escapeHtml(c.teachers) + '</span>';
+                if (c.avg_rating) sub += ' <span class="badge bg-warning text-dark" style="font-size:0.65rem;"><i class="bi bi-star-fill me-1"></i>' + c.avg_rating + '</span>';
+                item.innerHTML = '<div><strong>' + escapeHtml(c.course_code) + '</strong>' + (c.course_name ? ' <span class="text-muted">- ' + escapeHtml(c.course_name) + '</span>' : '') + '</div><div style="line-height:1.2;">' + sub + '</div>';
                 if (cfg.mode === 'select') {
                     item.setAttribute('onclick', "selectDropdownItem(this, '" + cfg.inputId + "', '" + cfg.hiddenId + "', '" + cfg.id + "')");
                 } else {
@@ -1418,7 +1757,7 @@ async function fetchLogs() {
     const studentNo = document.getElementById('filter-student')?.value.trim() || '';
     const dateFrom = document.getElementById('filter-date-from')?.value || '';
     const dateTo = document.getElementById('filter-date-to')?.value || '';
-    const course = document.getElementById('filter-course')?.value || '';
+    const course = document.getElementById('filter-course-input')?.value || document.getElementById('filter-course-search')?.value || '';
     const device = document.getElementById('filter-device')?.value || '';
     
     try {
@@ -1484,12 +1823,12 @@ async function fetchLogs() {
             if (!m) return `<span class="badge bg-light text-dark border rounded-pill px-2 py-1 shadow-sm" style="font-size: 0.85rem;">Unknown</span>`;
             m = m.toLowerCase();
             let badge = '';
-            if (m.includes('fingerprint') && m.includes('face')) badge = `<span class="badge bg-success shadow px-2 py-1 rounded-pill" style="font-size: 0.85rem;"><i class="bi bi-shield-lock-fill me-1"></i>2FA Verified</span>`;
-            else if (m.includes('fingerprint')) badge = `<span class="badge bg-success bg-gradient shadow-sm px-2 py-1 rounded-pill" style="font-size: 0.85rem;"><i class="bi bi-fingerprint me-1"></i>Fingerprint</span>`;
+            if (m.includes('fingerprint') && m.includes('face')) badge = `<span class="badge bg-success text-white shadow px-2 py-1 rounded-pill" style="font-size: 0.85rem;"><i class="bi bi-shield-lock-fill me-1"></i>2FA Verified</span>`;
+            else if (m.includes('fingerprint')) badge = `<span class="badge bg-success text-white bg-gradient shadow-sm px-2 py-1 rounded-pill" style="font-size: 0.85rem;"><i class="bi bi-fingerprint me-1"></i>Fingerprint</span>`;
             else if (m.includes('rfid')) badge = `<span class="badge bg-info text-dark bg-gradient shadow-sm px-2 py-1 rounded-pill" style="font-size: 0.85rem;"><i class="bi bi-credit-card me-1"></i>RFID</span>`;
             else if (m.includes('face') || m.includes('web_face') || m.includes('rpi_face')) badge = `<span class="badge bg-warning text-dark bg-gradient shadow-sm px-2 py-1 rounded-pill" style="font-size: 0.85rem;"><i class="bi bi-person-bounding-box me-1"></i>Face</span>`;
-            else if (m === 'manual') badge = `<span class="badge bg-primary bg-gradient shadow-sm px-2 py-1 rounded-pill" style="font-size: 0.85rem;"><i class="bi bi-pencil-square me-1"></i>Manual</span>`;
-            else badge = `<span class="badge bg-secondary bg-gradient shadow-sm px-2 py-1 rounded-pill" style="font-size: 0.85rem;"><i class="bi bi-cpu me-1"></i>${escapeHtml(m)}</span>`;
+            else if (m === 'manual') badge = `<span class="badge bg-primary text-white bg-gradient shadow-sm px-2 py-1 rounded-pill" style="font-size: 0.85rem;"><i class="bi bi-pencil-square me-1"></i>Manual</span>`;
+            else badge = `<span class="badge bg-secondary text-white bg-gradient shadow-sm px-2 py-1 rounded-pill" style="font-size: 0.85rem;"><i class="bi bi-cpu me-1"></i>${escapeHtml(m)}</span>`;
             
             if (isOffline) badge += ` <span class="badge bg-secondary px-1 py-0" style="font-size: 0.7rem;" title="Synced offline">OFF</span>`;
             return badge;
@@ -1548,271 +1887,342 @@ async function fetchLogs() {
             const displayCourseName = courseName.length > 35 ? courseName.substring(0, 35) + '...' : courseName;
 
             html += `
-            <div class="accordion-item mb-2 border rounded shadow-sm overflow-hidden">
+            <div class="accordion-item mb-2 border-0 overflow-hidden" style="border-radius:10px;box-shadow:0 2px 12px rgba(161,30,23,0.08);">
                 <h2 class="accordion-header d-flex align-items-center" id="${hId}">
-                    <button class="accordion-button flex-grow-1 ${courseIdx !== 0 ? 'collapsed' : ''} bg-light py-2" type="button" data-bs-toggle="collapse" data-bs-target="#${cId}">
-                        <i class="bi bi-collection-fill text-primary me-2"></i> <strong class="text-dark" title="${escapeHtml(courseName)}">${escapeHtml(displayCourseName)}</strong>
-                        <span class="badge bg-primary rounded-pill shadow-sm ms-3">${totalEntries} Entries</span>
+                    <button class="accordion-button flex-grow-1 ${courseIdx !== 0 ? 'collapsed' : ''} py-2" type="button" data-bs-toggle="collapse" data-bs-target="#${cId}"
+                            style="background:#fdf8f8;color:#1e293b;font-weight:700;font-size:0.9rem;">
+                        <i class="bi bi-collection-fill me-2" style="color:#a11e17;"></i>
+                        <span title="${escapeHtml(courseName)}">${escapeHtml(displayCourseName)}</span>
+                        <span class="badge rounded-pill ms-3" style="background:#a11e17;color:#fff;font-size:0.7rem;">${totalEntries} entries</span>
                     </button>
-                    <button class="btn btn-sm btn-outline-success py-1 px-2 ms-1 me-2 flex-shrink-0" onclick="window.downloadGroupCSV('${encodeURIComponent(courseName)}','','')" title="Download CSV"><i class="bi bi-download"></i></button>
                 </h2>
                 <div id="${cId}" class="accordion-collapse collapse ${courseIdx === 0 ? 'show' : ''}" data-bs-parent="#logsAccordion">
-                    <div class="accordion-body p-2">
-            `;
-
-            html += `<div class="accordion accordion-flush" id="dateAcc${courseIdx}">`;
-            let dateIdx = 0;
+                    <div class="accordion-body p-0">
+                        <div class="table-responsive">
+                            <table class="table table-hover table-xs mb-0">
+                                 <thead class="table-light">
+                                     <tr>
+                                         <th>#</th>
+                                         <th>Student</th>
+                                         <th>Name</th>
+                                         <th>Time</th>
+                                         <th>Modality</th>
+                                         <th>Device</th>
+                                     </tr>
+                                 </thead>
+                                 <tbody>`;
             dateKeys.forEach(dateStr => {
-                const dId = 'date' + courseIdx + '_' + dateIdx;
-                const dhId = 'dateHead' + courseIdx + '_' + dateIdx;
-                const timeBlocks = Object.keys(groups[courseName][dateStr]).sort();
-                const dateEntryCount = timeBlocks.reduce((s, tb) => s + groups[courseName][dateStr][tb].length, 0);
-                const formattedDate = dateStr !== 'Unknown' ? new Date(dateStr + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }) : 'Unknown Date';
-
-                html += `
-                <div class="accordion-item border-0">
-                    <h5 class="accordion-header d-flex align-items-center" id="${dhId}">
-                        <button class="accordion-button flex-grow-1 ${dateIdx !== 0 ? 'collapsed' : ''} bg-white py-1" type="button" data-bs-toggle="collapse" data-bs-target="#${dId}" aria-expanded="${dateIdx === 0}">
-                            <i class="bi bi-calendar3 text-secondary me-2"></i> <strong class="text-dark fs-6">${formattedDate}</strong>
-                            <span class="badge bg-secondary rounded-pill ms-3">${dateEntryCount}</span>
-                        </button>
-                        <button class="btn btn-sm btn-outline-success py-1 px-2 ms-1 me-2 flex-shrink-0" onclick="window.downloadGroupCSV('${encodeURIComponent(courseName)}','${dateStr}','')" title="Download CSV"><i class="bi bi-download"></i></button>
-                    </h5>
-                    <div id="${dId}" class="accordion-collapse collapse ${dateIdx === 0 ? 'show' : ''}" data-bs-parent="#dateAcc${courseIdx}">
-                        <div class="accordion-body p-1 ps-3">
-                `;
-
-                html += `<div class="accordion accordion-flush" id="timeAcc${courseIdx}_${dateIdx}">`;
-                let tbIdx = 0;
-                timeBlocks.forEach(tb => {
-                    const tbId = 'tb' + courseIdx + '_' + dateIdx + '_' + tbIdx;
-                    const tbhId = 'tbHead' + courseIdx + '_' + dateIdx + '_' + tbIdx;
-                    const tbEntries = groups[courseName][dateStr][tb];
-
-                    html += `
-                    <div class="accordion-item border-0">
-                        <h6 class="accordion-header d-flex align-items-center" id="${tbhId}">
-                            <button class="accordion-button flex-grow-1 ${tbIdx !== 0 ? 'collapsed' : ''} bg-light py-1" type="button" data-bs-toggle="collapse" data-bs-target="#${tbId}" aria-expanded="${tbIdx === 0}">
-                                <i class="bi bi-clock text-muted me-2"></i> <strong class="fs-6">${escapeHtml(tb)}</strong>
-                                <span class="badge bg-info rounded-pill ms-3 text-dark">${tbEntries.length}</span>
-                            </button>
-                            <button class="btn btn-sm btn-outline-success py-1 px-2 ms-1 me-2 flex-shrink-0" onclick="window.downloadGroupCSV('${encodeURIComponent(courseName)}','${dateStr}','${encodeURIComponent(tb)}')" title="Download CSV"><i class="bi bi-download"></i></button>
-                        </h6>
-                        <div id="${tbId}" class="accordion-collapse collapse ${tbIdx === 0 ? 'show' : ''}" data-bs-parent="#timeAcc${courseIdx}_${dateIdx}">
-                            <div class="accordion-body p-0">
-                                <div class="table-responsive">
-                                      <table class="table table-hover table-bordered align-middle mb-0 bg-white" style="border-radius: 0; font-size: 0.95rem;">
-                                          <thead class="table-dark" style="font-size: 1.0rem;">
-                                             <tr>
-                                                 <th class="ps-3 border-start-0 py-2">#</th>
-                                                 <th class="py-2">Student no.</th>
-                                                 <th class="py-2">Student name</th>
-                                                 <th class="py-2">Time</th>
-                                                 <th class="py-2">Modality</th>
-                                                 <th class="border-end-0 py-2">Device</th>
-                                             </tr>
-                                         </thead>
-                                         <tbody>
-                    `;
-
-                    let rowNum = 1;
-                    tbEntries.forEach(log => {
-                        const stName = log.student_name && log.student_name !== 'Unknown' ? escapeHtml(log.student_name) : `<span class="text-muted fst-italic">-</span>`;
+                const tbKeys = Object.keys(groups[courseName][dateStr]);
+                tbKeys.forEach(tb => {
+                    const logs = groups[courseName][dateStr][tb];
+                    logs.forEach((log, idx) => {
+                        const stName = log.student_name && log.student_name !== 'Unknown' ? escapeHtml(log.student_name) : '<span class="text-muted fst-italic">-</span>';
                         const timeStr = log.timestamp ? log.timestamp.split(' ')[1] || '' : '';
                         const isOffline = log.is_offline_sync == 1 || log.is_offline == 1;
                         html += `
-                            <tr>
-                                <td class="ps-3 text-muted fw-bold border-start-0 py-2">${rowNum++}</td>
-                                <td class="fw-bold text-primary py-2">${escapeHtml(log.student_no)}</td>
-                                <td class="fw-semibold text-dark py-2">${stName}</td>
-                                <td class="py-2"><span class="badge bg-dark rounded-pill px-3 py-1 shadow-sm" style="font-size: 0.85rem;">${escapeHtml(timeStr)}</span></td>
-                                <td class="py-2">${getModalityBadge(log.modality, isOffline)}</td>
-                                <td class="text-muted fw-medium border-end-0 py-2">${escapeHtml(log.device_name)}</td>
-                            </tr>
-                        `;
+                            <tr style="border-bottom:1px solid #f0e8e8;">
+                                <td class="ps-3 py-2 small text-muted">${idx + 1}</td>
+                                <td class="py-2 fw-bold" style="color:#a11e17;font-size:0.82rem;" data-att-tooltip="${escapeHtml(log.student_no)}">${escapeHtml(log.student_no)}</td>
+                                <td class="py-2 fw-semibold text-dark" style="font-size:0.82rem;">${stName}</td>
+                                <td class="py-2"><span class="badge rounded-pill" style="background:#1e293b;color:#fff;font-size:0.72rem;padding:4px 10px;">${escapeHtml(timeStr)}</span></td>
+                                <td class="py-2"><span>${getModalityBadge(log.modality, isOffline)}</span></td>
+                                <td class="pe-3 py-2 text-muted" style="font-size:0.78rem;">${escapeHtml(log.device_name)}</td>
+                            </tr>`;
                     });
-
-                    html += `</tbody></table></div></div></div></div>`;
-                    tbIdx++;
                 });
-                html += `</div></div></div></div>`;
-                dateIdx++;
             });
-            html += `</div></div></div></div>`;
+
+            html += `</tbody></table></div>
+                    </div>
+                </div>
+            </div>`;
             courseIdx++;
         });
         html += `</div>`;
+        // Preserve scroll position so refresh doesn't jump to top
+        const logsBody = container.closest('.logs-body');
+        const savedScroll = logsBody ? logsBody.scrollTop : 0;
         container.innerHTML = html;
-
+        if (logsBody) requestAnimationFrame(() => { logsBody.scrollTop = savedScroll; });
+        // Re-init tooltips so student hovers work on fresh content
+        if (typeof attachAttendanceTooltips === 'function') {
+            setTimeout(attachAttendanceTooltips, 100);
+        }
     } catch (e) {
         console.error("[Logs] Failed to fetch logs:", e);
-        const c = document.getElementById('logs-accordion-container');
-        if (c) {
-            const msg = e && e.message ? e.message : 'Unknown error';
-            if (msg.includes('abort') || msg.includes('AbortError')) {
-                c.innerHTML = '<div class="text-center text-danger py-4"><em>Request timed out. <a href="javascript:fetchLogs()">Retry</a></em></div>';
-            } else {
-                c.innerHTML = '<div class="text-center text-danger py-4"><em>Error loading logs: ' + escapeHtml(msg) + '. <a href="javascript:fetchLogs()">Retry</a></em></div>';
+        container.innerHTML = '<div class="text-center text-danger py-4"><em>Error loading logs.</em></div>';
+    }
+};
+
+/* ─── ADMIN CHARTS ────────────────────────────────────────── */
+let chartInstances = {};
+
+async function loadOverallSummary() {
+    try {
+        const r = await fetch('/csc2052/api/charts.php?action=overall_summary');
+        const d = await r.json();
+        if (d.error) return;
+        document.getElementById('summary-total').textContent = d.total_attendance ?? '-';
+        document.getElementById('summary-today').textContent = d.today_attendance ?? '-';
+        document.getElementById('summary-students').textContent = d.unique_students ?? '-';
+        document.getElementById('summary-courses').textContent = d.unique_courses ?? '-';
+    } catch (e) { console.error('[Charts] Overall summary:', e); }
+}
+
+async function loadCharts() {
+    const days = document.getElementById('chart-days')?.value || 30;
+
+    loadOverallSummary();
+
+    // Daily trend
+    try {
+        const r1 = await fetch(`/csc2052/api/charts.php?action=daily_trend&days=${days}`);
+        const d1 = await r1.json();
+        const ctx1 = document.getElementById('dailyTrendChart');
+        if (!ctx1) return;
+        if (chartInstances.daily) chartInstances.daily.destroy();
+        chartInstances.daily = new Chart(ctx1, {
+            type: 'line',
+            data: {
+                labels: d1.labels,
+                datasets: [{ label: 'Attendance', data: d1.data, borderColor: '#a11e17', backgroundColor: 'rgba(161,30,23,0.08)', fill: true, tension: 0.3, pointRadius: 3, pointBackgroundColor: '#a11e17' }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+        });
+    } catch (e) { console.error('[Charts] Daily trend:', e); }
+
+    // Modality pie
+    try {
+        const r2 = await fetch('/csc2052/api/charts.php?action=modality_distribution');
+        const d2 = await r2.json();
+        const ctx2 = document.getElementById('modalityChart');
+        if (!ctx2) return;
+        if (chartInstances.modality) chartInstances.modality.destroy();
+        chartInstances.modality = new Chart(ctx2, {
+            type: 'doughnut',
+            data: {
+                labels: d2.labels,
+                datasets: [{ data: d2.data, backgroundColor: d2.colors, borderWidth: 0 }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8, font: { size: 10 } } } } }
+        });
+    } catch (e) { console.error('[Charts] Modality:', e); }
+
+    // Course distribution
+    try {
+        const r3 = await fetch('/csc2052/api/charts.php?action=course_distribution');
+        const d3 = await r3.json();
+        const ctx3 = document.getElementById('courseChart');
+        if (!ctx3) return;
+        if (chartInstances.course) chartInstances.course.destroy();
+        chartInstances.course = new Chart(ctx3, {
+            type: 'bar',
+            data: {
+                labels: d3.labels,
+                datasets: [{ label: 'Attendance', data: d3.data, backgroundColor: d3.colors, borderRadius: 4 }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+        });
+    } catch (e) { console.error('[Charts] Course:', e); }
+
+    // Hourly pattern
+    try {
+        const r4 = await fetch('/csc2052/api/charts.php?action=hourly_heat');
+        const d4 = await r4.json();
+        const ctx4 = document.getElementById('hourlyChart');
+        if (!ctx4) return;
+        if (chartInstances.hourly) chartInstances.hourly.destroy();
+        chartInstances.hourly = new Chart(ctx4, {
+            type: 'bar',
+            data: {
+                labels: d4.labels,
+                datasets: [{ label: 'Check-ins', data: d4.data, backgroundColor: '#1e293b', borderRadius: 3 }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+        });
+    } catch (e) { console.error('[Charts] Hourly:', e); }
+
+    // Teacher chart
+    try {
+        const r5 = await fetch('/csc2052/api/charts.php?action=per_teacher');
+        const d5 = await r5.json();
+        const ctx5 = document.getElementById('teacherChart');
+        if (ctx5) {
+            if (chartInstances.teacher) chartInstances.teacher.destroy();
+            if (d5.labels && d5.labels.length) {
+                chartInstances.teacher = new Chart(ctx5, {
+                    type: 'bar',
+                    data: {
+                        labels: d5.labels,
+                        datasets: [{ label: 'Attendance', data: d5.data, backgroundColor: d5.colors, borderRadius: 3 }]
+                    },
+                    options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+                });
             }
         }
+    } catch (e) { console.error('[Charts] Teacher:', e); }
+}
+
+window.loadStudentChart = async function() {
+    const studentNo = document.getElementById('chart-student-no')?.value.trim();
+    if (!studentNo || studentNo.length < 3) return;
+    try {
+        const r = await fetch(`/csc2052/api/charts.php?action=student_trend&student_no=${encodeURIComponent(studentNo)}&days=30`);
+        const d = await r.json();
+        const ctx = document.getElementById('studentChart');
+        if (!ctx) return;
+        if (chartInstances.student) chartInstances.student.destroy();
+        chartInstances.student = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: d.labels || [],
+                datasets: [{ label: 'Attendance', data: d.data || [], backgroundColor: '#a11e17', borderRadius: 3 }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+        });
+    } catch (e) { console.error('[Charts] Student:', e); }
+};
+
+window.loadCourseDetailChart = async function() {
+    const course = document.getElementById('chart-course-input')?.value || '';
+    if (!course) return;
+    try {
+        const r = await fetch(`/csc2052/api/charts.php?action=per_course&course=${encodeURIComponent(course)}&days=30`);
+        const d = await r.json();
+        const ctx = document.getElementById('courseDetailChart');
+        if (!ctx) return;
+        if (chartInstances.courseDetail) chartInstances.courseDetail.destroy();
+        chartInstances.courseDetail = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: d.labels || [],
+                datasets: [{ label: 'Attendance', data: d.data || [], borderColor: '#0d6efd', backgroundColor: 'rgba(13,110,253,0.08)', fill: true, tension: 0.3, pointRadius: 2, pointBackgroundColor: '#0d6efd' }]
+            },
+            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
+        });
+    } catch (e) { console.error('[Charts] Course detail:', e); }
+};
+
+/* ─── ADMIN RATINGS BOARD ─────────────────────────────────── */
+async function loadAdminRatingsBoard() {
+    const container = document.getElementById('admin-ratings-board');
+    if (!container) return;
+    try {
+        const r = await fetch('/csc2052/api/ratings.php?action=get_board');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        if (!data || !data.length) {
+            container.innerHTML = '<div class="text-center text-muted py-4 small"><em>No ratings yet.</em></div>';
+            return;
+        }
+        let html = '';
+        data.forEach(course => {
+            const avg = parseFloat(course.avg_rating) || 0;
+            const full = Math.floor(avg);
+            const half = avg - full >= 0.5 ? 1 : 0;
+            const empty = 5 - full - half;
+            let stars = '';
+            for (let i = 0; i < full; i++) stars += '<i class="bi bi-star-fill text-warning" style="font-size:0.8rem;"></i>';
+            if (half) stars += '<i class="bi bi-star-half text-warning" style="font-size:0.8rem;"></i>';
+            for (let i = 0; i < empty; i++) stars += '<i class="bi bi-star text-warning" style="font-size:0.8rem;"></i>';
+            html += `<div class="d-flex justify-content-between align-items-center py-2 border-bottom">
+                <div><strong class="small">${escapeHtml(course.course_code || '')}</strong>
+                <span class="text-muted small"> - ${escapeHtml(course.course_name || '')}</span></div>
+                <div class="text-end"><span class="me-2 small fw-bold">${avg.toFixed(1)}</span>${stars}
+                <span class="ms-2 text-muted small">(${course.count || 0})</span></div>
+            </div>`;
+        });
+        container.innerHTML = html;
+    } catch (e) {
+        container.innerHTML = '<div class="text-center text-danger py-3 small">Failed to load ratings.</div>';
     }
 }
 
-window.exportLogsCsv = function() {
-    const studentNo = document.getElementById('filter-student')?.value.trim() || '';
-    const course = document.getElementById('filter-course')?.value.trim() || '';
-    const dateFrom = document.getElementById('filter-date-from')?.value || '';
-    const dateTo = document.getElementById('filter-date-to')?.value || '';
-    
-    window.location.href = `export_csv.php?student_no=${encodeURIComponent(studentNo)}&course_code=${encodeURIComponent(course)}&start_time=${encodeURIComponent(dateFrom)}&end_time=${encodeURIComponent(dateTo)}`;
-};
-
-window.downloadGroupCSV = async function(course, date, timeBlock) {
-    course = decodeURIComponent(course);
-    timeBlock = decodeURIComponent(timeBlock);
-    
-    let dateFrom = '', dateTo = '';
-    if (date && date !== 'Unknown') {
-        dateFrom = date;
-        dateTo = date;
-    }
-    
+/* ─── ADMIN RECENT COMMENTS ───────────────────────────────── */
+async function loadAdminRecentComments() {
+    const container = document.getElementById('admin-recent-comments');
+    if (!container) return;
     try {
-        const url = `/csc2052/api/logs.php?action=fetch_logs&student_no=&course_code=${encodeURIComponent(course)}&date_from=${encodeURIComponent(dateFrom)}&date_to=${encodeURIComponent(dateTo)}&device=`;
-        const response = await fetch(url);
-        if (!response.ok) return;
-        let logs = await response.json();
-        
-        if (timeBlock && timeBlock !== 'Unknown') {
-            const blockParts = timeBlock.split(' - ');
-            const startHour = parseInt(blockParts[0].split(':')[0]);
-            const endHour = parseInt(blockParts[1].split(':')[0]);
-            logs = logs.filter(log => {
-                const ts = log.timestamp || '';
-                const timePart = ts.split(' ')[1] || '';
-                const hour = parseInt(timePart.split(':')[0]);
-                return hour >= startHour && hour < endHour;
-            });
-        }
-        
-        if (logs.length === 0) {
-            alert('No records to export.');
+        const r = await fetch('/csc2052/api/ratings.php?action=get_comments&target_type=course&limit=20');
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        const comments = data.comments || (Array.isArray(data) ? data : []);
+        if (!comments.length) {
+            container.innerHTML = '<div class="text-center text-muted py-4 small"><em>No comments yet.</em></div>';
             return;
         }
-        
-        let csv = 'Student No,Student Name,Course,Date,Time,Modality,Device\n';
-        logs.forEach(log => {
-            const ts = log.timestamp || '';
-            const datePart = ts.split(' ')[0] || '';
-            const timePart = ts.split(' ')[1] || '';
-            csv += `"${log.student_no}","${log.student_name || ''}","${log.course_code || ''}","${datePart}","${timePart}","${log.modality || ''}","${log.device_name || ''}"\n`;
-        });
-        
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const urlObj = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = urlObj;
-        let fname = course.replace(/[^a-zA-Z0-9]/g, '_');
-        if (date) fname += '_' + date;
-        if (timeBlock) fname += '_' + timeBlock.replace(/[^a-zA-Z0-9]/g, '');
-        a.download = fname + '.csv';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(urlObj);
-    } catch (e) {
-        console.error('CSV download failed:', e);
-        alert('Failed to download CSV.');
-    }
-};
-
-window.exportFilteredCSV = function() {
-    const start = document.getElementById('export-start')?.value || '';
-    const end = document.getElementById('export-end')?.value || '';
-    const device = document.getElementById('export-device')?.value.trim() || '';
-    const crs = document.getElementById('export-course-input')?.value.trim() || (document.getElementById('export-course') ? document.getElementById('export-course').value.trim() : '');
-    
-    // Collect selected columns
-    const csvCols = ['student_no', 'student_name', 'course_code', 'device', 'timestamp', 'modality', 'is_offline', 'ip_address', 'id'];
-    const selectedCols = csvCols.filter(col => {
-        const cb = document.getElementById('csv-col-' + col);
-        return cb && cb.checked;
-    });
-    
-    let url = 'export_csv.php?';
-    const params = new URLSearchParams();
-    if (start) params.append('start_time', start.replace('T', ' ') + ':00');
-    if (end) params.append('end_time', end.replace('T', ' ') + ':59');
-    if (device) params.append('device', device);
-    if (crs) params.append('course_code', crs);
-    if (selectedCols.length > 0) params.append('columns', selectedCols.join(','));
-    
-    window.location.href = url + params.toString();
-};
-
-window.calculateCourseAnalytics = async function() {
-    const course = document.getElementById('analytics-course-input')?.value.trim() || document.getElementById('analytics-course-select')?.value.trim();
-    if (!course) return;
-    
-    const container = document.getElementById('analytics-results');
-    const tbody = document.getElementById('analytics-table-body');
-    const countSpan = document.getElementById('analytics-total-sessions');
-    if (!container || !tbody) return;
-    
-    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-muted"><span class="spinner-border spinner-border-sm me-2"></span>Calculating...</td></tr>';
-    container.classList.remove('d-none');
-    
-    try {
-        const res = await fetch(`/csc2052/api/analytics.php?action=course_stats&course_code=${encodeURIComponent(course)}`);
-        const data = await res.json();
-        
-        countSpan.textContent = data.total;
-        if (data.total === 0 || !data.students.length) {
-            tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 fw-bold text-danger">No attendance data found for this course.</td></tr>';
-            return;
-        }
-        
         let html = '';
-        data.students.forEach(st => {
-            let badgeClass = 'bg-success';
-            let barColor = '#198754';
-            if (st.percentage < 80) { badgeClass = 'bg-warning text-dark'; barColor = '#ffc107'; }
-            if (st.percentage < 50) { badgeClass = 'bg-danger'; barColor = '#dc3545'; }
-            
-            html += `
-                <tr data-student-no="${escapeHtml(st.student_no)}" data-student-name="${escapeHtml(st.student_name)}" data-percentage="${st.percentage}" data-course="${escapeHtml(course)}" data-attended="${st.attended}" data-total="${data.total}">
-                    <td><input class="form-check-input analytics-row-check" type="checkbox" value="${escapeHtml(st.student_no)}" onchange="updateSelectedCount('analytics')"></td>
-                    <td class="ps-3 fw-bold text-primary">${escapeHtml(st.student_no)}</td>
-                    <td class="fw-semibold text-dark">${escapeHtml(st.student_name)}</td>
-                    <td class="fw-bold">${st.attended} / ${data.total}</td>
-                    <td class="text-center">
-                        <div class="d-flex align-items-center justify-content-center gap-2">
-                            <div class="progress" style="height: 8px; width: 80px; background: #e9ecef; border-radius: 4px;">
-                                <div class="progress-bar" style="width: ${st.percentage}%; background-color: ${barColor}; border-radius: 4px;"></div>
-                            </div>
-                            <span class="badge ${badgeClass}" style="min-width: 50px;">${st.percentage}%</span>
-                        </div>
-                    </td>
-                    <td>
-                        <button class="btn btn-xs btn-outline-info py-0 px-2" onclick="sendSingleAnalyticsEmail('${escapeHtml(st.student_no)}', '${escapeHtml(st.student_name)}', ${st.percentage}, '${escapeHtml(course)}')" title="Email this student">
-                            <i class="bi bi-envelope"></i>
-                        </button>
-                    </td>
-                </tr>
-            `;
+        comments.slice(0, 15).forEach(c => {
+            const date = c.created_at ? c.created_at.split(' ')[0] : '';
+            html += `<div class="py-2 px-1 border-bottom">
+                <div class="d-flex justify-content-between align-items-start">
+                    <strong class="small text-primary">${escapeHtml(c.target_id || '')}</strong>
+                    <span class="text-muted" style="font-size:0.7rem;">${date}</span>
+                </div>
+                <p class="mb-0 small text-dark mt-1">${escapeHtml(c.body || c.comment_text || '')}</p>
+                <small class="text-muted" style="font-size:0.7rem;">by ${escapeHtml(c.author_name || c.commenter_name || 'Unknown')}</small>
+            </div>`;
         });
-        tbody.innerHTML = html;
-        const downloadBtn = document.getElementById('btn-download-analytics');
-        if (downloadBtn) downloadBtn.disabled = false;
-        const emailAllBtn = document.getElementById('btn-email-analytics-all');
-        if (emailAllBtn) emailAllBtn.disabled = false;
-        const customEmailBtn = document.getElementById('btn-custom-analytics-email');
-        if (customEmailBtn) customEmailBtn.disabled = false;
-        const filterSelect = document.getElementById('analytics-filter');
-        if (filterSelect) filterSelect.value = 'all';
-        updateSelectedCount('analytics');
+        container.innerHTML = html;
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-danger">Error retrieving analytics...</td></tr>';
+        container.innerHTML = '<div class="text-center text-danger py-3 small">Failed to load comments.</div>';
+    }
+}
+
+/* ─── ADMIN FORUM ─────────────────────────────────────────── */
+window.switchAdminForumCourse = async function() {
+    const sel = document.getElementById('admin-forum-course');
+    const course = sel?.value || '';
+    const container = document.getElementById('admin-forum-comments');
+    if (!container) return;
+    if (!course) { container.innerHTML = '<div class="text-center text-muted py-4 small">Select a course to view discussion.</div>'; return; }
+    container.innerHTML = '<div class="text-center text-muted py-3 small"><i class="bi bi-arrow-clockwise spin me-1"></i>Loading...</div>';
+    try {
+        const r = await fetch(`/csc2052/api/ratings.php?action=get_comments&target_type=course&target_id=${encodeURIComponent(course)}&limit=50`);
+        const data = await r.json();
+        const comments = data.comments || (Array.isArray(data) ? data : []);
+        if (!comments.length) {
+            container.innerHTML = '<div class="text-center text-muted py-4 small">No discussion yet for this course.</div>';
+            return;
+        }
+        let html = '';
+        comments.forEach(c => {
+            const date = c.created_at ? c.created_at.split(' ')[0] : '';
+            html += `<div class="py-2 px-3 border-bottom">
+                <div class="d-flex justify-content-between align-items-start">
+                    <strong class="small">${escapeHtml(c.author_name || c.commenter_name || 'Unknown')}</strong>
+                    <span class="text-muted" style="font-size:0.7rem;">${date}</span>
+                </div>
+                <p class="mb-0 small text-dark mt-1">${escapeHtml(c.body || c.comment_text || '')}</p>
+                <div class="mt-1">${c.like_count ? '<span class="badge bg-light text-dark fw-normal me-2" style="font-size:0.7rem;"><i class="bi bi-hand-thumbs-up me-1"></i>' + c.like_count + '</span>' : ''}${c.is_pinned ? '<span class="badge bg-warning text-dark fw-normal" style="font-size:0.7rem;"><i class="bi bi-pin me-1"></i>Pinned</span>' : ''}</div>
+            </div>`;
+        });
+        container.innerHTML = html;
+    } catch (e) {
+        container.innerHTML = '<div class="text-center text-danger py-3 small">Failed to load discussion.</div>';
+    }
+};
+
+window.submitAdminForumComment = async function() {
+    const course = document.getElementById('admin-forum-course')?.value;
+    const input = document.getElementById('admin-comment-input');
+    const comment = input?.value?.trim();
+    if (!course || !comment) return;
+    try {
+        const r = await fetch('/csc2052/api/ratings.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: new URLSearchParams({ action: 'submit_comment', target_type: 'course', target_id: course, body: comment })
+        });
+        const data = await r.json();
+        if (data.status === 'success' || data.status === 'ok' || data.success) {
+            input.value = '';
+            switchAdminForumCourse();
+        } else {
+            alert('Failed to submit comment: ' + (data.message || 'Unknown error'));
+        }
+    } catch (e) {
+        alert('Failed to submit comment.');
     }
 };
 
@@ -1941,7 +2351,7 @@ window.togglePasswordVisibility = function() {
     }
 };
 
-window.saveEmailConfig = async function() {
+window.saveEmailConfig = async function(evt) {
     const email = document.getElementById('user-sender-email')?.value.trim();
     const password = document.getElementById('user-sender-password')?.value.trim();
     const smtpSelect = document.getElementById('user-smtp-host');
@@ -1954,7 +2364,8 @@ window.saveEmailConfig = async function() {
     if (!email) { showToast('Enter your email address.', 'error'); return; }
     if (!password) { showToast('Enter your app password.', 'error'); return; }
     
-    const btn = event.target.closest('button');
+    const btn = (evt?.target || document.activeElement)?.closest('button');
+    if (!btn) return;
     const origHtml = btn.innerHTML;
     btn.disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
@@ -2022,7 +2433,7 @@ window.sendAbsentEmailReport = async function() {
         const data = await res.json();
         
         if (data.status === 'success') {
-            showToast('Email report sent to ' + data.recipient + '!', 'success');
+            showToast('Email report sent to ' + recipient + '!', 'success');
             loadEmailLogs();
         } else {
             showToast('Failed to send email: ' + data.message, 'error');
@@ -2279,6 +2690,9 @@ window.openCustomEmailModal = function(source) {
     const modal = new bootstrap.Modal(document.getElementById('customEmailModal'));
     document.getElementById('custom-email-source').value = source;
     
+    // Refresh the preset dropdown in modal
+    renderModalPresetSelect();
+    
     const senderInput = document.getElementById('custom-email-sender');
     const userEmail = document.getElementById('user-sender-email')?.value || '';
     if (senderInput) {
@@ -2290,6 +2704,17 @@ window.openCustomEmailModal = function(source) {
             opt.selected = true;
             senderInput.appendChild(opt);
         }
+    }
+    
+    // 'blank' = new blank template, don't pre-fill from row selections
+    if (source === 'blank') {
+        const recDiv = document.getElementById('custom-email-recipients');
+        if (recDiv) recDiv.innerHTML = '<span class="text-muted">Composing a new template — no recipients pre-selected.</span>';
+        document.getElementById('custom-email-subject').value = '';
+        document.getElementById('custom-email-body').value = '';
+        document.getElementById('custom-email-recipient').value = '';
+        modal.show();
+        return;
     }
     
     const recipients = [];
@@ -3418,13 +3843,7 @@ window.unenrollStudentCourse = async function(stuNo, code) {
 // ─── Raspberry Pi Camera Attendance ────────────────────────────────
 let rpiPollInterval = null;
 
-function getRpiIp() {
-    const sel = document.getElementById('rpi-ip-select');
-    if (sel && sel.value) return sel.value;
-    const input = document.getElementById('rpi-node-ip');
-    if (input && input.value.trim()) return input.value.trim();
-    return localStorage.getItem('rpi_node_ip') || '';
-}
+// getRpiIp() is already declared above — this section uses it for camera attendance
 
 window.refreshRpiStatus = async function() {
     const ip = getRpiIp();
@@ -3618,3 +4037,239 @@ window.registerNewDevice = async function() {
         }
     } catch(e) { alert('Could not reach server.'); }
 };
+
+// ─── EMAIL PRESETS (localStorage) ──────────────────────────────────────
+
+const EMAIL_PRESETS_KEY = 'sentinel_email_presets';
+
+function getEmailPresets() {
+    try { return JSON.parse(localStorage.getItem(EMAIL_PRESETS_KEY) || '[]'); }
+    catch (e) { return []; }
+}
+
+function saveEmailPresets(presets) {
+    localStorage.setItem(EMAIL_PRESETS_KEY, JSON.stringify(presets));
+}
+
+window.saveEmailPreset = function() {
+    const subject = document.getElementById('custom-email-subject')?.value.trim();
+    const body = document.getElementById('custom-email-body')?.value.trim();
+    if (!subject && !body) { showToast('Write a subject or message first.', 'warning'); return; }
+    const name = prompt('Enter a name for this preset:', subject || 'My Preset');
+    if (!name || !name.trim()) return;
+    const presets = getEmailPresets();
+    const idx = presets.findIndex(p => p.name === name.trim());
+    const preset = { name: name.trim(), subject: subject || '', body: body || '', savedAt: new Date().toISOString() };
+    if (idx >= 0) {
+        if (!confirm(`Overwrite existing preset "${name.trim()}"?`)) return;
+        presets[idx] = preset;
+    } else { presets.push(preset); }
+    saveEmailPresets(presets);
+    showToast(`Preset "${name.trim()}" saved!`, 'success');
+    renderEmailPresetsCard();
+    renderModalPresetSelect();
+};
+
+window.loadEmailPreset = function(name) {
+    if (!name) return;
+    const preset = getEmailPresets().find(p => p.name === name);
+    if (!preset) return;
+    const subjectEl = document.getElementById('custom-email-subject');
+    const bodyEl = document.getElementById('custom-email-body');
+    const charEl = document.getElementById('email-body-chars');
+    if (subjectEl) subjectEl.value = preset.subject;
+    if (bodyEl) { bodyEl.value = preset.body; if (charEl) charEl.textContent = preset.body.length; }
+    showToast(`Preset "${name}" loaded.`, 'info');
+};
+
+window.deleteEmailPreset = function(name) {
+    if (!name) { showToast('Select a preset to delete.', 'warning'); return; }
+    if (!confirm(`Delete preset "${name}"?`)) return;
+    saveEmailPresets(getEmailPresets().filter(p => p.name !== name));
+    showToast(`Preset "${name}" deleted.`, 'success');
+    renderEmailPresetsCard();
+    renderModalPresetSelect();
+    const sel = document.getElementById('modal-preset-select');
+    if (sel) sel.value = '';
+};
+
+function renderEmailPresetsCard() {
+    const container = document.getElementById('email-presets-container');
+    if (!container) return;
+    const presets = getEmailPresets();
+    if (presets.length === 0) {
+        container.innerHTML = '<div class="text-center text-muted py-2"><em>No presets saved yet. Compose an email and click "Save as Preset".</em></div>';
+        return;
+    }
+    let html = '<div class="row g-2">';
+    presets.forEach(p => {
+        const savedDate = p.savedAt ? new Date(p.savedAt).toLocaleDateString() : '';
+        html += `
+        <div class="col-md-6 col-lg-4">
+            <div class="card border shadow-sm h-100">
+                <div class="card-body py-2 px-3">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <div>
+                            <strong class="text-primary small">${escapeHtml(p.name)}</strong>
+                            <div class="text-muted small text-truncate" style="max-width:200px;">${escapeHtml(p.subject || '(no subject)')}</div>
+                        </div>
+                        <div class="d-flex gap-1">
+                            <button class="btn btn-xs btn-outline-primary py-0 px-1" title="Load into composer"
+                                onclick="openCustomEmailModal('blank'); setTimeout(() => loadEmailPreset(${JSON.stringify(p.name)}), 350)">
+                                <i class="bi bi-pencil-square"></i>
+                            </button>
+                            <button class="btn btn-xs btn-outline-danger py-0 px-1" title="Delete preset"
+                                onclick="deleteEmailPreset(${JSON.stringify(p.name)})">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="text-muted" style="font-size:0.75rem;">${escapeHtml((p.body || '').substring(0, 60))}${(p.body?.length > 60) ? '…' : ''}</div>
+                    ${savedDate ? `<small class="text-muted" style="font-size:0.7rem;">Saved: ${savedDate}</small>` : ''}
+                </div>
+            </div>
+        </div>`;
+    });
+    html += '</div>';
+    container.innerHTML = html;
+}
+
+function renderModalPresetSelect() {
+    const sel = document.getElementById('modal-preset-select');
+    if (!sel) return;
+    const presets = getEmailPresets();
+    sel.innerHTML = '<option value="">— Load a preset —</option>';
+    presets.forEach(p => {
+        const opt = document.createElement('option');
+        opt.value = p.name;
+        opt.textContent = p.name + (p.subject ? ` — ${p.subject.substring(0, 30)}` : '');
+        sel.appendChild(opt);
+    });
+}
+
+window.insertPlaceholder = function(text) {
+    const ta = document.getElementById('custom-email-body');
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    ta.value = ta.value.substring(0, start) + text + ta.value.substring(end);
+    ta.selectionStart = ta.selectionEnd = start + text.length;
+    ta.focus();
+    const charEl = document.getElementById('email-body-chars');
+    if (charEl) charEl.textContent = ta.value.length;
+};
+
+/* ─── NEXT LECTURE SECTION ──────────────────────────────────── */
+window.nextLectureSection = function() {
+    const sectionInput = document.getElementById('lecture-section-input');
+    const nextBtn = document.getElementById('btn-next-section');
+    if (!sectionInput) return;
+    const val = sectionInput.value.trim();
+    // Auto-increment section letter/number
+    const match = val.match(/^(.+?)\s*([A-Z])$/i);
+    if (match) {
+        const nextChar = String.fromCharCode(match[2].charCodeAt(0) + 1);
+        sectionInput.value = match[1] + ' ' + nextChar;
+    } else {
+        sectionInput.value = val + ' (next)';
+    }
+    if (nextBtn) nextBtn.style.display = 'none';
+    sectionInput.focus();
+};
+
+/* ─── CSV EXPORT ──────────────────────────────────────────────── */
+/* ─── EXPORT VISIBLE LOGS (immediate, no modal) ───────────── */
+window.exportVisibleLogsCsv = function() {
+    const dateFrom = document.getElementById('filter-date-from')?.value || '';
+    const dateTo = document.getElementById('filter-date-to')?.value || '';
+    const course = document.getElementById('filter-course-input')?.value || document.getElementById('filter-course-search')?.value || '';
+    const device = document.getElementById('filter-device')?.value || '';
+    const studentNo = document.getElementById('filter-student')?.value.trim() || '';
+
+    let startTime = dateFrom ? dateFrom + ' 00:00:00' : '';
+    let endTime = dateTo ? dateTo + ' 23:59:59' : '';
+
+    const params = new URLSearchParams();
+    if (startTime) params.set('start_time', startTime);
+    if (endTime) params.set('end_time', endTime);
+    if (course) params.set('course_code', course);
+    if (device) params.set('device', device);
+    if (studentNo) params.set('student_no', studentNo);
+    params.set('columns', 'student_no,student_name,course_code,timestamp,modality,device,is_offline');
+
+    const url = '/csc2052/export_csv.php?' + params.toString();
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = '';
+    a.style.display = 'none';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+};
+
+window.exportLogsCsv = function() {
+    const modal = document.getElementById('exportCsvModal');
+    if (!modal) return;
+    // Pre-fill from current filters
+    const from = document.getElementById('filter-date-from');
+    const to = document.getElementById('filter-date-to');
+    const device = document.getElementById('filter-device');
+    if (from) document.getElementById('export-date-from').value = from.value;
+    if (to) document.getElementById('export-date-to').value = to.value;
+    const filterCourseSearch = document.getElementById('filter-course-search');
+    const exportCourseSearch = document.getElementById('export-course-search');
+    const exportCourseInput = document.getElementById('export-course-input');
+    if (filterCourseSearch && exportCourseSearch) {
+        exportCourseSearch.value = filterCourseSearch.value;
+    }
+    const filterCourseInput = document.getElementById('filter-course-input');
+    if (filterCourseInput && exportCourseInput) {
+        exportCourseInput.value = filterCourseInput.value;
+    }
+    if (device) document.getElementById('export-device').value = device.value;
+    const bsModal = new bootstrap.Modal(modal);
+    bsModal.show();
+};
+
+window.doExportCsv = function() {
+    const dateFrom = document.getElementById('export-date-from')?.value || '';
+    const dateTo = document.getElementById('export-date-to')?.value || '';
+    const timeFrom = document.getElementById('export-time-from')?.value || '';
+    const timeTo = document.getElementById('export-time-to')?.value || '';
+    const course = document.getElementById('export-course-input')?.value || document.getElementById('export-course-search')?.value || '';
+    const device = document.getElementById('export-device')?.value || '';
+
+    // Build start/end datetime
+    let startTime = dateFrom;
+    if (dateFrom && timeFrom) startTime = dateFrom + ' ' + timeFrom + ':00';
+    else if (dateFrom) startTime = dateFrom + ' 00:00:00';
+
+    let endTime = dateTo;
+    if (dateTo && timeTo) endTime = dateTo + ' ' + timeTo + ':59';
+    else if (dateTo) endTime = dateTo + ' 23:59:59';
+
+    // Collect selected columns
+    const cols = [];
+    document.querySelectorAll('#exportCsvModal .form-check-input:checked').forEach(cb => {
+        cols.push(cb.value);
+    });
+
+    const params = new URLSearchParams();
+    if (startTime) params.set('start_time', startTime);
+    if (endTime) params.set('end_time', endTime);
+    if (course) params.set('course_code', course);
+    if (device) params.set('device', device);
+    if (cols.length) params.set('columns', cols.join(','));
+
+    const url = '/csc2052/export_csv.php?' + params.toString();
+    window.location.href = url;
+};
+
+// On DOMContentLoaded — render preset cards if the container exists
+document.addEventListener('DOMContentLoaded', () => {
+    if (document.getElementById('email-presets-container')) {
+        renderEmailPresetsCard();
+        renderModalPresetSelect();
+    }
+});
+

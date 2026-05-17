@@ -8,7 +8,7 @@ if (!isAdmin()) {
     header('Pragma: no-cache');
     header('Expires: 0');
     if (isTeacher()) { header('Location: teacher_dashboard.php'); exit; }
-    if (isStudent()) { header('Location: student_dashboard.php'); exit; }
+    if (isStudent())  { header('Location: student_dashboard.php'); exit; }
     header('Location: login.php'); exit;
 }
 
@@ -18,24 +18,18 @@ $is_esp = false;
 $is_rpi = false;
 $status_file_esp = __DIR__ . '/sys_status_esp32.txt';
 $status_file_rpi = __DIR__ . '/sys_status_rpi.txt';
+if (file_exists($status_file_esp)) { $last_ping = (int)file_get_contents($status_file_esp); if ((time() - $last_ping) <= 30) $is_esp = true; }
+if (file_exists($status_file_rpi)) { $last_ping = (int)file_get_contents($status_file_rpi); if ((time() - $last_ping) <= 30) $is_rpi = true; }
 
-if (file_exists($status_file_esp)) {
-    $last_ping = (int)file_get_contents($status_file_esp);
-    if ((time() - $last_ping) <= 30) { $is_esp = true; }
-}
-if (file_exists($status_file_rpi)) {
-    $last_ping = (int)file_get_contents($status_file_rpi);
-    if ((time() - $last_ping) <= 30) { $is_rpi = true; }
-}
-
-$total_students = 0;
-$today_attendance = 0;
-$courses = [];
+$total_students    = 0;
+$today_attendance  = 0;
+$courses           = [];
 $discovered_devices = [];
+
 try {
-    $total_students = $pdo->query("SELECT COUNT(*) FROM students")->fetchColumn() ?: 0;
+    $total_students    = $pdo->query("SELECT COUNT(*) FROM students")->fetchColumn() ?: 0;
     $today = date('Y-m-d');
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM attendance_logs WHERE DATE(timestamp) = ?");
+    $stmt  = $pdo->prepare("SELECT COUNT(*) FROM attendance_logs WHERE DATE(timestamp) = ?");
     $stmt->execute([$today]);
     $today_attendance = $stmt->fetchColumn() ?: 0;
     $courses = $pdo->query("SELECT course_code, course_name FROM courses ORDER BY course_code ASC")->fetchAll(PDO::FETCH_ASSOC);
@@ -59,331 +53,393 @@ try {
     error_log('[Dashboard] DB error: ' . $e->getMessage());
 }
 ?>
-<?php require_once 'includes/header_admin.php'; ?>
+<?php require_once 'includes/header.php'; ?>
 
-<style>
-body { background: #f8fafc; }
-.stat-card { border-radius: 16px !important; overflow: hidden !important; transition: transform 0.2s, box-shadow 0.2s; }
-.stat-card:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.08) !important; }
-.ls-wide { letter-spacing: 0.04em; }
-.badge-pill { border-radius: 50px !important; }
-.log-row { border-bottom: 1px solid #f1f5f9; padding: 0.6rem 0; }
-.log-row:last-child { border-bottom: none; }
-.card { border-radius: 14px !important; overflow: hidden !important; }
-.device-btn { border-radius: 50px !important; }
-#ai-assistant-container { display: none !important; }
-</style>
+<div class="fade-in">
 
-<div class="row mb-4 mt-3">
-    <div class="col-md-4 mb-3 mb-md-0">
-        <div class="stat-card bg-gradient-primary text-white h-100 shadow p-3">
-            <div class="card-body p-3 stat-content d-flex flex-column justify-content-center">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="rounded-circle bg-white bg-opacity-25 p-3"><i class="bi bi-people-fill fs-4"></i></div>
-                    <div>
-                        <h6 class="text-uppercase fw-semibold mb-1 opacity-75 tracking-wide ls-wide">Total Enrolled Students</h6>
-                        <h2 class="display-4 fw-bolder mb-0"><?php echo $total_students; ?></h2>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-    
-    <div class="col-md-4 mb-3 mb-md-0">
-        <div class="stat-card bg-white h-100 shadow border-0 p-3">
-            <div class="card-body p-3 stat-content d-flex flex-column align-items-center justify-content-center text-center">
-                <div class="d-flex align-items-center gap-3">
-                    <div class="rounded-circle bg-info bg-opacity-10 p-3"><i class="bi bi-clock text-info fs-4"></i></div>
-                    <div>
-                        <h6 class="text-uppercase fw-semibold mb-1 text-secondary tracking-wide ls-wide"><i class="bi bi-clock me-1 text-primary"></i>System Clock</h6>
-                        <h2 class="display-5 fw-bolder mb-0 mt-1" id="live-clock">--:--:--</h2>
-                        <small class="text-muted mt-1 fw-semibold text-uppercase" id="live-date">Loading...</small>
-                    </div>
-                </div>
-            </div>
-            <script>
-            (function(){
-                function tick(){
-                    var n=new Date();
-                    var c=document.getElementById('live-clock');
-                    var d=document.getElementById('live-date');
-                    if(c) c.textContent=n.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
-                    if(d) d.textContent=n.toLocaleDateString('en-GB',{weekday:'long',year:'numeric',month:'short',day:'numeric'});
-                }
-                tick();
-                setInterval(tick,1000);
-            })();
-            </script>
-        </div>
-    </div>
+<?php require_once 'includes/cards/admin_stat_cards.php'; ?>
 
-    <div class="col-md-4">
-        <div class="stat-card bg-gradient-success text-white h-100 shadow p-3">
-            <div class="card-body p-3 stat-content d-flex flex-column justify-content-center">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <h6 class="text-uppercase fw-semibold mb-0 opacity-75 tracking-wide ls-wide">Today's Attendance</h6>
-                    <select id="stat-device-select" class="form-select form-select-sm w-auto text-white fw-bold shadow-sm select-transparent" style="max-width:140px;background:rgba(255,255,255,0.2);border:none;color:#fff;border-radius:50px;" onchange="fetchTodayAttendance()">
-                        <option value="" class="text-dark">All Devices</option>
-                        <option value="WEB_DASHBOARD" class="text-dark">Web Dashboard</option>
-                        <?php foreach ($discovered_devices as $dev): ?>
-                        <option value="<?php echo htmlspecialchars($dev['name']); ?>" class="text-dark"><?php echo htmlspecialchars($dev['name']); ?><?php echo $dev['online'] ? '' : ' (Offline)'; ?></option>
-                        <?php endforeach; ?>
-                    </select>
-                </div>
-                <h2 class="display-4 fw-bolder mb-0" id="today-attendance-count"><?php echo $today_attendance; ?></h2>
-            </div>
-        </div>
-    </div>
-</div>
+<div class="row g-3">
 
-<div class="row">
+    <!-- ─── MAIN CONTENT: Live Logs ─────────────────────────── -->
     <div class="col-lg-8">
-        <div class="card shadow-sm border-0 mb-4">
-            <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
-                <strong class="small"><i class="bi bi-clock-history me-1"></i>Live Attendance Logs</strong>
+        <div class="logs-card">
+
+            <!-- Header -->
+            <div class="logs-card-header d-flex justify-content-between align-items-center">
+                <div class="d-flex align-items-center gap-2">
+                    <div style="width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,#a11e17,#8b1510);display:flex;align-items:center;justify-content:center;">
+                        <i class="bi bi-clock-history text-white" style="font-size:0.85rem;"></i>
+                    </div>
+                    <strong style="font-size:0.9rem;color:#1e293b;" data-i18n="live_logs">Live Attendance Logs</strong>
+                </div>
                 <div class="d-flex align-items-center gap-3">
                     <div class="form-check form-switch mb-0">
                         <input class="form-check-input" type="checkbox" id="global-voice-mute">
-                        <label class="form-check-label small text-muted fw-bold" for="global-voice-mute"><i class="bi bi-volume-mute me-1"></i>Mute</label>
+                        <label class="form-check-label small fw-bold text-muted" for="global-voice-mute">
+                            <i class="bi bi-volume-mute me-1"></i><span data-i18n="mute">Mute</span>
+                        </label>
                     </div>
-                    <button class="btn btn-sm btn-outline-primary rounded-pill py-0 fw-semibold" onclick="exportLogsCsv()"><i class="bi bi-download me-1"></i>Export CSV</button>
+                    <button class="btn btn-sm btn-outline-maroon fw-semibold"
+                            onclick="exportVisibleLogsCsv()" title="Download current view as CSV">
+                        <i class="bi bi-download me-1"></i><span data-i18n="export_csv">Export CSV</span>
+                    </button>
+                    <button class="btn btn-sm btn-outline-secondary fw-semibold"
+                            onclick="exportLogsCsv()" title="Advanced export options">
+                        <i class="bi bi-sliders me-1"></i>
+                    </button>
                 </div>
             </div>
-            <div class="card-body py-2 bg-light border-bottom">
-                <div class="row g-2">
+
+            <!-- Filter Bar -->
+            <div class="logs-filter-bar">
+                <div class="row g-2 align-items-center">
                     <div class="col-md-3">
-                        <input type="text" id="filter-student" class="form-control form-control-sm border-secondary" placeholder="Search student..." oninput="fetchLogs()">
+                        <input type="text" id="filter-student"
+                               class="form-control form-control-sm"
+                               placeholder="🔍 Search student..." data-i18n-placeholder="search_student"
+                               oninput="fetchLogs()">
                     </div>
                     <div class="col-md-2">
-                        <input type="text" id="filter-course" class="form-control form-control-sm border-secondary" placeholder="Course" oninput="fetchLogs()">
+                        <div class="searchable-select-wrapper position-relative">
+                            <input type="text" id="filter-course-search" class="form-control form-control-sm"
+                                   placeholder="Course" autocomplete="off"
+                                   data-i18n-placeholder="course"
+                                   oninput="filterDropdown(this, 'filter-course-dropdown', 'filter-course-input'); fetchLogs()"
+                                   onfocus="showDropdown('filter-course-dropdown')">
+                            <input type="hidden" id="filter-course-input" value="">
+                            <div id="filter-course-dropdown" class="searchable-dropdown d-none"></div>
+                        </div>
                     </div>
                     <div class="col-md-3">
-                        <select id="filter-device" class="form-select form-select-sm border-secondary" onchange="fetchLogs()">
-                            <option value="">All Devices</option>
-                            <option value="WEB_DASHBOARD">Web Dashboard</option>
+                        <select id="filter-device" class="form-select form-select-sm" onchange="fetchLogs()">
+                            <option value="" data-i18n="all_devices">All Devices</option>
+                            <option value="WEB_DASHBOARD" data-i18n="web_dashboard">Web Dashboard</option>
                             <?php foreach ($discovered_devices as $dev): ?>
-                            <option value="<?php echo htmlspecialchars($dev['name']); ?>"><?php echo htmlspecialchars($dev['name']); ?></option>
+                            <option value="<?php echo htmlspecialchars($dev['name']); ?>">
+                                <?php echo htmlspecialchars($dev['name']); ?>
+                            </option>
                             <?php endforeach; ?>
                         </select>
                     </div>
                     <div class="col-md-2">
-                        <input type="date" id="filter-date-from" class="form-control form-control-sm border-secondary" onchange="fetchLogs()">
+                        <input type="date" id="filter-date-from" class="form-control form-control-sm" onchange="fetchLogs()">
                     </div>
                     <div class="col-md-2">
-                        <input type="date" id="filter-date-to" class="form-control form-control-sm border-secondary" onchange="fetchLogs()">
+                        <input type="date" id="filter-date-to" class="form-control form-control-sm" onchange="fetchLogs()">
                     </div>
                 </div>
             </div>
-            <div class="card-body p-0 bg-white" style="max-height: 500px; overflow-y: auto;">
+
+            <!-- Logs Body -->
+            <div class="logs-body">
                 <div id="logs-accordion-container">
-                    <div class="text-center text-muted py-4"><em>Loading live logs...</em></div>
+                    <div class="text-center text-muted py-4 small">
+                        <i class="bi bi-hourglass-split me-1" style="color:#a11e17;"></i>
+                        <em data-i18n="loading_live_logs">Loading live logs...</em>
+                    </div>
                 </div>
             </div>
-        </div>
+
+        </div><!-- /.logs-card -->
     </div>
 
+    <!-- ─── SIDEBAR ───────────────────────────────────────────── -->
     <div class="col-lg-4">
+        <?php require_once 'includes/cards/admin_lecture_actions.php'; ?>
+        <?php require_once 'includes/cards/admin_manual_attendance.php'; ?>
+        <?php require_once 'includes/cards/admin_webcam_attendance.php'; ?>
+        <?php require_once 'includes/cards/admin_rpi_camera.php'; ?>
+    </div>
 
-        <div class="card shadow-sm border-0 mb-3 bg-white">
-            <div class="card-header bg-primary text-white py-2">
-                <strong class="small"><i class="bi bi-broadcast me-1"></i>Lecture &amp; Quick Actions</strong>
+</div><!-- /.row -->
+
+<!-- ─── CHARTS + RATINGS + FORUM (Tabs) ─────────────────────── -->
+<div class="mt-4">
+    <ul class="nav nav-tabs nav-tabs-premium" id="adminSecondaryTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="tab-charts-btn" data-bs-toggle="tab" data-bs-target="#tab-charts" type="button" role="tab">
+                <i class="bi bi-bar-chart me-1"></i> <span data-i18n="attendance_charts">Attendance Charts</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-ratings-btn" data-bs-toggle="tab" data-bs-target="#tab-ratings" type="button" role="tab">
+                <i class="bi bi-star me-1"></i> <span data-i18n="ratings_feedback">Ratings & Feedback</span>
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="tab-forum-btn" data-bs-toggle="tab" data-bs-target="#tab-forum" type="button" role="tab">
+                <i class="bi bi-chat-dots me-1"></i> <span data-i18n="forum_discussion">Forum Discussion</span>
+            </button>
+        </li>
+    </ul>
+    <div class="tab-content border border-top-0 rounded-bottom p-3 bg-white" style="border-color:#e2e8f0 !important;">
+
+        <!-- ── Charts Tab ─────────────────────────────────────── -->
+        <div class="tab-pane fade show active" id="tab-charts" role="tabpanel">
+            <!-- Overall Summary -->
+            <div class="row g-2 mb-3" id="overall-summary-row">
+                <div class="col-3">
+                    <div class="border rounded p-2 text-center" style="border-color:#e2e8f0 !important;">
+                        <div class="text-muted small" data-i18n="total_attendance">Total Attendance</div>
+                        <div class="fw-bold h4 mb-0" id="summary-total" style="color:#a11e17;">-</div>
+                    </div>
+                </div>
+                <div class="col-3">
+                    <div class="border rounded p-2 text-center" style="border-color:#e2e8f0 !important;">
+                        <div class="text-muted small" data-i18n="today">Today</div>
+                        <div class="fw-bold h4 mb-0" id="summary-today" style="color:#0d6efd;">-</div>
+                    </div>
+                </div>
+                <div class="col-3">
+                    <div class="border rounded p-2 text-center" style="border-color:#e2e8f0 !important;">
+                        <div class="text-muted small" data-i18n="students">Students</div>
+                        <div class="fw-bold h4 mb-0" id="summary-students" style="color:#198754;">-</div>
+                    </div>
+                </div>
+                <div class="col-3">
+                    <div class="border rounded p-2 text-center" style="border-color:#e2e8f0 !important;">
+                        <div class="text-muted small" data-i18n="courses">Courses</div>
+                        <div class="fw-bold h4 mb-0" id="summary-courses" style="color:#6f42c1;">-</div>
+                    </div>
+                </div>
             </div>
-            <div class="card-body py-2">
-                <div class="mb-2 p-2 bg-light rounded shadow-sm">
-                    <div class="d-flex justify-content-between align-items-center mb-1">
-                        <label class="form-label small text-muted fw-bold mb-0"><i class="bi bi-bullseye text-primary me-1"></i>Target Device</label>
-                        <div class="d-flex gap-1">
-                            <button class="btn btn-xs btn-outline-secondary py-0 px-1 small rounded-pill" onclick="refreshDeviceList(); refreshDeviceDropdown();" title="Scan"><i class="bi bi-arrow-clockwise"></i></button>
-                            <button class="btn btn-xs btn-outline-primary py-0 px-1 small rounded-pill" onclick="toggleManageDevices()" title="Manage"><i class="bi bi-gear"></i></button>
+            <div class="row g-3">
+                <div class="col-md-8">
+                    <div class="card border-0 shadow-none h-100" style="border:1px solid #e2e8f0 !important;border-radius:10px;">
+                        <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center" style="border-radius:10px 10px 0 0;">
+                            <strong class="small"><i class="bi bi-graph-up me-1"></i> <span data-i18n="daily_trend">Daily Attendance Trend</span></strong>
+                            <select id="chart-days" class="form-select form-select-sm" style="width:auto;" onchange="loadCharts()">
+                                <option value="7">7 days</option>
+                                <option value="14">14 days</option>
+                                <option value="30" selected>30 days</option>
+                                <option value="90">90 days</option>
+                            </select>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="dailyTrendChart" height="220"></canvas>
                         </div>
                     </div>
-                    <div class="searchable-select-wrapper position-relative">
-                        <input type="text" id="device-monitor-search" class="form-control form-control-sm border-primary fw-semibold" placeholder="Search devices..." autocomplete="off" oninput="filterDropdown(this, 'device-monitor-dropdown', 'action-target-device')" onfocus="showDropdown('device-monitor-dropdown')">
-                        <input type="hidden" id="action-target-device" value="WEB_DASHBOARD">
-                        <div id="device-monitor-dropdown" class="searchable-dropdown d-none"></div>
-                    </div>
-                    <div id="device-manage-panel" class="d-none mt-2">
-                        <div id="device-list-table" class="small text-muted"><em>Loading...</em></div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card border-0 shadow-none h-100" style="border:1px solid #e2e8f0 !important;border-radius:10px;">
+                        <div class="card-header bg-white py-2" style="border-radius:10px 10px 0 0;">
+                            <strong class="small"><i class="bi bi-pie-chart me-1"></i> <span data-i18n="modality_split">Modality Split</span></strong>
+                        </div>
+                        <div class="card-body d-flex align-items-center justify-content-center">
+                            <canvas id="modalityChart" height="200"></canvas>
+                        </div>
                     </div>
                 </div>
-
-                <h6 class="text-muted fw-bold mb-1 small">Start Active Lecture</h6>
-                <div class="input-group input-group-sm mb-2">
-                    <div class="searchable-select-wrapper flex-grow-1 position-relative">
-                        <input type="text" id="start-course-search" class="form-control border-primary" placeholder="Search courses..." autocomplete="off" oninput="filterDropdown(this, 'start-course-dropdown', 'start-course-input')" onfocus="showDropdown('start-course-dropdown')" onkeydown="filterDropdown(this, 'start-course-dropdown', 'start-course-input')">
-                        <input type="hidden" id="start-course-input" value="">
-                        <div id="start-course-dropdown" class="searchable-dropdown d-none"></div>
-                    </div>
-                    <select id="lecture-timer-preset" class="form-select form-select-sm border-secondary" style="width:90px;" onchange="applyTimerPreset(this.value)">
-                        <option value="0">No Timer</option>
-                        <option value="30">30 min</option>
-                        <option value="60">1 hour</option>
-                        <option value="90">1h 30m</option>
-                        <option value="120">2 hours</option>
-                        <option value="custom">Custom</option>
-                    </select>
-                    <input type="number" id="lecture-timer-custom" class="form-control form-control-sm border-secondary" style="width:65px;display:none;" placeholder="Min" min="1" max="480">
-                    <button class="btn btn-primary fw-semibold rounded-pill" id="btn-start-course" onclick="startCourseToDevice()"><i class="bi bi-play-fill"></i></button>
-                    <button class="btn btn-outline-danger fw-semibold px-2 rounded-pill" id="btn-end-course" onclick="endCourseToDevice()" disabled><i class="bi bi-stop-fill"></i></button>
-                </div>
-                <div id="lecture-timer-display" class="d-none mb-2">
-                    <div class="d-flex align-items-center justify-content-between small">
-                        <span class="text-muted"><i class="bi bi-clock me-1"></i>Auto-end in:</span>
-                        <span id="lecture-timer-countdown" class="fw-bold text-danger"></span>
-                        <button class="btn btn-sm btn-outline-secondary py-0 px-2 rounded-pill" onclick="cancelLectureTimer()">Cancel</button>
+                <div class="col-md-6">
+                    <div class="card border-0 shadow-none" style="border:1px solid #e2e8f0 !important;border-radius:10px;">
+                        <div class="card-header bg-white py-2" style="border-radius:10px 10px 0 0;">
+                            <strong class="small"><i class="bi bi-bar-chart me-1"></i> <span data-i18n="course_distribution">Per-Course Attendance</span></strong>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="courseChart" height="180"></canvas>
+                        </div>
                     </div>
                 </div>
-
-                <h6 class="text-muted fw-bold mb-1 small">Sync Courses to SD</h6>
-                <div class="input-group input-group-sm mb-2">
-                    <div class="searchable-select-wrapper flex-grow-1 position-relative">
-                        <input type="text" id="sync-courses-input" class="form-control border-secondary" placeholder="Search & add courses..." autocomplete="off" oninput="filterDropdown(this, 'sync-course-dropdown', null)" onfocus="showDropdown('sync-course-dropdown')" onkeydown="filterDropdown(this, 'sync-course-dropdown', null)">
-                        <div id="sync-course-dropdown" class="searchable-dropdown d-none"></div>
+                <div class="col-md-6">
+                    <div class="card border-0 shadow-none" style="border:1px solid #e2e8f0 !important;border-radius:10px;">
+                        <div class="card-header bg-white py-2" style="border-radius:10px 10px 0 0;">
+                            <strong class="small"><i class="bi bi-clock me-1"></i> <span data-i18n="hourly_pattern">Hourly Pattern</span></strong>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="hourlyChart" height="180"></canvas>
+                        </div>
                     </div>
-                    <button class="btn btn-secondary fw-semibold rounded-pill" onclick="syncCoursesToScanner()"><i class="bi bi-sd-card"></i></button>
                 </div>
-
-                <h6 class="text-muted fw-bold mb-1 small">Hardware Mode</h6>
-                <div class="d-flex gap-2">
-                    <button class="btn btn-sm btn-outline-success w-100 fw-semibold rounded-pill" onclick="sendOtaCommand('ATTENDANCE_MODE')"><i class="bi bi-person-check me-1"></i>Attendance</button>
-                    <button class="btn btn-sm btn-outline-warning w-100 fw-semibold rounded-pill" onclick="sendOtaCommand('ENROLL_MODE')"><i class="bi bi-fingerprint me-1"></i>Enroll</button>
+            </div>
+            <!-- Individual Analysis Section -->
+            <div class="row g-3 mt-3">
+                <div class="col-12">
+                    <hr class="my-1" style="border-color:#e2e8f0;">
+                    <h6 class="fw-bold small text-muted mt-2 mb-3"><i class="bi bi-person-lines-fill me-1"></i> <span data-i18n="individual_analysis">Individual Analysis</span></h6>
+                </div>
+                <div class="col-md-4">
+                    <div class="card border-0 shadow-none" style="border:1px solid #e2e8f0 !important;border-radius:10px;">
+                        <div class="card-header bg-white py-2" style="border-radius:10px 10px 0 0;">
+                            <strong class="small"><i class="bi bi-person me-1"></i> <span data-i18n="per_student">Per Student</span></strong>
+                        </div>
+                        <div class="card-body">
+                            <input type="text" id="chart-student-no" class="form-control form-control-sm mb-2" placeholder="Student No..." oninput="loadStudentChart()">
+                            <canvas id="studentChart" height="140"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card border-0 shadow-none" style="border:1px solid #e2e8f0 !important;border-radius:10px;">
+                        <div class="card-header bg-white py-2" style="border-radius:10px 10px 0 0;">
+                            <strong class="small"><i class="bi bi-book me-1"></i> <span data-i18n="per_course">Per Course</span></strong>
+                        </div>
+                        <div class="card-body">
+                            <div class="searchable-select-wrapper position-relative mb-2">
+                                <input type="text" id="chart-course-search" class="form-control form-control-sm" placeholder="Course..." autocomplete="off"
+                                       oninput="filterDropdown(this,'chart-course-dropdown','chart-course-input')"
+                                       onfocus="showDropdown('chart-course-dropdown')">
+                                <input type="hidden" id="chart-course-input" value="">
+                                <div id="chart-course-dropdown" class="searchable-dropdown d-none"></div>
+                            </div>
+                            <canvas id="courseDetailChart" height="140"></canvas>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card border-0 shadow-none" style="border:1px solid #e2e8f0 !important;border-radius:10px;">
+                        <div class="card-header bg-white py-2" style="border-radius:10px 10px 0 0;">
+                            <strong class="small"><i class="bi bi-people me-1"></i> <span data-i18n="per_teacher">Per Teacher</span></strong>
+                        </div>
+                        <div class="card-body">
+                            <canvas id="teacherChart" height="160"></canvas>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="card shadow-sm border-0 mb-3 bg-white">
-            <div class="card-header bg-info text-white py-2 d-flex justify-content-between align-items-center">
-                <strong class="small"><i class="bi bi-collection-play me-1"></i>Active Lectures</strong>
-                <span id="active-lecture-count" class="badge bg-white text-info badge-pill">0</span>
-            </div>
-            <div class="card-body py-2" style="max-height:180px;overflow-y:auto;">
-                <div id="active-lectures-container">
-                    <div class="text-muted small text-center py-2"><i class="bi bi-inbox me-1"></i>No active lectures</div>
+        <!-- ── Ratings Tab ────────────────────────────────────── -->
+        <div class="tab-pane fade" id="tab-ratings" role="tabpanel">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="card border-0 shadow-none h-100" style="border:1px solid #e2e8f0 !important;border-radius:10px;">
+                        <div class="card-header bg-white py-2" style="border-radius:10px 10px 0 0;">
+                            <strong class="small"><i class="bi bi-star me-1"></i> <span data-i18n="course_ratings">Course Ratings</span></strong>
+                        </div>
+                        <div class="card-body" style="max-height:450px;overflow-y:auto;" id="admin-ratings-board">
+                            <div class="text-center text-muted py-4 small"><i class="bi bi-arrow-clockwise spin me-1"></i><span data-i18n="loading_ratings">Loading ratings...</span></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card border-0 shadow-none h-100" style="border:1px solid #e2e8f0 !important;border-radius:10px;">
+                        <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center" style="border-radius:10px 10px 0 0;">
+                            <strong class="small"><i class="bi bi-chat-square-quote me-1"></i> <span data-i18n="recent_comments">Recent Comments</span></strong>
+                        </div>
+                        <div class="card-body" style="max-height:450px;overflow-y:auto;" id="admin-recent-comments">
+                                <div class="text-center text-muted py-4 small"><i class="bi bi-arrow-clockwise spin me-1"></i><span data-i18n="loading_comments">Loading comments...</span></div>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
 
-        <div class="card shadow-sm border-0 mb-3 bg-white">
-            <div class="card-header bg-success text-white py-2">
-                <strong class="small"><i class="bi bi-person-check me-1"></i>Mark Attendance Manually</strong>
+        <!-- ── Forum Tab ──────────────────────────────────────── -->
+        <div class="tab-pane fade" id="tab-forum" role="tabpanel">
+            <div class="row g-3">
+                <div class="col-12">
+                    <div class="card border-0 shadow-none" style="border:1px solid #e2e8f0 !important;border-radius:10px;">
+                        <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center" style="border-radius:10px 10px 0 0;">
+                            <strong class="small"><i class="bi bi-chat-dots me-1"></i> <span data-i18n="course_discussion">Course Discussion</span></strong>
+                            <div id="lang-switcher-admin-forum"></div>
+                        </div>
+                        <div class="card-body p-0">
+                            <div class="p-3 border-bottom">
+                                <select id="admin-forum-course" class="form-select form-select-sm" onchange="switchAdminForumCourse()">
+                                    <option value="" data-i18n="select_course">Select a course...</option>
+                                    <?php foreach ($courses as $c): ?>
+                                    <option value="<?php echo htmlspecialchars($c['course_code']); ?>">
+                                        <?php echo htmlspecialchars($c['course_code'] . ' - ' . $c['course_name']); ?>
+                                    </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <div class="px-3 py-2 border-bottom">
+                                <div class="input-group input-group-sm">
+                                    <input type="text" class="form-control" id="admin-comment-input" data-i18n-placeholder="write_comment" placeholder="Write a comment..." onkeydown="if(event.key==='Enter')submitAdminForumComment()">
+                                    <button class="btn btn-primary btn-sm" onclick="submitAdminForumComment()"><i class="bi bi-send"></i></button>
+                                </div>
+                            </div>
+                            <div id="admin-forum-comments" style="max-height:400px;overflow-y:auto;">
+                                <div class="text-center text-muted py-4 small" data-i18n="select_course">Select a course to view discussion.</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
-            <div class="card-body py-2">
-                <div class="row g-2 mb-2">
-                    <div class="col-6">
-                        <label class="form-label small text-muted mb-1 fw-bold">Course (Optional)</label>
+        </div>
+
+    </div>
+</div>
+
+</div><!-- /.fade-in -->
+
+<!-- CSV Export Modal -->
+<div class="modal fade" id="exportCsvModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content border-0 shadow-lg" style="border-radius:14px;">
+            <div class="modal-header bg-dark text-white" style="border-radius:14px 14px 0 0;">
+                <h6 class="mb-0 fw-bold"><i class="bi bi-download me-2"></i><span data-i18n="export_csv">Export Attendance CSV</span></h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-4">
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold" data-i18n="date_from">Date From</label>
+                        <input type="date" id="export-date-from" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold" data-i18n="date_to">Date To</label>
+                        <input type="date" id="export-date-to" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold" data-i18n="time_from">Time From</label>
+                        <input type="time" id="export-time-from" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold" data-i18n="time_to">Time To</label>
+                        <input type="time" id="export-time-to" class="form-control form-control-sm">
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold" data-i18n="course">Course</label>
                         <div class="searchable-select-wrapper position-relative">
-                            <input type="text" id="manual-course-search" class="form-control form-control-sm" placeholder="Search..." autocomplete="off" oninput="filterDropdown(this, 'manual-course-dropdown', 'manual-course-code')" onfocus="showDropdown('manual-course-dropdown')">
-                            <input type="hidden" id="manual-course-code" value="">
-                            <div id="manual-course-dropdown" class="searchable-dropdown d-none"></div>
+                            <input type="text" id="export-course-search" class="form-control form-control-sm"
+                                   placeholder="Leave blank for all" autocomplete="off"
+                                   data-i18n-placeholder="leave_blank_all"
+                                   oninput="filterDropdown(this, 'export-course-dropdown', 'export-course-input')"
+                                   onfocus="showDropdown('export-course-dropdown')">
+                            <input type="hidden" id="export-course-input" value="">
+                            <div id="export-course-dropdown" class="searchable-dropdown d-none"></div>
                         </div>
                     </div>
-                    <div class="col-6">
-                        <label class="form-label small text-muted mb-1 fw-bold">Time (Optional)</label>
-                        <input type="datetime-local" id="manual-timestamp" class="form-control form-control-sm">
+                    <div class="col-md-6">
+                        <label class="form-label small fw-semibold" data-i18n="device">Device</label>
+                        <select id="export-device" class="form-select form-select-sm">
+                            <option value="" data-i18n="all_devices">All Devices</option>
+                            <option value="WEB_DASHBOARD" data-i18n="web_dashboard">Web Dashboard</option>
+                            <?php foreach ($discovered_devices as $dev): ?>
+                            <option value="<?php echo htmlspecialchars($dev['name']); ?>">
+                                <?php echo htmlspecialchars($dev['name']); ?>
+                            </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                    <div class="col-12">
+                        <hr class="my-2">
+                        <div class="small text-muted mb-2 fw-semibold" data-i18n="include_columns">Include Columns</div>
+                        <div class="row g-2">
+                            <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" value="student_no" checked><label class="form-check-label small" data-i18n="student_no">Student No</label></div></div>
+                            <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" value="student_name" checked><label class="form-check-label small" data-i18n="student_name">Name</label></div></div>
+                            <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" value="course_code" checked><label class="form-check-label small" data-i18n="course">Course</label></div></div>
+                            <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" value="timestamp" checked><label class="form-check-label small" data-i18n="timestamp">Timestamp</label></div></div>
+                            <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" value="modality" checked><label class="form-check-label small" data-i18n="modality">Modality</label></div></div>
+                            <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" value="device" checked><label class="form-check-label small" data-i18n="device">Device</label></div></div>
+                            <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" value="ip_address"><label class="form-check-label small" data-i18n="ip_address">IP</label></div></div>
+                            <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" value="is_offline"><label class="form-check-label small" data-i18n="offline_sync">Offline Sync</label></div></div>
+                            <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" value="id"><label class="form-check-label small" data-i18n="log_id">Log ID</label></div></div>
+                        </div>
                     </div>
                 </div>
-                <div class="input-group mb-1 shadow-sm">
-                    <span class="input-group-text bg-white"><i class="bi bi-person-check text-success"></i></span>
-                    <input type="text" id="manual-student-no" class="form-control" placeholder="e.g. S/20/123" oninput="searchStudentName(this.value)">
-                    <button class="btn btn-success fw-semibold rounded-end-pill" onclick="markManualAttendance()">Present</button>
-                </div>
-                <div id="manual-student-name-display" class="form-text text-muted small px-1 min-h-xs"></div>
             </div>
-        </div>
-
-        <div class="card shadow-sm border-0 mb-3 bg-white">
-            <div class="card-header bg-warning text-dark py-2">
-                <strong class="small"><i class="bi bi-camera-video me-1"></i>Webcam Attendance</strong>
-            </div>
-            <div class="card-body py-2">
-                <button id="btn-start-attendance" class="btn btn-warning w-100 fw-bold shadow-sm btn-sm rounded-pill" onclick="startWebFaceAttendance()">
-                    <i class="bi bi-play-circle me-1"></i>Start Camera Scanner
+            <div class="modal-footer border-0 pt-0 px-4 pb-4">
+                <button class="btn btn-sm btn-secondary" data-bs-dismiss="modal" data-i18n="cancel">Cancel</button>
+                <button class="btn btn-sm fw-semibold btn-hover-lift" onclick="doExportCsv()"
+                        style="background:#a11e17;color:#fff;border:none;border-radius:7px;padding:6px 18px;">
+                    <i class="bi bi-download me-1"></i><span data-i18n="export">Export</span>
                 </button>
-                <div id="web-attendance-container" class="d-none border rounded p-2 mt-2 bg-light text-center shadow-sm">
-                    <select id="attendance-camera-select" class="form-select form-select-sm mb-2 d-none" onchange="switchAttendanceCamera()"></select>
-                    <div class="position-relative w-100 rounded bg-dark mb-2" style="line-height:0;overflow:hidden;">
-                        <video id="web-attendance-video" autoplay muted playsinline class="w-100" style="height:auto;display:block;"></video>
-                        <canvas id="web-attendance-overlay" style="position:absolute;top:0;left:0;pointer-events:none;width:100%;height:100%;"></canvas>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center mb-2">
-                        <div id="web-attendance-status" class="small fw-bold"></div>
-                        <span id="web-head-count-badge" class="badge bg-secondary d-none badge-pill">Faces: 0</span>
-                    </div>
-                    <div class="mb-2 p-1 border rounded bg-white">
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="radio" name="webFaceMode" id="modeAttendance" value="attendance" checked>
-                            <label class="form-check-label fw-bold text-success small" for="modeAttendance"><i class="bi bi-person-check-fill me-1"></i>Mark</label>
-                        </div>
-                        <div class="form-check form-check-inline">
-                            <input class="form-check-input" type="radio" name="webFaceMode" id="modeIdentify" value="identify">
-                            <label class="form-check-label fw-bold text-primary small" for="modeIdentify"><i class="bi bi-search me-1"></i>Identify</label>
-                        </div>
-                    </div>
-                    <div class="d-flex justify-content-center align-items-center gap-3 mb-2">
-                        <div class="form-check form-switch mb-0">
-                            <input class="form-check-input" type="checkbox" id="web-attendance-auto">
-                            <label class="form-check-label small text-muted fw-bold" for="web-attendance-auto"><i class="bi bi-lightning-charge me-1"></i>Auto</label>
-                        </div>
-                        <div class="form-check form-switch mb-0">
-                            <input class="form-check-input" type="checkbox" id="web-attendance-mute">
-                            <label class="form-check-label small text-muted fw-bold" for="web-attendance-mute"><i class="bi bi-volume-mute me-1"></i>Mute</label>
-                        </div>
-                    </div>
-                    <button id="btn-stop-attendance" class="btn btn-danger btn-sm w-100 fw-bold d-none rounded-pill"><i class="bi bi-stop-circle me-1"></i>Stop Scanner</button>
-                </div>
             </div>
         </div>
-
-        <div class="card shadow-sm border-0 mb-3 bg-white">
-            <div class="card-header bg-dark text-white py-2">
-                <strong class="small"><i class="bi bi-camera-reels me-1"></i>Raspberry Pi Camera</strong>
-            </div>
-            <div class="card-body py-2">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <div class="d-flex align-items-center gap-2">
-                        <span id="rpi-status-dot" class="badge bg-secondary badge-pill"><i class="bi bi-circle me-1"></i>Offline</span>
-                        <small id="rpi-ip-display" class="text-muted">Not connected</small>
-                    </div>
-                    <button class="btn btn-sm btn-outline-light rounded-pill" onclick="refreshRpiStatus()" title="Check Pi"><i class="bi bi-arrow-clockwise"></i></button>
-                </div>
-                <div id="rpi-face-container" class="border rounded p-2 bg-light text-center shadow-sm">
-                    <div class="position-relative w-100 rounded bg-dark mb-2" style="line-height:0;overflow:hidden;aspect-ratio:4/3;">
-                        <img id="rpi-cam-stream" src="" alt="Pi Camera Feed" class="w-100 rounded" style="display:none;object-fit:cover;">
-                        <div id="rpi-cam-placeholder" class="d-flex align-items-center justify-content-center text-muted" style="height:160px;">
-                            <div><i class="bi bi-camera-reels" style="font-size:2rem;"></i><p class="small mt-1 mb-0">Pi Camera Offline</p></div>
-                        </div>
-                        <canvas id="rpi-attendance-overlay" style="position:absolute;top:0;left:0;pointer-events:none;width:100%;height:100%;"></canvas>
-                    </div>
-                    <div id="rpi-attendance-status" class="small fw-bold mb-2"></div>
-                    <div class="d-flex justify-content-center align-items-center gap-3 mb-2">
-                        <div class="form-check form-switch mb-0">
-                            <input class="form-check-input" type="checkbox" id="rpi-attendance-auto">
-                            <label class="form-check-label small text-muted fw-bold" for="rpi-attendance-auto"><i class="bi bi-lightning-charge me-1"></i>Auto</label>
-                        </div>
-                        <div class="form-check form-switch mb-0">
-                            <input class="form-check-input" type="checkbox" id="rpi-attendance-mute" checked>
-                            <label class="form-check-label small text-muted fw-bold" for="rpi-attendance-mute"><i class="bi bi-volume-mute me-1"></i>Mute</label>
-                        </div>
-                    </div>
-                    <div class="d-flex gap-2">
-                        <button id="btn-start-rpi-attendance" class="btn btn-dark btn-sm w-100 fw-bold shadow-sm rounded-pill" onclick="startRpiAttendance()"><i class="bi bi-play-circle me-1"></i>Start Pi</button>
-                        <button id="btn-stop-rpi-attendance" class="btn btn-danger btn-sm w-100 fw-bold d-none rounded-pill" onclick="stopRpiAttendance()"><i class="bi bi-stop-circle me-1"></i>Stop</button>
-                    </div>
-                </div>
-                <div class="mt-2">
-                    <h6 class="text-muted fw-bold mb-1 small"><i class="bi bi-terminal me-1"></i>Pi Configuration</h6>
-                    <div class="input-group input-group-sm mb-2">
-                        <span class="input-group-text bg-white"><i class="bi bi-hdd-network"></i></span>
-                        <input type="text" id="rpi-node-ip" class="form-control" placeholder="Pi IP (e.g. 192.168.1.100)">
-                    </div>
-                    <div class="d-flex gap-2">
-                        <button class="btn btn-outline-secondary btn-sm w-100 fw-semibold rounded-pill" onclick="saveRpiConfig()"><i class="bi bi-save me-1"></i>Save</button>
-                        <button class="btn btn-outline-dark btn-sm w-100 fw-semibold rounded-pill" onclick="triggerRpiOta()"><i class="bi bi-cloud-arrow-down me-1"></i>Pull Queue</button>
-                    </div>
-                </div>
-            </div>
-        </div>
-
     </div>
 </div>
 

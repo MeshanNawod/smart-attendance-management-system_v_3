@@ -14,7 +14,7 @@ function escapeHtml(unsafe) {
 }
 
 // Local and CDN model URLs
-const LOCAL_MODEL_URL = './weights';
+const LOCAL_MODEL_URL = '/csc2052/weights';
 const CDN_MODEL_URL = 'https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights';
 
 let isModelsLoaded = false;
@@ -375,7 +375,19 @@ async function fetchEnrolledDescriptors() {
     try {
         const fd = new FormData();
         fd.append('action', 'get_all_descriptors');
+        
+        const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+        if (csrfToken) {
+            fd.append('csrf_token', csrfToken);
+        }
+
         const res = await fetch('api/student.php', { method: 'POST', body: fd });
+        
+        if (!res.ok) {
+            console.error("HTTP error when fetching descriptors:", res.status);
+            return false;
+        }
+        
         const data = await res.json();
 
         allDescriptors = [];
@@ -689,7 +701,7 @@ function startRecognitionLoop(video, overlay, statusText) {
                 if (chalPassed) challengeDone = true;
 
                 const live     = challengeDone && texOk;
-                const boxColor = live ? '#28a745' : (challengeDone ? '#fd7e14' : '#dc3545');
+                const boxColor = live ? '#ffd30a' : (challengeDone ? '#fd7e14' : '#dc3545');
 
                 ctx.strokeStyle = boxColor; ctx.lineWidth = 2;
                 ctx.strokeRect(box.x, box.y, box.width, box.height);

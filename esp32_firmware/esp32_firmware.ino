@@ -2,7 +2,17 @@
 // SENTINEL SWARM — ESP32 Attendance Firmware
 // FM10A Fingerprint | DS3231 RTC | LittleFS Offline Queue
 // LiquidCrystal_I2C LCD | Dashboard OTA | Auto-Sync
+// Version: 3.1.0 — Fixed scanning macros, API URLs, BLE safety
 // ============================================================
+
+// ─── FEATURE FLAGS ─────────────────────────────────────────
+// Comment out any feature you do NOT have hardware for.
+// Disabling USE_BLE saves ~200KB of flash space!
+#define USE_FINGERPRINT   // Enable FM10A fingerprint sensor
+#define USE_RFID          // Enable MFRC522 RFID reader
+#define USE_LCD           // Enable I2C LCD display
+// #define USE_BLE        // BLE scanner — disable to save flash
+// ───────────────────────────────────────────────────────────
 
 #include <WiFi.h>
 #include <HTTPClient.h>
@@ -10,15 +20,27 @@
 #include <Preferences.h>
 #include <Wire.h>
 #include <RTClib.h>
-#include <Adafruit_Fingerprint.h>
 #include <LittleFS.h>
+
+#ifdef USE_FINGERPRINT
+#include <Adafruit_Fingerprint.h>
+#endif
+
 #include <SPI.h>
+#ifdef USE_RFID
 #include <MFRC522.h>
+#endif
+
+#ifdef USE_LCD
 #include <LiquidCrystal_I2C.h>
+#endif
+
+#ifdef USE_BLE
 #include <BLEDevice.h>
 #include <BLEUtils.h>
 #include <BLEScan.h>
 #include <BLEAdvertisedDevice.h>
+#endif
 
 Preferences preferences;
 
@@ -86,17 +108,27 @@ void loadDeviceConfig() {
 // --- Hardware ---
 WebServer webServer(80);
 RTC_DS3231 rtc;
+
+#ifdef USE_FINGERPRINT
 HardwareSerial mySerial(2);
 Adafruit_Fingerprint finger = Adafruit_Fingerprint(&mySerial);
+bool fpOK = false;
+#endif
 
+#ifdef USE_RFID
 // --- RFID Hardware ---
 #define SS_PIN 5
 #define RST_PIN 22
 MFRC522 mfrc522(SS_PIN, RST_PIN);
+#endif
 
+#ifdef USE_LCD
 // --- LCD Hardware (I2C at address 0x27, 20x4) ---
 LiquidCrystal_I2C lcd(0x27, 20, 4);
 bool lcdOK = false;
+#else
+bool lcdOK = false;
+#endif
 
 // --- LCD State (4 lines mirrored to web) ---
 String lcdLine[4] = {"", "", "", ""};
@@ -105,20 +137,25 @@ void lcdWrite(int row, String text) {
   if (text.length() < 20) { while(text.length() < 20) text += ' '; }
   else text = text.substring(0, 20);
   lcdLine[row] = text;
+#ifdef USE_LCD
   if (lcdOK) {
     lcd.setCursor(0, row);
     lcd.print(text);
   }
+#endif
 }
 
 void lcdClear() {
   for (int i = 0; i < 4; i++) lcdLine[i] = "                    ";
+#ifdef USE_LCD
   if (lcdOK) lcd.clear();
+#endif
 }
 
-// --- BLE Hardware ---
-BLEScan* pBLEScan;
+#ifdef USE_BLE
+BLEScan* pBLEScan = nullptr;
 bool bleScannerEnabled = false;
+#endif
 
 // --- Virtual Keypad State ---
 String pendingKeypadKey = "";
@@ -385,6 +422,10 @@ void markAttendance(String fingerId, String modality, String ts) {
 // ENROLLMENT: Interactive wizard (Serial or OTA triggered)
 // ============================================================
 void runEnrollment(int overrideSlot) {
+#ifndef USE_FINGERPRINT
+  espPrintln("[ENROLL] Fingerprint not compiled in. Enable USE_FINGERPRINT.");
+  return;
+#else
   int    slotId    = overrideSlot;
   String studentNo = "";
 
@@ -498,6 +539,7 @@ void runEnrollment(int overrideSlot) {
   } else {
     espPrintln("[ERROR] FM10A failed to save model to flash.");
   }
+#endif // USE_FINGERPRINT
 }
 
 // ============================================================
@@ -507,20 +549,19 @@ void scanForAttendance() {
   String ts = getTimestamp();
 
 #ifdef USE_RFID
-  // --- 1. Check RFID (only if enabled) ---
+  // --- 1. Check RFID (only if enabled by runtime config) ---
   if (enableRfid && mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial()) {
     String rfidUid = "";
     for (byte i = 0; i < mfrc522.uid.size; i++) {
-      rfidUid += String(mfrc522.uid.uidByte[i] < 0x10 ? "0" : "");
+      if (mfrc522.uid.uidByte[i] < 0x10) rfidUid += "0";
       rfidUid += String(mfrc522.uid.uidByte[i], HEX);
     }
     rfidUid.toUpperCase();
-    
-    espPrintln("\n" + ts + " [SCAN] RFID Card Detected! UID: " + rfidUid);
-    espPrintln(isOnline ? "[STATUS] ONLINE — Posting to server." : "[STATUS] OFFLINE — Saving to queue.");
+    espPrintln("\n" + ts + " [RFID] Card UID: " + rfidUid);
+    espPrintln(isOnline ? "[STATUS] ONLINE" : "[STATUS] OFFLINE — queuing");
     markAttendance(rfidUid, "rfid", ts);
-    
     mfrc522.PICC_HaltA();
+    mfrc522.PCD_StopCrypto1();
     delay(2000);
     printMenu();
     return;
@@ -528,29 +569,34 @@ void scanForAttendance() {
 #endif
 
 #ifdef USE_FINGERPRINT
-  // --- 2. Check Fingerprint (only if enabled) ---
+  // --- 2. Check Fingerprint (only if enabled by runtime config) ---
   if (!enableFingerprint) return;
-  
+  if (!fpOK) return; // sensor not found during init
   if (finger.getImage() != FINGERPRINT_OK) return;
 
-  espPrintln("\n" + ts + " [SCAN] Finger detected! Analyzing...");
+  espPrintln("\n" + ts + " [FP] Finger detected! Analyzing...");
 
   if (finger.image2Tz() != FINGERPRINT_OK) {
-    espPrintln("[ERROR] Poor image quality. Try again.");
+    espPrintln("[FP] Poor image quality. Try again.");
+    lcdWrite(2, "Poor quality!");
     delay(1500);
+    printMenu();
     return;
   }
 
   if (finger.fingerSearch() == FINGERPRINT_OK) {
-    espPrint("[MATCH] Slot #");  espPrint(String(finger.fingerID));
-    espPrint(" | Confidence: "); espPrintln(String(finger.confidence));
-    espPrintln(isOnline ? "[STATUS] ONLINE — Posting to server." : "[STATUS] OFFLINE — Saving to queue.");
+    espPrint("[FP] Match! Slot #"); espPrint(String(finger.fingerID));
+    espPrint(" Conf: "); espPrintln(String(finger.confidence));
+    espPrintln(isOnline ? "[STATUS] ONLINE" : "[STATUS] OFFLINE — queuing");
+    lcdWrite(2, "Match! Slot #" + String(finger.fingerID));
     markAttendance(String(finger.fingerID), "fingerprint", ts);
     delay(2000);
     printMenu();
   } else {
-    espPrintln("[REJECT] Unknown fingerprint. Access Denied.");
+    espPrintln("[FP] Unknown fingerprint. Access Denied.");
+    lcdWrite(2, "Access Denied!");
     delay(2000);
+    printMenu();
   }
 #endif
 }
@@ -793,13 +839,17 @@ void handleDashboardCommand() {
 
   // --- WIPE_FP_TEMPLATES ---
   if (cmd == "WIPE_FP_TEMPLATES") {
+#ifdef USE_FINGERPRINT
     espPrintln("[OTA] Wiping all fingerprint templates...");
-    if (finger.emptyDatabase()) {
+    if (finger.emptyDatabase() == FINGERPRINT_OK) {
       espPrintln("[OTA] FP database wiped.");
       webServer.send(200, "text/plain", "ACK: All fingerprint templates wiped.");
     } else {
       webServer.send(200, "text/plain", "ERR: Failed to wipe FP database.");
     }
+#else
+    webServer.send(200, "text/plain", "ERR: Fingerprint not compiled in.");
+#endif
     return;
   }
 
@@ -835,18 +885,26 @@ void handleDashboardCommand() {
 
   // --- SCANBT ---
   if (cmd == "SCANBT") {
+#ifdef USE_BLE
     espPrintln("[OTA] Scanning BLE...");
+    if (!pBLEScan) { webServer.send(200, "application/json", "[]"); return; }
     BLEScanResults* foundDevices = pBLEScan->start(5, false);
     String resp = "[";
-    for (int i = 0; i < foundDevices->getCount(); i++) {
-      if (i > 0) resp += ",";
-      BLEAdvertisedDevice d = foundDevices->getDevice(i);
-      String name = d.haveName() ? String(d.getName().c_str()) : "Unknown Device";
-      resp += "{\"name\":\"" + name + "\", \"mac\":\"" + String(d.getAddress().toString().c_str()) + "\"}";
+    if (foundDevices) {
+      for (int i = 0; i < foundDevices->getCount(); i++) {
+        if (i > 0) resp += ",";
+        BLEAdvertisedDevice d = foundDevices->getDevice(i);
+        String name = d.haveName() ? String(d.getName().c_str()) : "Unknown Device";
+        resp += "{\"name\":\"" + name + "\", \"mac\":\"" + String(d.getAddress().toString().c_str()) + "\"}";
+      }
+      pBLEScan->clearResults();
     }
     resp += "]";
-    pBLEScan->clearResults();
     webServer.send(200, "application/json", resp);
+#else
+    webServer.send(200, "application/json", "[]");
+    espPrintln("[OTA] BLE not compiled in. Enable USE_BLE in firmware.");
+#endif
     return;
   }
 
@@ -1071,14 +1129,15 @@ void setup() {
     }
   }
 
+#ifdef USE_FINGERPRINT
   // --- 3. Fingerprint Sensor (FM10A on Serial2: RX=16, TX=17) ---
   espPrintln("[SENSOR] Initializing FM10A...");
   mySerial.begin(57600, SERIAL_8N1, 16, 17);
   finger.begin(57600);
   delay(500);
-
   if (finger.verifyPassword()) {
-    espPrintln("[SENSOR] Found at 57600 baud.");
+    fpOK = true;
+    espPrintln("[SENSOR] FM10A found at 57600 baud.");
   } else {
     espPrintln("[SENSOR] Not at 57600. Trying 9600...");
     mySerial.end();
@@ -1086,13 +1145,16 @@ void setup() {
     finger.begin(9600);
     delay(500);
     if (finger.verifyPassword()) {
-      espPrintln("[SENSOR] Found at 9600 baud.");
+      fpOK = true;
+      espPrintln("[SENSOR] FM10A found at 9600 baud.");
     } else {
-      espPrintln("[SENSOR] FATAL: FM10A not responding at any baud rate!");
-      espPrintln("         -> Check wiring: TX->RX2(16), RX->TX2(17), GND->GND, VCC->5V");
+      fpOK = false;
+      espPrintln("[SENSOR] WARNING: FM10A not found. Check wiring: TX->GPIO16, RX->GPIO17, VCC->5V");
     }
   }
+#endif
 
+#ifdef USE_RFID
   // --- 3.5. RFID Sensor ---
   espPrintln("[SENSOR] Initializing MFRC522...");
   SPI.begin();
@@ -1100,7 +1162,9 @@ void setup() {
   delay(10);
   mfrc522.PCD_DumpVersionToSerial();
   espPrintln("[SENSOR] RFID Ready.");
+#endif
 
+#ifdef USE_LCD
   // --- 3.7. LCD ---
   espPrintln("[LCD] Initializing I2C LCD (0x27, 20x4)...");
   lcd.init();
@@ -1112,22 +1176,29 @@ void setup() {
   lcdWrite(2, "Please wait...");
   lcdWrite(3, "");
   espPrintln("[LCD] OK.");
+#endif
 
+#ifdef USE_BLE
   // --- 3.8. BLE Setup ---
   espPrintln("[BLE] Initializing BLE Scanner...");
   BLEDevice::init(DEVICE_NAME);
   pBLEScan = BLEDevice::getScan();
-  pBLEScan->setActiveScan(true);
-  pBLEScan->setInterval(100);
-  pBLEScan->setWindow(99);
-  espPrintln("[BLE] Scanner Ready.");
+  if (pBLEScan) {
+    pBLEScan->setActiveScan(true);
+    pBLEScan->setInterval(100);
+    pBLEScan->setWindow(99);
+    espPrintln("[BLE] Scanner Ready.");
+  } else {
+    espPrintln("[BLE] WARNING: BLE scan init failed.");
+  }
+#endif
 
   // --- 3.9. Load Device Config from Preferences ---
   loadDeviceConfig();
 
   // --- 4. Build URLs ---
-  serverURL    = "http://" + String(SERVER_IP) + "/csc2052/attendance.php";
-  heartbeatURL = "http://" + String(SERVER_IP) + "/csc2052/heartbeat.php";
+  serverURL    = "http://" + String(SERVER_IP) + "/csc2052/api/attendance.php";
+  heartbeatURL = "http://" + String(SERVER_IP) + "/csc2052/api/heartbeat.php";
   enrollApiURL = "http://" + String(SERVER_IP) + "/csc2052/api/student.php?action=get_next_slot&hardware_override=1";
   studentApiURL= "http://" + String(SERVER_IP) + "/csc2052/api/student.php";
 

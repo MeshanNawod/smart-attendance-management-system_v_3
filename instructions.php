@@ -1,5 +1,5 @@
 <?php
-require 'includes/header_admin.php';
+require_once 'includes/header.php';
 ?>
 <div class="row mt-2">
     <div class="col-lg-10 mx-auto">

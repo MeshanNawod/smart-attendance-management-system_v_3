@@ -1,5 +1,5 @@
 <?php
-require_once 'includes/header_admin.php';
+require_once 'includes/header.php';
 
 $courses = [];
 $device_course_map = [];
@@ -56,7 +56,7 @@ try {
 <!-- ═══ ESP32 Control Center ═══ -->
 <div class="row mb-4">
     <div class="col-12">
-        <div class="card shadow-sm border-0">
+        <div class="card shadow-none border-0" style="border: 1px solid #e2e8f0 !important;">
             <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
                 <strong class="text-dark"><i class="bi bi-cpu me-2 text-primary"></i>ESP32 Control Center</strong>
                 <span id="esp32-status-badge" class="badge bg-secondary">Offline</span>
@@ -277,7 +277,7 @@ try {
 <!-- ═══ Digital Twin Interface ═══ -->
 <div class="row mb-4">
     <div class="col-12">
-        <div class="card shadow-sm border-0">
+        <div class="card shadow-none border-0" style="border: 1px solid #e2e8f0 !important;">
             <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
                 <strong class="text-dark"><i class="bi bi-display me-2 text-info"></i>Digital Twin Interface</strong>
                 <span title="RX/TX Indicator" class="ota-blue-light" id="tx-indicator"></span>
@@ -341,7 +341,7 @@ try {
 <!-- ═══ ESP-NOW Mesh Control ═══ -->
 <div class="row mb-4">
     <div class="col-12">
-        <div class="card shadow-sm border-0">
+        <div class="card shadow-none border-0" style="border: 1px solid #e2e8f0 !important;">
             <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
                 <strong class="text-dark"><i class="bi bi-broadcast me-2" style="color:#6f42c1;"></i>ESP-NOW Mesh Control</strong>
                 <span class="badge bg-success"><i class="bi bi-wifi me-1"></i>Mesh Ready</span>
@@ -410,7 +410,7 @@ try {
 <!-- ═══ Raspberry Pi 3B Control Center ═══ -->
 <div class="row mb-4">
     <div class="col-12">
-        <div class="card shadow-sm border-0">
+        <div class="card shadow-none border-0" style="border: 1px solid #e2e8f0 !important;">
             <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
                 <strong class="text-dark"><i class="bi bi-raspberry-pi me-2 text-danger"></i>Raspberry Pi 3B Control Center</strong>
                 <div class="d-flex align-items-center gap-2">
@@ -534,7 +534,7 @@ try {
 <!-- ═══ All Devices Overview ═══ -->
 <div class="row mb-4">
     <div class="col-12">
-        <div class="card shadow-sm border-0">
+        <div class="card shadow-none border-0" style="border: 1px solid #e2e8f0 !important;">
             <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
                 <strong class="text-dark"><i class="bi bi-hdd-rack me-2 text-info"></i>Devices Overview</strong>
                 <div class="d-flex gap-2 align-items-center">
@@ -573,7 +573,7 @@ try {
 <!-- ═══ Multi-Device Course Assignment ═══ -->
 <div class="row mb-4">
     <div class="col-12">
-        <div class="card shadow-sm border-0">
+        <div class="card shadow-none border-0" style="border: 1px solid #e2e8f0 !important;">
             <div class="card-header bg-white py-2 d-flex justify-content-between align-items-center">
                 <strong class="text-dark"><i class="bi bi-diagram-3 me-2 text-success"></i>Multi-Device Course Assignment</strong>
                 <small class="text-muted">Assign courses to specific hardware devices</small>
@@ -1628,3 +1628,4 @@ window.startTelemetryAutoPoll = function() {
 window.startTelemetryAutoPoll();
 updateDeviceSettingsBadges();
 </script>
+<?php require_once 'includes/footer.php'; ?>

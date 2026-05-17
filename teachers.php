@@ -134,7 +134,7 @@ try {
 
 $csrf_token = $_SESSION['csrf_token'] ?? '';
 ?>
-<?php require_once 'includes/header_admin.php'; ?>
+<?php require_once 'includes/header.php'; ?>
 <style>.teacher-card { border-left: 4px solid #0d6efd; }</style>
 
     <div class="d-flex justify-content-between align-items-center mb-4">
@@ -155,7 +155,7 @@ $csrf_token = $_SESSION['csrf_token'] ?? '';
 
     <!-- Teachers List -->
     <?php if (empty($teachers)): ?>
-        <div class="card shadow-sm border-0">
+        <div class="card shadow-none border-0" style="border: 1px solid #e2e8f0 !important;">
             <div class="card-body text-center py-5 text-muted">
                 <i class="bi bi-people display-4 d-block mb-3"></i>
                 <p class="mb-0">No teachers registered yet. Click "Add Teacher" to create the first one.</p>
@@ -165,7 +165,7 @@ $csrf_token = $_SESSION['csrf_token'] ?? '';
         <div class="row g-3">
             <?php foreach ($teachers as $t): ?>
                 <div class="col-md-6">
-                    <div class="card shadow-sm border-0 teacher-card h-100">
+                    <div class="card shadow-none border-0 teacher-card h-100" style="border: 1px solid #e2e8f0 !important;">
                         <div class="card-body">
                             <div class="d-flex justify-content-between align-items-start mb-2">
                                 <div>
