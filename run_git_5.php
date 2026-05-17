@@ -1,1 +1,0 @@
-<?php header("Content-Type: text/plain"); $cmd = 'cd c:/xampp/htdocs/csc2052 && git add -A && git commit -m "fix(js): resolve all JS logic and style errors across main.js and ratings.php" 2>&1'; $output = shell_exec($cmd); echo "OUTPUT:\\n" . $output; ?>
