@@ -38,15 +38,15 @@ All methods converge into the same attendance records, so a student can be marke
 ## Architecture Overview
 
 ```
-┌─────────────────────────────────────────────────────┐
+┌──────────────────────────────────────────────────────┐
 │                    Web Browser                       │
 │  (Admin / Teacher / Student dashboards)              │
 └──────────┬──────────────────────────┬────────────────┘
            │ HTTP/JSON                │ HTTP/JSON
-┌──────────▼──────────┐   ┌──────────▼────────────────┐
-│   PHP Server (API)   │   │   React SPA (frontend/)   │
+┌──────────▼───────────┐   ┌──────────▼─────────────────┐
+│   PHP Server (API)   │   │   React SPA (frontend/)    │
 │  ├─ student.php      │   │  (Login, Teacher Dashboard)│
-│  ├─ attendance.php   │   └───────────────────────────┘
+│  ├─ attendance.php   │   └────────────────────────────┘
 │  ├─ heartbeat.php    │
 │  └─ 30+ more APIs    │
 └──────────┬───────────┘
@@ -56,13 +56,13 @@ All methods converge into the same attendance records, so a student can be marke
     └─────────────┘
            ▲ (heartbeat / attendance)
            │
-┌──────────┴──────────────────┐     ┌────────────────────┐
-│   Raspberry Pi (Flask)      │     │   ESP32 Nodes      │
-│  ├─ Face recognition        │     │  ├─ RFID scan      │
-│  ├─ MJPEG stream            │     │  ├─ QR scan        │
+┌──────────┴───────────────────┐     ┌─────────────────────┐
+│   Raspberry Pi (Flask)       │     │   ESP32 Nodes       │
+│  ├─ Face recognition         │     │  ├─ RFID scan       │
+│  ├─ MJPEG stream             │     │  ├─ QR scan         │
 │  ├─ Heartbeat → heartbeat.php│     │  ├─ Voice capture   │
-│  └─ Attendance POST          │     │  └─ Heartbeat      │
-└─────────────────────────────┘     └────────────────────┘
+│  └─ Attendance POST          │     │  └─ Heartbeat       │
+└──────────────────────────────┘     └─────────────────────┘
 ```
 
 ---
