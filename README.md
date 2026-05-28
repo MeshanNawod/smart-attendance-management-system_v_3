@@ -1,3 +1,5 @@
+<img width="1536" height="365" alt="ChatGPT Image May 28, 2026, 09_05_45 PM" src="https://github.com/user-attachments/assets/06bff2bd-a05a-48f5-9c81-0df9cbaa22d5" />
+
 # Sentinel Swarm AMS
 
 A full-stack, multi-modal **Attendance Management System** that fuses IoT hardware (ESP32 + Raspberry Pi) with a PHP/React web dashboard.
@@ -225,5 +227,3 @@ Key settings in `rpi_flask/config.json`:
 ## License
 
 This project is developed for academic purposes at University of Peradeniya.
-
-<img width="1536" height="1024" alt="ChatGPT Image May 28, 2026, 09_05_45 PM" src="https://github.com/user-attachments/assets/37781c65-0a66-4494-a833-e8c453848056" />
