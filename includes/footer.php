@@ -1,38 +1,43 @@
 </div> <!-- End of Global Container -->
 
-<!-- AI Assistant -->
+<!-- AI Assistant (Google-style) -->
 <div id="ai-assistant-container">
-    <button id="ai-assistant-toggle" class="btn btn-primary rounded-circle shadow-lg ai-assistant-toggle" onclick="toggleAiAssistant()" title="AI Assistant" aria-controls="ai-assistant-panel" aria-expanded="false">
-        <i class="bi bi-robot"></i>
+    <button id="ai-assistant-toggle" class="btn rounded-circle shadow ai-assistant-toggle" onclick="toggleAiAssistant()" title="AI Assistant" aria-controls="ai-assistant-panel" aria-expanded="false" style="width:52px;height:52px;background:#fff;border:1px solid #e2e8f0;color:#1a73e8;font-size:1.3rem;box-shadow:0 2px 8px rgba(0,0,0,0.08);">
+        <i class="bi bi-chat-dots-fill"></i>
     </button>
-    <div id="ai-assistant-panel" class="d-none position-fixed ai-assistant-panel" role="dialog" aria-label="Sentinel AI Assistant">
-        <div class="bg-primary text-white p-3 d-flex align-items-center">
-            <i class="bi bi-robot fs-4 me-2"></i>
-            <div class="flex-grow-1">
-                <strong>Sentinel AI Assistant</strong>
-                <div class="small opacity-75">Ask me anything about the system</div>
+    <div id="ai-assistant-panel" class="d-none position-fixed ai-assistant-panel" role="dialog" aria-label="Sentinel AI Assistant" style="border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.12);background:#fff;border:1px solid #e8eaed;overflow:hidden;width:360px;max-height:520px;display:none;flex-direction:column;bottom:80px;right:20px;">
+        <div class="d-flex align-items-center p-3" style="background:#fff;border-bottom:1px solid #e8eaed;">
+            <div style="width:32px;height:32px;border-radius:50%;background:#f0f6ff;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                <i class="bi bi-robot" style="color:#1a73e8;font-size:1rem;"></i>
             </div>
-            <button class="btn btn-sm btn-outline-light py-0 px-2" onclick="toggleAiAssistant()"><i class="bi bi-x"></i></button>
+            <div class="flex-grow-1 ms-2">
+                <strong style="color:#202124;font-size:0.9rem;">Sentinel AI</strong>
+                <div style="color:#5f6368;font-size:0.72rem;">Ask me anything</div>
+            </div>
+            <button class="btn btn-sm py-0 px-1" onclick="toggleAiAssistant()" style="border:none;color:#5f6368;font-size:1.2rem;"><i class="bi bi-x"></i></button>
         </div>
-        <div id="ai-chat-messages" class="flex-grow-1 p-3 overflow-auto" style="max-height:340px;min-height:200px;background:#f8f9fa;">
-            <div class="mb-2">
-                <div class="d-inline-block bg-white rounded-pill px-3 py-2 small shadow-sm">
-                    <i class="bi bi-robot text-primary me-1"></i>Hi! I know the <strong>entire codebase</strong> — web pages, ESP32 firmware (1239 lines), all 13 APIs, database, hardware wiring, email, face recognition, and more.<br><br>Ask me about: errors, setup, features, code, debugging.
+        <div id="ai-chat-messages" class="flex-grow-1 p-3 overflow-auto" style="max-height:300px;min-height:200px;background:#f8f9fa;">
+            <div class="mb-3 d-flex align-items-start gap-2">
+                <div style="width:28px;height:28px;border-radius:50%;background:#f0f6ff;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:2px;">
+                    <i class="bi bi-robot" style="color:#1a73e8;font-size:0.8rem;"></i>
+                </div>
+                <div class="d-inline-block px-3 py-2 small" style="background:#fff;border-radius:0 12px 12px 12px;color:#3c4043;font-size:0.82rem;line-height:1.5;max-width:85%;border:1px solid #e8eaed;">
+                    Hi! I know the <strong>entire codebase</strong> — web pages, ESP32 firmware (1239 lines), all 13 APIs, database, hardware, email, face recognition, and more.<br><br>Ask me about: errors, setup, features, code, debugging.
                 </div>
             </div>
         </div>
-        <div class="p-2 border-top bg-white">
-            <div class="input-group input-group-sm">
-                <input type="text" id="ai-chat-input" class="form-control" placeholder="Type your question..." onkeydown="if(event.key==='Enter')sendAiMessage()">
-                <button class="btn btn-primary" onclick="sendAiMessage()"><i class="bi bi-send"></i></button>
+        <div class="p-3" style="border-top:1px solid #e8eaed;background:#fff;">
+            <div class="d-flex gap-2">
+                <input type="text" id="ai-chat-input" class="form-control" placeholder="Type your question..." style="border-radius:20px;border:1px solid #dadce0;font-size:0.85rem;padding:8px 14px;height:38px;" onkeydown="if(event.key==='Enter')sendAiMessage()">
+                <button class="btn" onclick="sendAiMessage()" style="border-radius:50%;width:38px;height:38px;min-width:38px;background:#1a73e8;color:#fff;border:none;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0;"><i class="bi bi-send" style="font-size:0.9rem;"></i></button>
             </div>
-            <div class="d-flex gap-1 mt-1 flex-wrap">
-                <button class="btn btn-xs btn-outline-secondary py-0 px-2" onclick="sendAiQuickQ('How do I start a lecture?')">Start lecture</button>
-                <button class="btn btn-xs btn-outline-secondary py-0 px-2" onclick="sendAiQuickQ('How to enroll a student?')">Enroll</button>
-                <button class="btn btn-xs btn-outline-secondary py-0 px-2" onclick="sendAiQuickQ('Email not sending')">Email fix</button>
-                <button class="btn btn-xs btn-outline-danger py-0 px-2" onclick="sendAiQuickQ('ESP32 offline fix')">ESP offline</button>
-                <button class="btn btn-xs btn-outline-warning py-0 px-2" onclick="sendAiQuickQ('Fingerprint not working')">FP issue</button>
-                <button class="btn btn-xs btn-outline-info py-0 px-2" onclick="sendAiQuickQ('Database connection error')">DB error</button>
+            <div class="d-flex gap-1 mt-2 flex-wrap">
+                <button class="btn btn-xs py-0 px-2" style="border-radius:16px;border:1px solid #dadce0;color:#3c4043;font-size:0.72rem;background:#fff;" onclick="sendAiQuickQ('How do I start a lecture?')">Start lecture</button>
+                <button class="btn btn-xs py-0 px-2" style="border-radius:16px;border:1px solid #dadce0;color:#3c4043;font-size:0.72rem;background:#fff;" onclick="sendAiQuickQ('How to enroll a student?')">Enroll</button>
+                <button class="btn btn-xs py-0 px-2" style="border-radius:16px;border:1px solid #dadce0;color:#3c4043;font-size:0.72rem;background:#fff;" onclick="sendAiQuickQ('Email not sending')">Email fix</button>
+                <button class="btn btn-xs py-0 px-2" style="border-radius:16px;border:1px solid #dadce0;color:#3c4043;font-size:0.72rem;background:#fff;" onclick="sendAiQuickQ('ESP32 offline fix')">ESP offline</button>
+                <button class="btn btn-xs py-0 px-2" style="border-radius:16px;border:1px solid #dadce0;color:#3c4043;font-size:0.72rem;background:#fff;" onclick="sendAiQuickQ('Fingerprint not working')">FP issue</button>
+                <button class="btn btn-xs py-0 px-2" style="border-radius:16px;border:1px solid #dadce0;color:#3c4043;font-size:0.72rem;background:#fff;" onclick="sendAiQuickQ('Database connection error')">DB error</button>
             </div>
         </div>
     </div>
@@ -53,14 +58,14 @@ window.escapeHtml = function(unsafe) {
 window.toggleAiAssistant = function() {
     const panel = document.getElementById('ai-assistant-panel');
     if (!panel) return;
-    if (panel.classList.contains('d-none')) {
+    const isHidden = panel.style.display === 'none' || panel.classList.contains('d-none');
+    if (isHidden) {
         panel.classList.remove('d-none');
         panel.style.display = 'flex';
         document.getElementById('ai-assistant-toggle')?.setAttribute('aria-expanded', 'true');
         const inp = document.getElementById('ai-chat-input');
         if (inp) inp.focus();
     } else {
-        panel.classList.add('d-none');
         panel.style.display = 'none';
         document.getElementById('ai-assistant-toggle')?.setAttribute('aria-expanded', 'false');
     }
@@ -201,15 +206,17 @@ window.getAiResponse = function(q) {
 }
 </script>
 
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-<!-- SweetAlert2 for modern popups -->
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-<!-- Face API library for Web-based Face Recognition -->
-<script defer src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
-<script defer src="<?php echo htmlspecialchars(asset_url('js/face_recognition.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
+<script src="<?php echo htmlspecialchars(asset_url('js/vendor/bootstrap.bundle.min.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
+
+<script src="<?php echo htmlspecialchars(asset_url('js/vendor/sweetalert2.min.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
+
+<script defer src="<?php echo htmlspecialchars(asset_url('js/admin-charts.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
 <script defer src="<?php echo htmlspecialchars(asset_url('js/main.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
-<script defer src="<?php echo htmlspecialchars(asset_url('js/cards.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
 <script defer src="<?php echo htmlspecialchars(asset_url('js/ratings.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
+<script defer src="<?php echo htmlspecialchars(asset_url('js/vendor/face-api.min.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
+<script defer src="<?php echo htmlspecialchars(asset_url('js/face_recognition.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
+<script defer src="<?php echo htmlspecialchars(asset_url('js/voice.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
+<script defer src="<?php echo htmlspecialchars(asset_url('js/cards.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
 <script>
 document.addEventListener('DOMContentLoaded', function() {
     if (document.getElementById('lang-switcher-header')) {

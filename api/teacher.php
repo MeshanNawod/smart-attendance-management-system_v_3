@@ -7,6 +7,7 @@ require_once '../includes/config.php';
 require_once '../includes/auth.php';
 require_once '../includes/db.php';
 require_once '../includes/helpers.php';
+require_once __DIR__ . '/../includes/attendance_helper.php';
 
 requireCsrfIfMutating();
 
@@ -72,7 +73,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         if (!$teacherId) { echo json_encode(['status' => 'error', 'message' => 'Not a teacher.']); exit; }
         try {
             $stmt = $pdo->prepare(
-                "SELECT c.course_code, c.course_name, c.description, c.credits, c.department
+                "SELECT DISTINCT c.course_code, c.course_name, c.description, c.credits, c.department
                  FROM teacher_courses tc
                  JOIN courses c ON tc.course_code = c.course_code
                  WHERE tc.teacher_id = ?
@@ -108,7 +109,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
 
             foreach ($courses as &$c) {
                 $cc = $c['course_code'];
-                $c['schedules'] = array_filter($schedules, fn($s) => $s['course_code'] === $cc);
+                $c['schedules'] = array_values(array_filter($schedules, fn($s) => $s['course_code'] === $cc));
                 $c['enrolled'] = $enrolled[$cc] ?? 0;
             }
 
@@ -350,16 +351,108 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                     WHERE $where ORDER BY a.timestamp ASC";
             $stmt2 = $pdo->prepare($sql);
             $stmt2->execute($params);
-            $rows = $stmt2->fetchAll(PDO::FETCH_ASSOC);
+            $rows = $stmt2->fetchAll(PDO::FETCH_NUM);
 
             $fileDate = $dateFilter ?: date('Y-m-d');
             header('Content-Type: text/csv; charset=utf-8');
             header("Content-Disposition: attachment; filename=report_{$courseCode}_{$fileDate}.csv");
             $out = fopen('php://output', 'w');
+            fwrite($out, "\xEF\xBB\xBF");
             fputcsv($out, ['Student No', 'Name', 'Timestamp', 'Course', 'Modality', 'Device']);
             foreach ($rows as $row) fputcsv($out, $row);
             fclose($out);
         } catch (PDOException $e) { header('HTTP/1.1 500'); }
+        exit;
+    }
+
+    // Get attendance stats per student per course
+    if ($action === 'get_attendance_stats') {
+        requireRole('teacher');
+        $teacherId = $_SESSION['teacher_id'] ?? null;
+        if (!$teacherId) { echo json_encode(['status' => 'error', 'message' => 'Not a teacher.']); exit; }
+        try {
+            $stmt = $pdo->prepare("SELECT course_code FROM teacher_courses WHERE teacher_id = ?");
+            $stmt->execute([$teacherId]);
+            $myCodes = $stmt->fetchAll(PDO::FETCH_COLUMN);
+            if (empty($myCodes)) { echo json_encode(['status' => 'success', 'stats' => []]); exit; }
+            $ph = implode(',', array_fill(0, count($myCodes), '?'));
+
+            // Per-student attendance counts
+            $s = $pdo->prepare("
+                SELECT sc.course_code, s.student_no, s.student_name,
+                    COUNT(DISTINCT DATE(al.id)) as attended
+                FROM student_courses sc
+                JOIN students s ON sc.student_no = s.student_no
+                LEFT JOIN attendance_logs al ON al.student_no = sc.student_no AND al.course_code = sc.course_code
+                WHERE sc.course_code IN ($ph)
+                GROUP BY sc.course_code, s.student_no, s.student_name
+                ORDER BY sc.course_code, s.student_no
+            ");
+            $s->execute($myCodes);
+            $rows = $s->fetchAll(PDO::FETCH_ASSOC);
+
+            // Total sessions per course
+            $t = $pdo->prepare("
+                SELECT course_code, COUNT(DISTINCT DATE(timestamp)) as total
+                FROM attendance_logs WHERE course_code IN ($ph)
+                GROUP BY course_code
+            ");
+            $t->execute($myCodes);
+            $totals = [];
+            while ($r = $t->fetch(PDO::FETCH_ASSOC)) $totals[$r['course_code']] = (int)$r['total'];
+
+            // Total enrolled per course
+            $e = $pdo->prepare("SELECT course_code, COUNT(*) as enrolled FROM student_courses WHERE course_code IN ($ph) GROUP BY course_code");
+            $e->execute($myCodes);
+            $enr = [];
+            while ($r = $e->fetch(PDO::FETCH_ASSOC)) $enr[$r['course_code']] = (int)$r['enrolled'];
+
+            $stats = [];
+            foreach ($rows as &$r) {
+                $r['attended'] = (int)$r['attended'];
+                $r['total_sessions'] = $totals[$r['course_code']] ?? 0;
+                $r['percentage'] = $r['total_sessions'] > 0 ? round(($r['attended'] / $r['total_sessions']) * 100, 1) : 0;
+                $stats[$r['course_code']][] = $r;
+            }
+            echo json_encode(['status' => 'success', 'stats' => $stats, 'totals' => $totals, 'enrolled' => $enr]);
+        } catch (PDOException $e) {
+            echo json_encode(['status' => 'error', 'message' => 'Database error.']);
+        }
+        exit;
+    }
+
+    // Admin: get courses overview with lecturer, enrollment count, and avg attendance
+    if ($action === 'get_courses_overview') {
+        requireRole('admin');
+        try {
+            $stmt = $pdo->query("
+                SELECT
+                    c.course_code,
+                    c.course_name,
+                    COALESCE(t.teacher_name, '—') AS lecturer_name,
+                    (SELECT COUNT(*) FROM student_courses sc WHERE sc.course_code = c.course_code) AS enrolled_count,
+                    (SELECT COUNT(DISTINCT DATE(al.timestamp)) FROM attendance_logs al WHERE al.course_code = c.course_code) AS total_sessions,
+                    ROUND(
+                        (SELECT COUNT(DISTINCT CONCAT(al.student_no, '_', DATE(al.timestamp)))
+                         FROM attendance_logs al WHERE al.course_code = c.course_code)
+                        /
+                        NULLIF(
+                            (SELECT COUNT(DISTINCT sc2.student_no) FROM student_courses sc2 WHERE sc2.course_code = c.course_code)
+                            *
+                            (SELECT COUNT(DISTINCT DATE(al2.timestamp)) FROM attendance_logs al2 WHERE al2.course_code = c.course_code)
+                        , 0)
+                        * 100, 1
+                    ) AS avg_attendance
+                FROM courses c
+                LEFT JOIN teacher_courses tc ON c.course_code = tc.course_code
+                LEFT JOIN teachers t ON tc.teacher_id = t.id
+                ORDER BY c.course_code ASC
+            ");
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            echo json_encode(['status' => 'ok', 'courses' => $rows]);
+        } catch (PDOException $e) {
+            echo json_encode(['status' => 'error', 'message' => 'Database error.']);
+        }
         exit;
     }
 
@@ -385,9 +478,11 @@ if ($action === 'start_course') {
         $stmt->execute([$teacherId, $courseCode]);
         if (!$stmt->fetch()) { echo json_encode(['status' => 'error', 'message' => 'You do not teach this course.']); exit; }
 
-        $now = date('Y-m-d H:i:s');
-        $stmt2 = $pdo->prepare("INSERT INTO active_courses (course_code, teacher_id, started_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE started_at = ?");
-        $stmt2->execute([$courseCode, $teacherId, $now, $now]);
+        ensureLectureSessionsTable($pdo);
+        $pdo->prepare("UPDATE lecture_sessions SET is_active = 0, ended_at = NOW() WHERE course_code = ? AND is_active = 1")
+            ->execute([$courseCode]);
+        $pdo->prepare("INSERT INTO lecture_sessions (course_code, teacher_id, started_by, started_at, device_name, is_active) VALUES (?, ?, 'teacher', NOW(), 'WEB_DASHBOARD', 1)")
+            ->execute([$courseCode, $teacherId]);
         echo json_encode(['status' => 'success', 'message' => "Course $courseCode started."]);
     } catch (PDOException $e) {
         echo json_encode(['status' => 'error', 'message' => 'Database error.']);
@@ -399,19 +494,24 @@ if ($action === 'start_course') {
 if ($action === 'mark_attendance') {
     $teacherId = $_SESSION['teacher_id'] ?? null;
     $studentNo = strtoupper(trim($_POST['student_no'] ?? ''));
+    $courseCode = strtoupper(trim($_POST['course_code'] ?? ''));
     if (!$teacherId || !$studentNo) { echo json_encode(['status' => 'error', 'message' => 'Student number required.']); exit; }
+    if (!$courseCode) { echo json_encode(['status' => 'error', 'message' => 'Course code required.']); exit; }
     try {
         $stmt = $pdo->prepare("SELECT student_no FROM students WHERE student_no = ?");
         $stmt->execute([$studentNo]);
         if (!$stmt->fetch()) { echo json_encode(['status' => 'error', 'message' => 'Student not found.']); exit; }
 
-        $stmt2 = $pdo->prepare("SELECT id FROM attendance_logs WHERE student_no = ? AND DATE(timestamp) = CURDATE()");
-        $stmt2->execute([$studentNo]);
-        if ($stmt2->fetch()) { echo json_encode(['status' => 'error', 'message' => 'Already marked present today.']); exit; }
-
-        $stmt3 = $pdo->prepare("INSERT INTO attendance_logs (student_no, device_name, timestamp, modality) VALUES (?, 'Teacher Portal', NOW(), 'manual')");
-        $stmt3->execute([$studentNo]);
-        echo json_encode(['status' => 'success', 'message' => 'Attendance marked.']);
+        $result = recordLectureAttendance($pdo, $studentNo, $courseCode, 'Teacher Portal', 'manual', date('Y-m-d H:i:s'));
+        if ($result['status'] === 'not_enrolled') {
+            echo json_encode(['status' => 'error', 'message' => 'Student is not enrolled in this course.']);
+        } elseif ($result['status'] === 'no_session') {
+            echo json_encode(['status' => 'error', 'message' => 'No active lecture session for this course. Start a lecture first.']);
+        } elseif ($result['status'] === 'updated') {
+            echo json_encode(['status' => 'success', 'message' => 'Attendance re-scanned — record updated.']);
+        } else {
+            echo json_encode(['status' => 'success', 'message' => 'Attendance marked.']);
+        }
     } catch (PDOException $e) {
         echo json_encode(['status' => 'error', 'message' => 'Database error.']);
     }
@@ -680,67 +780,65 @@ if ($action === 'upload_photo') {
         $photoPath = 'uploads/teachers/' . $filename;
         $stmt = $pdo->prepare("UPDATE teachers SET profile_photo = ? WHERE id = ?");
         $stmt->execute([$photoPath, $teacherId]);
-        echo json_encode(['status' => 'success', 'photo_url' => '/' . $photoPath, 'message' => 'Photo uploaded.']);
+        echo json_encode(['status' => 'success', 'photo_url' => $photoPath, 'message' => 'Photo uploaded.']);
     } else {
         echo json_encode(['status' => 'error', 'message' => 'Failed to save file.']);
     }
     exit;
 }
 
-// ─── POST: Start Course / Mark Manual Attendance (teacher) ───────────
+// ─── POST: Start Course / Mark Manual Attendance (teacher + admin) ───
 if ($action === 'start_course_session') {
-    requireRole('teacher');
-    $teacherId = $_SESSION['teacher_id'] ?? null;
+    requireRole('teacher', 'admin');
+    $isAdmin = isAdmin();
+    $userId = $isAdmin ? ($_SESSION['user_id'] ?? 0) : ($_SESSION['teacher_id'] ?? null);
     $courseCode = strtoupper(trim($_POST['course_code'] ?? ''));
     $device = trim($_POST['device'] ?? 'WEB_DASHBOARD');
     $timerMinutes = (int)($_POST['timer_minutes'] ?? 0);
 
-    if (!$teacherId || empty($courseCode)) {
+    if (!$userId || empty($courseCode)) {
         echo json_encode(['status' => 'error', 'message' => 'Course required.']); exit;
     }
 
     try {
-        // Ensure active_courses table exists
-        $pdo->exec("CREATE TABLE IF NOT EXISTS active_courses (
-            id INT AUTO_INCREMENT PRIMARY KEY,
-            course_code VARCHAR(50) NOT NULL,
-            teacher_id INT NOT NULL,
-            started_at DATETIME NOT NULL,
-            device_name VARCHAR(100) DEFAULT 'WEB_DASHBOARD',
-            timer_minutes INT DEFAULT 0,
-            UNIQUE KEY uk_active_course (course_code, teacher_id)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        ensureLectureSessionsTable($pdo);
 
-        $stmt = $pdo->prepare("SELECT 1 FROM teacher_courses WHERE teacher_id = ? AND course_code = ?");
-        $stmt->execute([$teacherId, $courseCode]);
-        if (!$stmt->fetch()) { echo json_encode(['status' => 'error', 'message' => 'You do not teach this course.']); exit; }
+        if (!$isAdmin) {
+            $stmt = $pdo->prepare("SELECT 1 FROM teacher_courses WHERE teacher_id = ? AND course_code = ?");
+            $stmt->execute([$userId, $courseCode]);
+            if (!$stmt->fetch()) { echo json_encode(['status' => 'error', 'message' => 'You do not teach this course.']); exit; }
+        }
 
-        $stmt = $pdo->prepare("INSERT INTO active_courses (course_code, teacher_id, started_at, device_name, timer_minutes) VALUES (?, ?, NOW(), ?, ?) ON DUPLICATE KEY UPDATE started_at = NOW(), device_name = ?, timer_minutes = ?");
-        $stmt->execute([$courseCode, $teacherId, $device, $timerMinutes, $device, $timerMinutes]);
-        echo json_encode(['status' => 'success', 'message' => "Course $courseCode started on $device."]);
+        // End any existing active session for this course
+        $pdo->prepare("UPDATE lecture_sessions SET is_active = 0, ended_at = NOW() WHERE course_code = ? AND is_active = 1")
+            ->execute([$courseCode]);
+
+        // Create new session
+        $pdo->prepare("INSERT INTO lecture_sessions (course_code, teacher_id, started_by, started_at, device_name, is_active) VALUES (?, ?, ?, NOW(), ?, 1)")
+            ->execute([$courseCode, $isAdmin ? 0 : $userId, $isAdmin ? 'admin' : 'teacher', $device]);
+        $sessionId = $pdo->lastInsertId();
+
+        echo json_encode(['status' => 'success', 'message' => "Course $courseCode started on $device.", 'session_id' => $sessionId]);
     } catch (PDOException $e) {
         echo json_encode(['status' => 'error', 'message' => 'Failed to start course.', 'debug' => $e->getMessage()]);
     }
     exit;
 }
 
-// ─── POST: End Course Session (teacher) ─────────────────────────────
+// ─── POST: End Course Session (teacher + admin) ─────────────────────
 if ($action === 'end_course_session') {
-    requireRole('teacher');
-    $teacherId = $_SESSION['teacher_id'] ?? null;
+    requireRole('teacher', 'admin');
+    $isAdmin = isAdmin();
     $courseCode = strtoupper(trim($_POST['course_code'] ?? ''));
 
-    if (!$teacherId || empty($courseCode)) {
+    if (empty($courseCode)) {
         echo json_encode(['status' => 'error', 'message' => 'Course required.']); exit;
     }
 
     try {
-        $stmt = $pdo->prepare("SELECT 1 FROM teacher_courses WHERE teacher_id = ? AND course_code = ?");
-        $stmt->execute([$teacherId, $courseCode]);
-        if (!$stmt->fetch()) { echo json_encode(['status' => 'error', 'message' => 'You do not teach this course.']); exit; }
-
-        $stmt = $pdo->prepare("DELETE FROM active_courses WHERE course_code = ? AND teacher_id = ?");
-        $stmt->execute([$courseCode, $teacherId]);
+        ensureLectureSessionsTable($pdo);
+        $pdo->prepare("UPDATE lecture_sessions SET is_active = 0, ended_at = NOW() WHERE course_code = ? AND is_active = 1")
+            ->execute([$courseCode]);
         echo json_encode(['status' => 'success', 'message' => "Course $courseCode session ended."]);
     } catch (PDOException $e) {
         echo json_encode(['status' => 'error', 'message' => 'Failed to end course session.']);
@@ -782,12 +880,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && $action === 'download_report') {
              ORDER BY al.timestamp DESC"
         );
         $stmt2->execute($params);
-        $logs = $stmt2->fetchAll(PDO::FETCH_ASSOC);
+        $logs = $stmt2->fetchAll(PDO::FETCH_NUM);
 
         header('Content-Type: text/csv');
         header('Content-Disposition: attachment; filename="' . $courseCode . '_report_' . date('Y-m-d') . '.csv"');
         header('Pragma: no-cache');
         $out = fopen('php://output', 'w');
+        fwrite($out, "\xEF\xBB\xBF");
         fputcsv($out, ['Student No', 'Name', 'Course', 'Timestamp', 'Modality', 'Device']);
         foreach ($logs as $row) {
             fputcsv($out, $row);

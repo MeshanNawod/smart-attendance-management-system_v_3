@@ -114,7 +114,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'get_all
             $params[] = $courseCode;
         }
 
-        $stmt = $pdo->prepare("SELECT student_no, student_name FROM students WHERE $where ORDER BY student_no ASC LIMIT 100");
+        $stmt = $pdo->prepare("SELECT student_no, student_name, fingerprint_id, fp_template_hex FROM students WHERE $where ORDER BY student_no ASC LIMIT 100");
         $stmt->execute($params);
         echo json_encode(['status' => 'success', 'students' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
     } catch (PDOException $e) {
@@ -743,8 +743,10 @@ if ($action === 'get_all_descriptors') {
 
 // ─── manual_attendance ────────────────────────────────────────────
 if ($action === 'manual_attendance') {
+    require_once __DIR__ . '/../includes/attendance_helper.php';
+
     $stu_no      = sanitizeStudentNo($_POST['student_no'] ?? '');
-    $course_code = substr(preg_replace('/[^a-zA-Z0-9_\- ]/', '', trim($_POST['course_code'] ?? 'MANUAL_ENTRY')), 0, 30);
+    $course_code = substr(preg_replace('/[^a-zA-Z0-9_\- ]/', '', trim($_POST['course_code'] ?? '')), 0, 30);
     $timestamp   = trim($_POST['timestamp'] ?? '');
 
     $modality    = trim($_POST['modality'] ?? 'manual');
@@ -753,7 +755,9 @@ if ($action === 'manual_attendance') {
         respond('error', 'Student number is required.', 422);
     }
 
-    if (empty($course_code)) $course_code = 'MANUAL_ENTRY';
+    if (empty($course_code)) {
+        respond('error', 'Course code is required.', 422);
+    }
 
     // Validate and parse timestamp
     if (!empty($timestamp) && strtotime($timestamp) !== false) {
@@ -763,12 +767,17 @@ if ($action === 'manual_attendance') {
     }
 
     try {
-        $stmt = $pdo->prepare(
-            "INSERT INTO attendance_logs (student_no, device_name, course_code, timestamp, modality)
-             VALUES (?, 'WEB_DASHBOARD', ?, ?, ?)"
-        );
-        $stmt->execute([$stu_no, $course_code, $timestamp, $modality]);
-        respond('success', "Manual attendance recorded for {$stu_no}.");
+        $result = recordLectureAttendance($pdo, $stu_no, $course_code, 'WEB_DASHBOARD', $modality, $timestamp);
+
+        if ($result['status'] === 'not_enrolled') {
+            respond('error', 'Student not enrolled in this course.', 403);
+        }
+        if ($result['status'] === 'no_session') {
+            respond('error', 'No active lecture session for this course. Start a lecture first.', 403);
+        }
+
+        $msg = $result['status'] === 'updated' ? "Manual attendance updated for {$stu_no} (re-scan)." : "Manual attendance recorded for {$stu_no}.";
+        respond('success', $msg);
     } catch (PDOException $e) {
         error_log('[Student API] manual_attendance: ' . $e->getMessage());
         respond('error', 'Database error while recording attendance.', 500);
@@ -1569,13 +1578,18 @@ if ($action === 'update_my_profile') {
 
 // ─── Student Self-Service: Upload Photo ──────────────────────────
 if ($action === 'upload_my_photo') {
+    header('Content-Type: application/json; charset=utf-8');
     requireRole('student');
     $studentNo = $_SESSION['student_no'] ?? $_SESSION['username'] ?? '';
     if (empty($studentNo)) {
+        error_log("[Student API] upload_my_photo: No student number in session");
         echo json_encode(['status' => 'error', 'message' => 'No student number.']); exit;
     }
     if (!isset($_FILES['photo']) || $_FILES['photo']['error'] !== UPLOAD_ERR_OK) {
-        echo json_encode(['status' => 'error', 'message' => 'No file uploaded.']); exit;
+        $errCode = isset($_FILES['photo']) ? $_FILES['photo']['error'] : -1;
+        $errMsg = $errCode === UPLOAD_ERR_INI_SIZE ? 'File exceeds PHP max upload size.' : ($errCode === UPLOAD_ERR_FORM_SIZE ? 'File exceeds form max size.' : 'No file uploaded.');
+        error_log("[Student API] upload_my_photo: Upload error code $errCode for student $studentNo");
+        echo json_encode(['status' => 'error', 'message' => $errMsg]); exit;
     }
     $file = $_FILES['photo'];
     $allowed = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
@@ -1597,15 +1611,17 @@ if ($action === 'upload_my_photo') {
         if ($oldPath && file_exists($uploadDir . basename($oldPath))) unlink($uploadDir . basename($oldPath));
         $photoPath = 'uploads/students/' . $filename;
         $pdo->prepare("UPDATE students SET profile_photo = ? WHERE student_no = ?")->execute([$photoPath, $studentNo]);
-        echo json_encode(['status' => 'success', 'photo_url' => '/' . $photoPath, 'message' => 'Photo uploaded.']);
+        echo json_encode(['status' => 'success', 'photo_url' => $photoPath, 'message' => 'Photo uploaded.']);
     } else {
-        echo json_encode(['status' => 'error', 'message' => 'Failed to save file.']);
+        error_log("[Student API] upload_my_photo: move_uploaded_file failed for student $studentNo. Dest: $dest");
+        echo json_encode(['status' => 'error', 'message' => 'Failed to save file. Check directory permissions.']);
     }
     exit;
 }
 
 // ─── Student Self-Service: Get Attendance History ────────────────
 if ($action === 'get_my_attendance') {
+    header('Content-Type: application/json; charset=utf-8');
     requireRole('student');
     $studentNo = $_SESSION['student_no'] ?? $_SESSION['username'] ?? '';
     if (empty($studentNo)) {
@@ -1625,20 +1641,53 @@ if ($action === 'get_my_attendance') {
     if (!empty($dateTo)) { $where .= " AND DATE(al.timestamp) <= ?"; $params[] = $dateTo; }
     if (!empty($search)) { $where .= " AND (al.course_code LIKE ? OR c.course_name LIKE ?)"; $params[] = '%' . $search . '%'; $params[] = '%' . $search . '%'; }
 
-    $stmt = $pdo->prepare(
-        "SELECT al.student_no, al.course_code, c.course_name, al.timestamp, al.modality
-         FROM attendance_logs al
-         LEFT JOIN courses c ON al.course_code = c.course_code
-         WHERE $where ORDER BY al.timestamp DESC LIMIT " . (int)$limit . ""
-    );
-    $stmt->execute($params);
-    $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    echo json_encode(['status' => 'success', 'logs' => $logs]);
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT al.id, al.student_no, al.course_code, c.course_name, al.timestamp, al.modality, al.rating, al.comment
+             FROM attendance_logs al
+             LEFT JOIN courses c ON al.course_code = c.course_code
+             WHERE $where ORDER BY al.timestamp DESC LIMIT " . (int)$limit . ""
+        );
+        $stmt->execute($params);
+        $logs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        foreach ($logs as &$log) {
+            $log['rating'] = $log['rating'] !== null ? (int)$log['rating'] : null;
+        }
+        echo json_encode(['status' => 'success', 'logs' => $logs]);
+    } catch (PDOException $e) {
+        echo json_encode(['status' => 'error', 'message' => 'Database error.']);
+    }
+    exit;
+}
+
+// ─── Student Self-Service: Rate an Attendance Session ────────────
+if ($action === 'rate_attendance') {
+    requireRole('student');
+    $studentNo = $_SESSION['student_no'] ?? $_SESSION['username'] ?? '';
+    $attId = (int)($_POST['attendance_id'] ?? 0);
+    $rating = (int)($_POST['rating'] ?? 0);
+    $comment = trim($_POST['comment'] ?? '');
+
+    if ($attId <= 0) { respond('error', 'Invalid attendance ID.'); }
+    if ($rating < 1 || $rating > 5) { respond('error', 'Rating must be 1-5.'); }
+
+    try {
+        $stmt = $pdo->prepare("SELECT id FROM attendance_logs WHERE id = ? AND student_no = ?");
+        $stmt->execute([$attId, $studentNo]);
+        if (!$stmt->fetch()) { respond('error', 'Attendance record not found.'); }
+
+        $upd = $pdo->prepare("UPDATE attendance_logs SET rating = ?, comment = ? WHERE id = ?");
+        $upd->execute([$rating, $comment ?: null, $attId]);
+        respond('success', 'Rating saved.');
+    } catch (PDOException $e) {
+        respond('error', 'Database error.');
+    }
     exit;
 }
 
 // ─── Student Self-Service: Get My Courses ────────────────────────
 if ($action === 'get_my_courses') {
+    header('Content-Type: application/json; charset=utf-8');
     // Allow students to see their own, teachers/admins to see any student's
     if (isStudent()) {
         $studentNo = $_SESSION['student_no'] ?? $_SESSION['username'] ?? '';
@@ -1653,7 +1702,7 @@ if ($action === 'get_my_courses') {
     }
     try {
         $stmt = $pdo->prepare(
-            "SELECT sc.course_code, c.course_name
+            "SELECT DISTINCT sc.course_code, c.course_name
              FROM student_courses sc
              LEFT JOIN courses c ON sc.course_code = c.course_code
              WHERE sc.student_no = ? ORDER BY c.course_code ASC"
@@ -1661,27 +1710,36 @@ if ($action === 'get_my_courses') {
         $stmt->execute([$studentNo]);
         $courses = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+        // Dedup by course_code (keep first occurrence)
+        $seen = [];
+        $courses = array_values(array_filter($courses, function($c) use (&$seen) {
+            if (isset($seen[$c['course_code']])) return false;
+            $seen[$c['course_code']] = true;
+            return true;
+        }));
+
         $codes = array_column($courses, 'course_code');
         $attendance = [];
         $totals = [];
         if (!empty($codes)) {
             $ph = implode(',', array_fill(0, count($codes), '?'));
-
+ 
             $s = $pdo->prepare("SELECT course_code, COUNT(DISTINCT DATE(timestamp)) as cnt FROM attendance_logs WHERE student_no = ? AND course_code IN ($ph) GROUP BY course_code");
             $s->execute(array_merge([$studentNo], $codes));
             while ($r = $s->fetch(PDO::FETCH_ASSOC)) $attendance[$r['course_code']] = $r['cnt'];
-
+ 
             $s2 = $pdo->prepare("SELECT course_code, COUNT(DISTINCT DATE(timestamp)) as cnt FROM attendance_logs WHERE course_code IN ($ph) GROUP BY course_code");
             $s2->execute($codes);
             while ($r = $s2->fetch(PDO::FETCH_ASSOC)) $totals[$r['course_code']] = $r['cnt'];
         }
-
+ 
         foreach ($courses as &$c) {
             $cc = $c['course_code'];
             $c['attended'] = $attendance[$cc] ?? 0;
             $c['total_sessions'] = $totals[$c['course_code']] ?? 0;
             $c['percentage'] = $c['total_sessions'] > 0 ? round(($c['attended'] / $c['total_sessions']) * 100, 1) : 0;
         }
+        unset($c);
         
         // Validate course codes exist in courses table
         $validCodes = $pdo->query("SELECT course_code FROM courses")->fetchAll(PDO::FETCH_COLUMN);
@@ -1689,7 +1747,6 @@ if ($action === 'get_my_courses') {
         foreach ($courses as $key => $c) {
             if (!isset($validSet[$c['course_code']])) {
                 error_log("[Student API] get_my_courses: Student $studentNo has enrollment in non-existent course: {$c['course_code']}");
-                // Optionally skip or keep; keeping for now
             }
         }
 

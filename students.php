@@ -5,6 +5,7 @@ $enrolled_students = [];
 $admins = [];
 $courses = [];
 $next_id = 1;
+$admin_next_id = 1;
 try {
     $enrolled_students = $pdo->query("SELECT student_no, student_name, fingerprint_id, rfid_uid, face_id, face_descriptor FROM students ORDER BY student_no ASC")->fetchAll(PDO::FETCH_ASSOC);
     $used_ids = array_column($enrolled_students, 'fingerprint_id');
@@ -14,6 +15,15 @@ try {
         }
     }
     $admins = $pdo->query("SELECT admin_name, fingerprint_id, rfid_uid, face_id, face_descriptor FROM admins ORDER BY admin_name ASC")->fetchAll(PDO::FETCH_ASSOC);
+    $admin_used = array_merge(
+        array_column($enrolled_students, 'fingerprint_id'),
+        array_column($admins, 'fingerprint_id')
+    );
+    for ($i = 1; $i <= 127; $i++) {
+        if (!in_array($i, $admin_used)) {
+            $admin_next_id = $i; break;
+        }
+    }
     $courses = $pdo->query("SELECT course_code, course_name FROM courses ORDER BY course_code ASC")->fetchAll(PDO::FETCH_ASSOC);
 } catch (PDOException $e) {
     error_log('[Students] DB error: ' . $e->getMessage());
@@ -28,6 +38,10 @@ try {
         <?php require_once 'includes/cards/admin_student_database.php'; ?>
 
         <?php require_once 'includes/cards/admin_database_card.php'; ?>
+
+        <?php require_once 'includes/cards/admin_voice_settings_card.php'; ?>
+
+        <?php require_once 'includes/cards/admin_device_password_card.php'; ?>
 
     </div>
 </div>

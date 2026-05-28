@@ -17,8 +17,7 @@
         <span class="small"><strong>No hardware device selected.</strong> Choose an active ESP32 node above before using <em>Enroll Finger</em> or <em>Push Template</em>. Name/RFID/CSV operations work without a device.</span>
     </div>
     <div class="card-body bg-light">
-        <div class="row">
-            <div class="col-md-6 border-end pe-md-4">
+            <div class="mb-4">
                 <h6 class="text-muted fw-bold mb-2">Hardware Enrollment Link</h6>
                 <div class="input-group mb-2 shadow-sm rounded">
                     <span class="input-group-text bg-white"><i class="bi bi-person-badge text-primary"></i></span>
@@ -35,8 +34,10 @@
                 </div>
                 <div class="input-group mb-2">
                     <span class="input-group-text bg-white"><i class="bi bi-credit-card text-info"></i></span>
-                    <input type="text" id="enroll-rfid" class="form-control" placeholder="RFID Tag UID">
-                    <button class="btn btn-outline-info fw-semibold px-2" onclick="autoFindRfid('enroll-rfid')" title="Auto Find Latest Scan"><i class="bi bi-search"></i></button>
+                    <input type="text" id="enroll-rfid" class="form-control" placeholder="Scan RFID on device or type UID" style="background:#fff;">
+                    <button class="btn btn-outline-info fw-semibold" onclick="triggerRfidScan('enroll-rfid')" title="Trigger device to scan RFID card">
+                        <i class="bi bi-credit-card-2-front me-1"></i>Scan RFID
+                    </button>
                     <button class="btn btn-info text-white fw-semibold" onclick="triggerEnrollRfid()">
                         <i class="bi bi-link me-1"></i>Link RFID
                     </button>
@@ -47,6 +48,13 @@
                     <button class="btn btn-outline-warning fw-semibold px-2" onclick="autoFindFace('enroll-face')" title="Auto Find Latest Scan"><i class="bi bi-search"></i></button>
                     <button class="btn btn-warning text-white fw-semibold" onclick="triggerEnrollFace()">
                         <i class="bi bi-link me-1"></i>Link Face
+                    </button>
+                </div>
+                <div class="input-group mb-2">
+                    <span class="input-group-text bg-white"><i class="bi bi-mic text-purple" style="color:#6f42c1;"></i></span>
+                    <input type="text" id="enroll-voice-student" class="form-control" placeholder="Student No" value="" onfocus="this.value=document.getElementById('enroll-student-no').value">
+                    <button class="btn btn-outline-purple fw-semibold px-2" style="border-color:#6f42c1;color:#6f42c1;" onclick="window.goToVoiceEnroll('enroll-voice-student', 'enroll-student-no')" title="Go to Voice tab">
+                        <i class="bi bi-mic"></i> Enroll Voice
                     </button>
                 </div>
                 <div class="input-group mb-2 mt-3">
@@ -92,7 +100,9 @@
                 </div>
             </div>
 
-            <div class="col-md-6 ps-md-4">
+            <hr class="my-4">
+
+            <div>
                 <div class="d-flex justify-content-between align-items-center mb-2">
                     <h6 class="text-muted fw-bold mb-0">Mapped Templates</h6>
                     <div class="d-flex gap-2 align-items-center">
@@ -102,17 +112,19 @@
                         <input type="text" id="template-search" class="form-control form-control-sm border-secondary w-25" placeholder="Search student..." oninput="filterTemplates()">
                     </div>
                 </div>
-                <div class="scroll-y-lg border rounded bg-white mb-3 shadow-sm w-100">
-                    <table class="table table-hover table-borderless align-middle mb-0" id="templates-table">
+                    <div class="scroll-y-lg border rounded bg-white mb-3 shadow-sm w-100">
+                    <div class="table-responsive">
+                    <table class="table table-hover table-borderless align-middle mb-0" id="templates-table" style="min-width:900px;">
                         <thead class="table-light sticky-top border-bottom">
                             <tr>
-                                <th class="ps-3 text-secondary small fw-bold">Student No</th>
-                                <th class="text-secondary small fw-bold">Slot ID</th>
-                                <th class="text-secondary small fw-bold">RFID UID</th>
-                                <th class="text-secondary small fw-bold">HW Face ID</th>
-                                <th class="text-secondary small fw-bold">Web Face</th>
-                                <th class="text-secondary small fw-bold">Attendance %</th>
-                                <th class="text-end pe-3 text-secondary small fw-bold">Actions</th>
+                                <th class="ps-3 small fw-bold text-dark">Student No</th>
+                                <th class="small fw-bold text-dark">Slot ID</th>
+                                <th class="small fw-bold text-dark">RFID UID</th>
+                                <th class="small fw-bold text-dark">HW Face ID</th>
+                                <th class="small fw-bold text-dark">Web Face</th>
+                                <th class="small fw-bold text-dark">Voice</th>
+                                <th class="small fw-bold text-dark">Attendance %</th>
+                                <th class="text-end pe-3 small fw-bold text-dark">Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -187,7 +199,7 @@
                                     </td>
                                     <td>
                                         <?php if($st['fingerprint_id']): ?>
-                                        <span class="badge rounded-pill bg-primary bg-opacity-10 text-primary border border-primary-subtle px-2 py-1">
+                                        <span class="badge rounded-pill bg-primary text-white px-2 py-1" style="font-size:0.78rem;">
                                             <i class="bi bi-fingerprint me-1"></i><?php echo htmlspecialchars($st['fingerprint_id']); ?>
                                         </span>
                                         <?php else: ?>
@@ -196,7 +208,7 @@
                                     </td>
                                     <td>
                                         <?php if($st['rfid_uid']): ?>
-                                        <span class="badge rounded-pill bg-info bg-opacity-10 text-info border border-info-subtle px-2 py-1">
+                                        <span class="badge rounded-pill bg-info text-white px-2 py-1" style="font-size:0.78rem;">
                                             <i class="bi bi-credit-card me-1"></i><?php echo htmlspecialchars($st['rfid_uid']); ?>
                                         </span>
                                         <?php else: ?>
@@ -205,7 +217,7 @@
                                     </td>
                                     <td>
                                         <?php if($st['face_id']): ?>
-                                        <span class="badge rounded-pill bg-warning bg-opacity-10 text-warning border border-warning-subtle px-2 py-1">
+                                        <span class="badge rounded-pill bg-warning text-dark px-2 py-1" style="font-size:0.78rem;">
                                             <i class="bi bi-person-bounding-box me-1"></i><?php echo htmlspecialchars($st['face_id']); ?>
                                         </span>
                                         <?php else: ?>
@@ -214,8 +226,17 @@
                                     </td>
                                     <td>
                                         <?php if($wf > 0): ?>
-                                        <span class="badge rounded-pill bg-success bg-opacity-10 text-success border border-success-subtle px-2 py-1">
+                                        <span class="badge rounded-pill bg-success text-white px-2 py-1" style="font-size:0.78rem;">
                                             <i class="bi bi-camera me-1"></i><?php echo $wf; ?> angle(s)
+                                        </span>
+                                        <?php else: ?>
+                                        <span class="text-muted small">-</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <?php if(!empty($st['voice_sample'])): ?>
+                                        <span class="badge rounded-pill bg-purple text-white px-2 py-1" style="font-size:0.78rem;background:#6f42c1!important;">
+                                            <i class="bi bi-mic me-1"></i> Enrolled
                                         </span>
                                         <?php else: ?>
                                         <span class="text-muted small">-</span>
@@ -247,12 +268,12 @@
                             <?php endif; ?>
                         </tbody>
                     </table>
+                    </div><!-- /.table-responsive -->
                 </div>
                 <div class="d-flex gap-2">
                     <a href="download_template.php?bulk=true" class="btn btn-sm w-100 fw-semibold btn-success"><i class="bi bi-box-arrow-down me-1"></i>Backup All Records</a>
                     <button onclick="bulkDeleteTemplates()" class="btn btn-sm w-100 fw-semibold btn-danger"><i class="bi bi-exclamation-triangle me-1"></i>Wipe Database</button>
                 </div>
             </div>
-        </div>
     </div>
 </div>

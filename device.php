@@ -127,6 +127,31 @@ try {
                             <label class="form-label small fw-bold mb-0">Server URL</label>
                             <input type="text" id="sd-server-url" class="form-control form-control-sm" placeholder="http://10.0.0.5/csc2052">
                         </div>
+                        <div class="border-top pt-2 mt-2">
+                            <h6 class="fw-bold text-muted small mb-2"><i class="bi bi-globe me-1"></i>Static IP (Optional)</h6>
+                            <p class="small text-muted mb-2">If your device IP changes on each boot, set a static IP below. Leave empty for DHCP.</p>
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small text-muted mb-0">Static IP</label>
+                                    <input type="text" id="sd-static-ip" class="form-control form-control-sm font-monospace" placeholder="10.193.54.212">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small text-muted mb-0">Gateway</label>
+                                    <input type="text" id="sd-static-gateway" class="form-control form-control-sm font-monospace" placeholder="10.193.54.1">
+                                </div>
+                            </div>
+                            <div class="row g-2 mb-2">
+                                <div class="col-md-6">
+                                    <label class="form-label small text-muted mb-0">Subnet Mask</label>
+                                    <input type="text" id="sd-static-subnet" class="form-control form-control-sm font-monospace" placeholder="255.255.255.0">
+                                </div>
+                                <div class="col-md-6">
+                                    <label class="form-label small text-muted mb-0">DNS Server</label>
+                                    <input type="text" id="sd-static-dns" class="form-control form-control-sm font-monospace" placeholder="8.8.8.8">
+                                </div>
+                            </div>
+                            <small class="text-muted d-block mb-2">To find these: Windows <code>ipconfig</code>, Linux/Mac <code>ifconfig</code>.</small>
+                        </div>
                         <div class="mb-2">
                             <label class="form-label small fw-bold mb-0">Encryption Method</label>
                             <select id="sd-enc-method" class="form-select form-select-sm">
@@ -179,6 +204,9 @@ try {
                         <div class="mb-3">
                             <div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" id="set_enable_fingerprint" checked onchange="updateDeviceSettingsBadges()"><label class="form-check-label small" for="set_enable_fingerprint">Fingerprint Reader</label></div>
                             <div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" id="set_enable_rfid" checked onchange="updateDeviceSettingsBadges()"><label class="form-check-label small" for="set_enable_rfid">RFID Scanner</label></div>
+                            <div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" id="set_enable_rfid_rc522" checked onchange="updateDeviceSettingsBadges()"><label class="form-check-label small" for="set_enable_rfid_rc522">RFID-RC522</label></div>
+                            <div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" id="set_enable_i2c_lcd" checked onchange="updateDeviceSettingsBadges()"><label class="form-check-label small" for="set_enable_i2c_lcd">I2C LCD</label></div>
+                            <div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" id="set_enable_hw084" onchange="updateDeviceSettingsBadges()"><label class="form-check-label small" for="set_enable_hw084">HW-084 Sound Sensor</label></div>
                             <div class="form-check form-switch mb-1"><input class="form-check-input" type="checkbox" id="set_enable_face" onchange="updateDeviceSettingsBadges()"><label class="form-check-label small" for="set_enable_face">Face Recognition</label></div>
                             <div class="form-check form-switch mb-2"><input class="form-check-input" type="checkbox" id="set_require_multi_factor" onchange="updateDeviceSettingsBadges()"><label class="form-check-label small text-danger fw-bold" for="set_require_multi_factor">Require Multi-Factor</label></div>
                             <label class="form-label small text-muted mb-1">Enroll Count: <span id="esp-enroll-count-val">3</span></label>
@@ -274,6 +302,63 @@ try {
     </div>
 </div>
 
+<!-- ═══ Command Reference ═══ -->
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card shadow-sm border-0">
+            <div class="card-header bg-dark text-white py-2 px-3 d-flex justify-content-between align-items-center" style="cursor:pointer" onclick="toggleCmdRef()">
+                <strong class="small"><i class="bi bi-question-circle me-1"></i>Command Reference <span class="text-muted fw-normal">(click to toggle)</span></strong>
+                <i class="bi bi-chevron-down" id="cmd-ref-icon"></i>
+            </div>
+            <div id="cmd-ref-body" class="card-body p-3" style="display:none;font-size:0.85rem;">
+                <div class="row">
+                    <div class="col-md-6">
+                        <h6 class="fw-bold text-primary mb-2"><i class="bi bi-keyboard me-1"></i>Serial Commands</h6>
+                        <table class="table table-sm table-borderless mb-0">
+                            <tr><td class="fw-bold text-nowrap" style="width:40px">E</td><td>Enroll a new student locally</td></tr>
+                            <tr><td class="fw-bold">I</td><td>Enroll an RFID card for a student</td></tr>
+                            <tr><td class="fw-bold">D</td><td>Delete a specific fingerprint slot</td></tr>
+                            <tr><td class="fw-bold">C</td><td>Change dynamic course session</td></tr>
+                            <tr><td class="fw-bold">S</td><td>Print system diagnostic stats</td></tr>
+                            <tr><td class="fw-bold">T</td><td>Show today's session totals</td></tr>
+                            <tr><td class="fw-bold">X</td><td>Wipe entire template flash memory</td></tr>
+                            <tr><td class="fw-bold">Y</td><td>Manually force sync offline queue</td></tr>
+                            <tr><td class="fw-bold">O</td><td>Dump offline queue records in terminal</td></tr>
+                            <tr><td class="fw-bold">K</td><td>Clear offline queue file</td></tr>
+                            <tr><td class="fw-bold">R</td><td>Software reboot node DevKit</td></tr>
+                            <tr><td class="fw-bold">A</td><td>Start Attendance (asks course)</td></tr>
+                            <tr><td class="fw-bold">F</td><td>Backup all FP templates to server</td></tr>
+                            <tr><td class="fw-bold">G</td><td>Restore FP templates from server</td></tr>
+                        </table>
+                    </div>
+                    <div class="col-md-6">
+                        <h6 class="fw-bold text-success mb-2"><i class="bi bi-grid-3x3-gap me-1"></i>Keypad</h6>
+                        <table class="table table-sm table-borderless mb-0">
+                            <tr><td class="fw-bold text-nowrap" style="width:40px">A</td><td>Start course-picker (scroll B/C, confirm D)</td></tr>
+                            <tr><td class="fw-bold">B</td><td>Scroll UP in menu / T9 uppercase toggle</td></tr>
+                            <tr><td class="fw-bold">C</td><td>Scroll DOWN in menu</td></tr>
+                            <tr><td class="fw-bold">D</td><td>CONFIRM / OK</td></tr>
+                            <tr><td class="fw-bold">*</td><td>Backspace / Cancel</td></tr>
+                            <tr><td class="fw-bold">#</td><td>Force offline sync / Toggle RFID-only mode</td></tr>
+                            <tr><td class="fw-bold">0</td><td>(when idle) Enter RFID enrollment mode</td></tr>
+                            <tr><td class="fw-bold">1-9</td><td>T9 multi-tap text (mobile keyboard style)</td></tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<script>
+function toggleCmdRef() {
+    const body = document.getElementById('cmd-ref-body');
+    const icon = document.getElementById('cmd-ref-icon');
+    const isHidden = body.style.display === 'none';
+    body.style.display = isHidden ? 'block' : 'none';
+    icon.className = isHidden ? 'bi bi-chevron-up' : 'bi bi-chevron-down';
+}
+</script>
+
 <!-- ═══ Digital Twin Interface ═══ -->
 <div class="row mb-4">
     <div class="col-12">
@@ -348,57 +433,74 @@ try {
             </div>
             <div class="card-body">
                 <div class="row g-4">
-                    <div class="col-lg-4">
-                        <div class="alert alert-light py-2 mb-3 small border">
+                    <!-- Left: Control Panels & Statuses -->
+                    <div class="col-lg-5 d-flex flex-column gap-3">
+                        <div class="alert alert-light py-2 mb-0 small border">
                             <i class="bi bi-info-circle me-1 text-primary"></i>
-                            <strong>How it works:</strong> ESP-NOW is a connectionless protocol. Offline nodes queue attendance data and broadcast via ESP-NOW. Nearby "gateway" nodes receive and forward to the server.
+                            <strong>Mesh Protocol:</strong> Offline nodes queue attendance data and broadcast via ESP-NOW. Nearby "gateway" nodes relay them to the server.
                         </div>
-                        <h6 class="fw-bold text-muted small mb-2"><i class="bi bi-diagram-3 me-1"></i>Mesh Network Status</h6>
-                        <div id="espnow-mesh-status" class="border rounded p-2 bg-light mb-3 small text-muted">
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <span><i class="bi bi-circle-fill text-success me-1" style="font-size:0.5rem;"></i>Gateway Nodes (Online)</span>
-                                <span id="espnow-gateway-count" class="badge bg-success">—</span>
+                        
+                        <div>
+                            <h6 class="fw-bold text-muted small mb-2"><i class="bi bi-diagram-3 me-1"></i>Mesh Status Indicators</h6>
+                            <div id="espnow-mesh-status" class="border rounded p-2 bg-light small text-muted">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span><i class="bi bi-circle-fill text-success me-1" style="font-size:0.5rem;"></i>Gateway Nodes (Online)</span>
+                                    <span id="espnow-gateway-count" class="badge bg-success">1</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <span><i class="bi bi-circle-fill text-warning me-1" style="font-size:0.5rem;"></i>Relay Nodes (Offline Wi-Fi)</span>
+                                    <span id="espnow-relay-count" class="badge bg-warning text-dark">2</span>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span><i class="bi bi-circle-fill text-secondary me-1" style="font-size:0.5rem;"></i>Queued Offline Records</span>
+                                    <span id="espnow-queue-count" class="badge bg-secondary">0</span>
+                                </div>
                             </div>
-                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                <span><i class="bi bi-circle-fill text-warning me-1" style="font-size:0.5rem;"></i>Relay Nodes (Offline Wi-Fi)</span>
-                                <span id="espnow-relay-count" class="badge bg-warning text-dark">—</span>
+                        </div>
+
+                        <div>
+                            <h6 class="fw-bold text-muted small mb-2"><i class="bi bi-fingerprint me-1"></i>Peer MAC Management</h6>
+                            <div class="input-group input-group-sm mb-2">
+                                <span class="input-group-text bg-white"><i class="bi bi-hdd-network text-muted"></i></span>
+                                <input type="text" id="espnow-mac-input" class="form-control font-monospace" placeholder="AA:BB:CC:DD:EE:FF">
+                                <button class="btn btn-outline-primary" onclick="sendEspOta('ESPNOW_ADD_PEER:'+document.getElementById('espnow-mac-input').value)"><i class="bi bi-plus-lg"></i></button>
+                                <button class="btn btn-outline-danger" onclick="sendEspOta('ESPNOW_DEL_PEER:'+document.getElementById('espnow-mac-input').value)"><i class="bi bi-dash-lg"></i></button>
                             </div>
-                            <div class="d-flex justify-content-between align-items-center">
-                                <span><i class="bi bi-circle-fill text-secondary me-1" style="font-size:0.5rem;"></i>Queued Offline Records</span>
-                                <span id="espnow-queue-count" class="badge bg-secondary">—</span>
+                            <div class="form-check form-switch">
+                                <input class="form-check-input" type="checkbox" id="espnow-broadcast-mode" checked onchange="sendEspOta('ESPNOW_BROADCAST:'+(this.checked?'1':'0'))">
+                                <label class="form-check-label small text-muted fw-bold" for="espnow-broadcast-mode"><i class="bi bi-megaphone me-1"></i>Broadcast Mode</label>
+                            </div>
+                        </div>
+
+                        <div>
+                            <h6 class="fw-bold text-muted small mb-2"><i class="bi bi-terminal me-1"></i>Send Mesh Command</h6>
+                            <div class="row g-2 mb-2">
+                                <div class="col-6"><button class="btn btn-sm btn-outline-primary w-100" onclick="sendEspOta('ESPNOW_FLUSH_QUEUE'); triggerMeshPacketAnimation();"><i class="bi bi-cloud-upload me-1"></i>Flush Queue</button></div>
+                                <div class="col-6"><button class="btn btn-sm btn-outline-success w-100" onclick="sendEspOta('ESPNOW_PING_MESH'); triggerMeshPacketAnimation();"><i class="bi bi-broadcast me-1"></i>Ping All</button></div>
+                                <div class="col-6"><button class="btn btn-sm btn-outline-warning w-100" onclick="sendEspOta('ESPNOW_STATUS')"><i class="bi bi-info-circle me-1"></i>Mesh Status</button></div>
+                                <div class="col-6"><button class="btn btn-sm btn-outline-danger w-100" onclick="sendEspOta('ESPNOW_RESET_PEERS')"><i class="bi bi-x-circle me-1"></i>Reset Peers</button></div>
+                            </div>
+                            <div class="input-group input-group-sm">
+                                <input type="text" id="mesh-cmd-input" class="form-control font-monospace" placeholder="Custom mesh command..." onkeydown="if(event.key==='Enter')sendMeshCmd()">
+                                <button class="btn btn-sm btn-outline-primary" onclick="sendMeshCmd()"><i class="bi bi-send"></i></button>
                             </div>
                         </div>
                     </div>
-                    <div class="col-lg-4">
-                        <h6 class="fw-bold text-muted small mb-2"><i class="bi bi-fingerprint me-1"></i>Peer MAC Management</h6>
-                        <div class="alert alert-light py-2 mb-2 small border">
-                            <i class="bi bi-book me-1"></i>
-                            Add or remove peer MAC addresses so this ESP32 can relay data from specific nodes. <strong>Broadcast Mode</strong> sends to <code>FF:FF:FF:FF:FF:FF</code> (all nearby ESP-NOW devices).
-                        </div>
-                        <div class="input-group input-group-sm mb-2">
-                            <span class="input-group-text bg-white"><i class="bi bi-hdd-network text-muted"></i></span>
-                            <input type="text" id="espnow-mac-input" class="form-control font-monospace" placeholder="AA:BB:CC:DD:EE:FF">
-                            <button class="btn btn-outline-primary" onclick="sendEspOta('ESPNOW_ADD_PEER:'+document.getElementById('espnow-mac-input').value)"><i class="bi bi-plus-lg"></i></button>
-                            <button class="btn btn-outline-danger" onclick="sendEspOta('ESPNOW_DEL_PEER:'+document.getElementById('espnow-mac-input').value)"><i class="bi bi-dash-lg"></i></button>
-                        </div>
-                        <div class="form-check form-switch">
-                            <input class="form-check-input" type="checkbox" id="espnow-broadcast-mode" checked onchange="sendEspOta('ESPNOW_BROADCAST:'+(this.checked?'1':'0'))">
-                            <label class="form-check-label small text-muted fw-bold" for="espnow-broadcast-mode"><i class="bi bi-megaphone me-1"></i>Broadcast Mode</label>
-                        </div>
-                    </div>
-                    <div class="col-lg-4">
-                        <h6 class="fw-bold text-muted small mb-2"><i class="bi bi-terminal me-1"></i>Send Mesh Command</h6>
-                        <div class="row g-2 mb-2">
-                            <div class="col-6"><button class="btn btn-sm btn-outline-primary w-100" onclick="sendEspOta('ESPNOW_FLUSH_QUEUE')"><i class="bi bi-cloud-upload me-1"></i>Flush Queue</button></div>
-                            <div class="col-6"><button class="btn btn-sm btn-outline-success w-100" onclick="sendEspOta('ESPNOW_PING_MESH')"><i class="bi bi-broadcast me-1"></i>Ping All</button></div>
-                            <div class="col-6"><button class="btn btn-sm btn-outline-warning w-100" onclick="sendEspOta('ESPNOW_STATUS')"><i class="bi bi-info-circle me-1"></i>Mesh Status</button></div>
-                            <div class="col-6"><button class="btn btn-sm btn-outline-danger w-100" onclick="sendEspOta('ESPNOW_RESET_PEERS')"><i class="bi bi-x-circle me-1"></i>Reset Peers</button></div>
-                            <div class="col-12"><button class="btn btn-sm btn-outline-info w-100" onclick="sendEspOta('ESPNOW_BROADCAST:1')"><i class="bi bi-megaphone me-1"></i>Broadcast ON</button></div>
-                        </div>
-                        <h6 class="fw-bold text-muted small mb-1 mt-2"><i class="bi bi-pencil me-1"></i>Custom Command</h6>
-                        <div class="input-group input-group-sm">
-                            <input type="text" id="mesh-cmd-input" class="form-control font-monospace" placeholder="Custom command..." onkeydown="if(event.key==='Enter')sendMeshCmd()">
-                            <button class="btn btn-sm btn-outline-primary" onclick="sendMeshCmd()"><i class="bi bi-send"></i></button>
+
+                    <!-- Right: Glowing Mesh Canvas Topology Visualizer -->
+                    <div class="col-lg-7">
+                        <div class="p-3 border rounded h-100 d-flex flex-column justify-content-between shadow-sm" style="background: hsl(222, 47%, 7%); border-color: rgba(255,255,255,0.08) !important; min-height: 400px;">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <h6 class="fw-bold text-light small mb-0"><i class="bi bi-diagram-3 me-2 text-info animate-pulse"></i>Live Node Topology Graph</h6>
+                                <span class="badge bg-dark border border-info text-info font-monospace small" id="mesh-packets-sent">TX: 4 | RX: 12</span>
+                            </div>
+                            <div class="flex-grow-1 position-relative d-flex align-items-center justify-content-center" style="background: radial-gradient(circle at 50% 50%, rgba(0, 240, 255, 0.03) 0%, transparent 80%);">
+                                <canvas id="mesh-topology-canvas" style="width: 100%; height: 280px; display: block;"></canvas>
+                            </div>
+                            <div class="d-flex gap-2 justify-content-center mt-2 border-top border-secondary pt-2">
+                                <button class="btn btn-xs btn-outline-info" onclick="triggerMeshPacketAnimation()"><i class="bi bi-broadcast me-1"></i>Animate Ping All</button>
+                                <button class="btn btn-xs btn-outline-secondary" onclick="resetMeshTopology()"><i class="bi bi-arrow-clockwise me-1"></i>Reset Coordinates</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -584,9 +686,15 @@ try {
                         <label class="form-label small fw-bold text-muted mb-1"><i class="bi bi-cpu me-1"></i>Device</label>
                         <select id="assign-device-select" class="form-select form-select-sm">
                             <option value="">Select Device...</option>
-                            <?php foreach ($discovered_devices as $dev): ?>
+                            <?php foreach ($discovered_devices as $dev):
+                                $assigned = isset($device_course_map[$dev['name']]) && count($device_course_map[$dev['name']]) > 0;
+                                if ($dev['online'] && !$assigned):
+                            ?>
                             <option value="<?php echo htmlspecialchars($dev['name']); ?>"><?php echo htmlspecialchars($dev['name']); ?> (<?php echo htmlspecialchars($dev['ip']); ?>)</option>
-                            <?php endforeach; ?>
+                            <?php endif; endforeach; ?>
+                            <?php if (count(array_filter($discovered_devices, function($d) use($device_course_map) { return $d['online'] && (!isset($device_course_map[$d['name']]) || count($device_course_map[$d['name']]) === 0); })) === 0): ?>
+                            <option value="" disabled>— No devices available —</option>
+                            <?php endif; ?>
                         </select>
                     </div>
                     <div class="col-md-4">
@@ -713,7 +821,7 @@ function syncSerialWithMainTarget(ip) {
 function fetchTelemetry() {
     const ip = getEspTarget();
     if (!ip) { document.getElementById('esp-rssi').textContent = '—'; return; }
-    fetch(`http://${ip}/cmd?command=GETSTATUS`, { signal: AbortSignal.timeout(8000) })
+    fetch(`api/esp_ota_proxy.php?ip=${encodeURIComponent(ip)}&command=${encodeURIComponent('GETSTATUS')}`, { signal: AbortSignal.timeout(8000) })
         .then(r => r.text())
         .then(raw => parseTelemetry(raw))
         .catch(e => console.warn('[Telemetry] Fetch error:', e));
@@ -724,7 +832,7 @@ function sendEspOta(cmd, targetIp) {
     if (!ip) { alert('Please select a target ESP32 node first.'); return; }
     appendSerial('[TX] ' + cmd, 'text-info');
     flashTxIndicator();
-    fetch(`http://${ip}/cmd?command=${encodeURIComponent(cmd)}`, { signal: AbortSignal.timeout(8000) })
+    fetch(`api/esp_ota_proxy.php?ip=${encodeURIComponent(ip)}&command=${encodeURIComponent(cmd)}`, { signal: AbortSignal.timeout(10000) })
         .then(r => r.text())
         .then(data => {
             const raw = data.trim();
@@ -900,7 +1008,7 @@ function toggleSseStream() {
 
         let pollCount = 0;
         function pollEsp() {
-            fetch(`http://${ip}/logs`, { signal: AbortSignal.timeout(3000) })
+            fetch(`api/esp_ota_proxy.php?ip=${encodeURIComponent(ip)}&endpoint=logs`, { signal: AbortSignal.timeout(3000) })
                 .then(r => r.text())
                 .then(raw => {
                     if (raw && raw.trim()) {
@@ -968,7 +1076,7 @@ window.sendSerialCmd = function() {
     appendSerial('> ' + cmd, 'text-success fw-bold');
     const target = serialEspIp || getEspTarget();
     if (!target) { appendSerial('[ERR] No ESP32 selected. Choose a target above.', 'text-danger'); input.value = ''; return; }
-    fetch(`http://${target}/cmd?command=${encodeURIComponent(cmd)}`, { signal: AbortSignal.timeout(5000) })
+    fetch(`api/esp_ota_proxy.php?ip=${encodeURIComponent(target)}&command=${encodeURIComponent(cmd)}`, { signal: AbortSignal.timeout(5000) })
         .then(r => r.text())
         .then(resp => {
             if (resp.trim()) {
@@ -1049,7 +1157,7 @@ function parseBtScan(data) {
 function loadDeviceSettingsEsp() {
     const ip = getEspTarget();
     if (!ip) return;
-    fetch(`http://${ip}/cmd?command=${encodeURIComponent('GETCONFIG')}`, { signal: AbortSignal.timeout(5000) })
+    fetch(`api/esp_ota_proxy.php?ip=${encodeURIComponent(ip)}&command=${encodeURIComponent('GETCONFIG')}`, { signal: AbortSignal.timeout(5000) })
         .then(r => r.text())
         .then(resp => {
             resp.split(',').forEach(pair => {
@@ -1057,6 +1165,9 @@ function loadDeviceSettingsEsp() {
                 if (!key || val === undefined) return;
                 if (key === 'ENABLE_FP') { document.getElementById('set_enable_fingerprint').checked = (val === '1'); }
                 else if (key === 'ENABLE_RFID') { document.getElementById('set_enable_rfid').checked = (val === '1'); }
+                else if (key === 'ENABLE_RC522') { document.getElementById('set_enable_rfid_rc522').checked = (val === '1'); }
+                else if (key === 'ENABLE_LCD') { document.getElementById('set_enable_i2c_lcd').checked = (val === '1'); }
+                else if (key === 'ENABLE_HW084') { document.getElementById('set_enable_hw084').checked = (val === '1'); }
                 else if (key === 'ENABLE_FACE') { document.getElementById('set_enable_face').checked = (val === '1'); }
                 else if (key === 'MFA') { document.getElementById('set_require_multi_factor').checked = (val === '1'); }
                 else if (key === 'ENROLL_COUNT') {
@@ -1075,14 +1186,18 @@ function saveDeviceSettingsEsp() {
     const btn = document.querySelector('[onclick*="saveDeviceSettingsEsp"]');
     if (btn) { const orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...'; setTimeout(() => { btn.disabled = false; btn.innerHTML = orig; }, 5000); }
     
-    const cfg = 'ENABLE_FP=' + (document.getElementById('set_enable_fingerprint').checked ? 1 : 0) +
-                ',ENABLE_RFID=' + (document.getElementById('set_enable_rfid').checked ? 1 : 0) +
-                ',ENABLE_FACE=' + (document.getElementById('set_enable_face').checked ? 1 : 0) +
-                ',MFA=' + (document.getElementById('set_require_multi_factor').checked ? 1 : 0) +
+    function cb(id) { return document.getElementById(id).checked ? 1 : 0; }
+    const cfg = 'ENABLE_FP=' + cb('set_enable_fingerprint') +
+                ',ENABLE_RFID=' + cb('set_enable_rfid') +
+                ',ENABLE_RC522=' + cb('set_enable_rfid_rc522') +
+                ',ENABLE_LCD=' + cb('set_enable_i2c_lcd') +
+                ',ENABLE_HW084=' + cb('set_enable_hw084') +
+                ',ENABLE_FACE=' + cb('set_enable_face') +
+                ',MFA=' + cb('set_require_multi_factor') +
                 ',ENROLL_COUNT=' + document.getElementById('set_enroll_fingers').value;
     
     appendSerial('[TX] SETCONFIG ' + cfg, 'text-info');
-    fetch(`http://${ip}/cmd?command=${encodeURIComponent('SETCONFIG ' + cfg)}`, { signal: AbortSignal.timeout(5000) })
+    fetch(`api/esp_ota_proxy.php?ip=${encodeURIComponent(ip)}&command=${encodeURIComponent('SETCONFIG ' + cfg)}`, { signal: AbortSignal.timeout(5000) })
         .then(r => r.text())
         .then(resp => { appendSerial('[RX] ' + resp, 'text-success'); })
         .catch(e => appendSerial('[ERR] ' + e.message, 'text-danger'));
@@ -1091,20 +1206,20 @@ function saveDeviceSettingsEsp() {
 function updateDeviceSettingsBadges() {
     const fp = document.getElementById('set_enable_fingerprint').checked;
     const rfid = document.getElementById('set_enable_rfid').checked;
+    const rc522 = document.getElementById('set_enable_rfid_rc522').checked;
+    const lcd = document.getElementById('set_enable_i2c_lcd').checked;
+    const hw084 = document.getElementById('set_enable_hw084').checked;
     const face = document.getElementById('set_enable_face').checked;
     const mfa = document.getElementById('set_require_multi_factor').checked;
-    const label = document.querySelector('[for="set_enable_fingerprint"]');
-    if (label) {
-        label.innerHTML = 'Fingerprint Reader ' + (fp ? '<span class="badge bg-success ms-1">ON</span>' : '<span class="badge bg-danger ms-1">OFF</span>');
-    }
-    const rlabel = document.querySelector('[for="set_enable_rfid"]');
-    if (rlabel) {
-        rlabel.innerHTML = 'RFID Scanner ' + (rfid ? '<span class="badge bg-success ms-1">ON</span>' : '<span class="badge bg-danger ms-1">OFF</span>');
-    }
-    const flabel = document.querySelector('[for="set_enable_face"]');
-    if (flabel) {
-        flabel.innerHTML = 'Face Recognition ' + (face ? '<span class="badge bg-success ms-1">ON</span>' : '<span class="badge bg-danger ms-1">OFF</span>');
-    }
+    const on = '<span class="badge bg-success ms-1">ON</span>';
+    const off = '<span class="badge bg-danger ms-1">OFF</span>';
+    const lbl = (id, txt, state) => { const el = document.querySelector('[for="' + id + '"]'); if (el) el.innerHTML = txt + ' ' + (state ? on : off); };
+    lbl('set_enable_fingerprint', 'Fingerprint Reader', fp);
+    lbl('set_enable_rfid', 'RFID Scanner', rfid);
+    lbl('set_enable_rfid_rc522', 'RFID-RC522', rc522);
+    lbl('set_enable_i2c_lcd', 'I2C LCD', lcd);
+    lbl('set_enable_hw084', 'HW-084 Sound Sensor', hw084);
+    lbl('set_enable_face', 'Face Recognition', face);
     const mlabel = document.querySelector('[for="set_require_multi_factor"]');
     if (mlabel) {
         mlabel.innerHTML = 'Require Multi-Factor ' + (mfa ? '<span class="badge bg-warning text-dark ms-1">ON</span>' : '<span class="badge bg-secondary ms-1">OFF</span>');
@@ -1155,7 +1270,7 @@ function startLcdPolling() {
     if (lcdPollInterval) return;
     lcdPollInterval = setInterval(() => {
         if (!currentEspIp) return;
-        fetch(`http://${currentEspIp}/cmd?command=GETLCD`, { signal: AbortSignal.timeout(5000) })
+        fetch(`api/esp_ota_proxy.php?ip=${encodeURIComponent(currentEspIp)}&command=${encodeURIComponent('GETLCD')}`, { signal: AbortSignal.timeout(5000) })
             .then(r => r.text()).then(data => { updateDigitalTwin(data); })
             .catch(e => appendSerial(`[LCD ERR] ${e.message}`, 'text-danger'));
     }, 2000);
@@ -1171,6 +1286,7 @@ window.refreshDeviceList = async function() {
         const res = await fetch('api/devices.php?action=list');
         const data = await res.json();
         const devices = data.devices || [];
+        window._discoveredDevices = devices; // for main.js renderDeviceManageTable() compat
         const table = document.getElementById('device-list-table');
         if (table) {
             if (devices.length === 0) { table.innerHTML = '<em class="text-muted">No hardware nodes discovered.</em>'; }
@@ -1612,6 +1728,22 @@ window.setButtonLoading = function(btnId, loading, originalHtml) {
     if (loading) { btn.disabled = true; btn.dataset.original = btn.innerHTML; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Processing...'; }
     else { btn.disabled = false; if (originalHtml) btn.innerHTML = originalHtml; }
 };
+
+// ─── Load-order fix: main.js (defer) overwrites these functions above ──
+// Save device.php versions now; restore after main.js runs (DOMContentLoaded)
+const _devDeviceList = window.refreshDeviceList;
+const _devDeviceAction = window.deviceAction;
+const _devRenameDevice = window.renameDevice;
+
+document.addEventListener('DOMContentLoaded', function() {
+    window.refreshDeviceList = _devDeviceList;
+    window.deviceAction = _devDeviceAction;
+    window.renameDevice = _devRenameDevice;
+    // Re-run with device.php version to update all selectors
+    if (document.getElementById('action-target-device')) {
+        window.refreshDeviceList();
+    }
+});
 
 if (document.getElementById('device-overview-body')) {
     refreshAllDeviceStatus();

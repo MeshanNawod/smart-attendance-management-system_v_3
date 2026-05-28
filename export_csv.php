@@ -50,7 +50,7 @@ $availableColumns = [
     'timestamp'   => ['label' => 'Timestamp',       'sql' => 'l.timestamp'],
     'modality'    => ['label' => 'Modality',        'sql' => 'l.modality'],
     'is_offline'  => ['label' => 'Offline Sync',    'sql' => "CASE WHEN l.is_offline_sync=1 THEN 'Yes' ELSE 'No' END AS is_offline"],
-    'ip_address'  => ['label' => 'Device IP',       'sql' => "COALESCE(d.ip, '') AS ip_address"],
+    'ip_address'  => ['label' => 'Device IP',       'sql' => "'' AS ip_address"],
 ];
 
 $selectedCols = trim($_GET['columns'] ?? '');
@@ -90,7 +90,6 @@ try {
     $query  = "SELECT " . implode(', ', $sqlCols) .
               " FROM attendance_logs l" .
               " LEFT JOIN students s ON l.student_no = s.student_no" .
-              " LEFT JOIN devices_registry d ON d.name = l.device_name" .
               " WHERE 1=1";
     $params = [];
 
@@ -120,7 +119,7 @@ try {
     $stmt = $pdo->prepare($query);
     $stmt->execute($params);
 
-    while ($row = $stmt->fetch()) {
+    while ($row = $stmt->fetch(PDO::FETCH_NUM)) {
         fputcsv($output, $row);
     }
 

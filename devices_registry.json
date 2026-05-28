@@ -1,7 +1,7 @@
 {
     "10.185.246.68": {
         "type": "esp32",
-        "name": "UoP_Scanner_1",
+        "name": "ESP-32U_1",
         "last_seen": 1777827612,
         "method": "plaintext",
         "blocked": false
@@ -10,6 +10,34 @@
         "type": "esp32",
         "name": "UoP_Scanner_1",
         "last_seen": 1777904396,
+        "method": "plaintext",
+        "blocked": false
+    },
+    "10.181.155.36": {
+        "type": "esp32",
+        "name": "UoP_Scanner_1",
+        "last_seen": 1779475985,
+        "method": "plaintext",
+        "blocked": false
+    },
+    "10.116.42.36": {
+        "type": "esp32",
+        "name": "UoP_Scanner_1",
+        "last_seen": 1779746071,
+        "method": "plaintext",
+        "blocked": false
+    },
+    "10.193.54.36": {
+        "type": "esp32",
+        "name": "UoP_Scanner_1",
+        "last_seen": 1779816052,
+        "method": "plaintext",
+        "blocked": false
+    },
+    "10.193.54.68": {
+        "type": "esp32",
+        "name": "UoP_Scanner_1",
+        "last_seen": 1779814996,
         "method": "plaintext",
         "blocked": false
     }

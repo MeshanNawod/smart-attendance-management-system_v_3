@@ -73,22 +73,22 @@ if ($_SERVER['REQUEST_METHOD']==='POST' && !$locked) {
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Sign In — Sentinel Swarm AMS</title>
 <meta name="description" content="Secure sign-in portal for the Sentinel Swarm Attendance Management System.">
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.css">
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+<link rel="stylesheet" href="<?php echo htmlspecialchars(asset_url('css/vendor/bootstrap.min.css'), ENT_QUOTES, 'UTF-8'); ?>">
+<link rel="stylesheet" href="<?php echo htmlspecialchars(asset_url('css/vendor/bootstrap-icons.css'), ENT_QUOTES, 'UTF-8'); ?>">
+<link rel="stylesheet" href="<?php echo htmlspecialchars(asset_url('css/style.css'), ENT_QUOTES, 'UTF-8'); ?>">
+<script src="<?php echo htmlspecialchars(asset_url('js/vendor/sweetalert2.min.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
 <style>
-/* ── Tokens ── */
+/* ── Tokens (Google-style) ── */
 :root {
-  --primary-color: #6B1A2A; /* UoP Maroon */
-  --primary-hover: #4A121D;
-  --bg-color: #fdfdfd;
+  --primary-color: #1a73e8;
+  --primary-hover: #1557b0;
+  --bg-color: #f0f4f9;
   --card-bg: #FFFFFF;
-  --text-dark: #1e293b;
-  --text-muted: #64748b;
-  --border-color: #e2e8f0;
+  --text-dark: #202124;
+  --text-muted: #5f6368;
+  --border-color: #dadce0;
   --input-bg: #fff;
-  --focus-ring: rgba(107, 26, 42, 0.1);
+  --focus-ring: rgba(26, 115, 232, 0.15);
 }
 
 /* ── Page ── */
@@ -105,29 +105,30 @@ body {
 
 /* ── Top Brand Bar ── */
 .brand-bar {
-  background: var(--card-bg);
-  padding: 1rem 2rem;
+  background: #fff;
+  padding: 0.75rem 2rem;
   display: flex;
   align-items: center;
   gap: 0.75rem;
   border-bottom: 1px solid var(--border-color);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.04);
 }
 .brand-bar .brand-icon {
-  font-size: 1.5rem;
+  font-size: 1.4rem;
   color: var(--primary-color);
   line-height: 1;
 }
 .brand-bar .brand-name {
-  font-size: 1.1rem;
-  font-weight: 700;
+  font-size: 1.05rem;
+  font-weight: 600;
   color: var(--text-dark);
-  letter-spacing: -0.02em;
+  letter-spacing: -0.01em;
 }
 .brand-bar .brand-sub {
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   color: var(--text-muted);
   font-weight: 400;
-  margin-top: 2px;
+  margin-top: 1px;
 }
 
 /* ── Main area ── */
@@ -136,15 +137,15 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2.5rem 1rem;
+  padding: 2rem 1rem;
 }
 
 /* ── Card ── */
 .login-card {
   background: var(--card-bg);
-  border-radius: 8px;
+  border-radius: 12px;
   border: 1px solid var(--border-color);
-  box-shadow: none;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.06), 0 4px 16px rgba(0,0,0,0.04);
   width: 100%;
   max-width: 400px;
   overflow: hidden;
@@ -152,46 +153,46 @@ body {
 
 /* Card header strip */
 .card-header-strip {
-  padding: 2.5rem 2rem 1.5rem;
+  padding: 2rem 2rem 1rem;
   text-align: center;
 }
 .card-header-strip .lock-icon {
-  width: 56px;
-  height: 56px;
-  background: var(--bg-color);
+  width: 48px;
+  height: 48px;
+  background: #e8f0fe;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  margin: 0 auto 1.25rem;
-  font-size: 1.5rem;
+  margin: 0 auto 1rem;
+  font-size: 1.3rem;
   color: var(--primary-color);
-  border: 2px solid var(--border-color);
+  border: none;
 }
 .card-header-strip h1 {
-  font-size: 1.4rem;
-  font-weight: 600;
+  font-size: 1.3rem;
+  font-weight: 500;
   color: var(--text-dark);
-  margin: 0 0 0.5rem;
+  margin: 0 0 0.35rem;
   letter-spacing: -0.01em;
 }
 .card-header-strip p {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   color: var(--text-muted);
   margin: 0;
 }
 
 /* Card body */
 .card-body-inner {
-  padding: 0 2rem 2.5rem;
+  padding: 0 2rem 2rem;
 }
 
 /* Labels */
 .form-label {
-  font-size: 0.85rem;
+  font-size: 0.82rem;
   font-weight: 500;
   color: var(--text-dark);
-  margin-bottom: 0.5rem;
+  margin-bottom: 0.4rem;
 }
 
 /* Input groups */
@@ -199,20 +200,22 @@ body {
   background: var(--input-bg);
   border-color: var(--border-color);
   color: var(--text-muted);
+  border-radius: 8px 0 0 8px !important;
 }
 .form-control {
   font-family: 'Inter', sans-serif;
   font-size: 0.95rem;
-  padding: 0.6rem 0.75rem;
+  padding: 0.55rem 0.75rem;
   border-color: var(--border-color);
   background-color: var(--input-bg);
   color: var(--text-dark);
   transition: all 0.2s ease;
+  border-radius: 8px;
 }
 .form-control:focus {
   background-color: var(--card-bg);
   border-color: var(--primary-color);
-  box-shadow: 0 0 0 3px var(--focus-ring);
+  box-shadow: 0 0 0 2px var(--focus-ring);
 }
 .input-group:focus-within .input-group-text {
   border-color: var(--primary-color);
@@ -225,9 +228,9 @@ body {
   border-left: none;
   color: var(--text-muted);
   cursor: pointer;
-  padding: 0 1rem;
+  padding: 0 0.9rem;
   transition: all 0.2s ease;
-  border-radius: 0 6px 6px 0;
+  border-radius: 0 8px 8px 0;
 }
 .btn-pw-toggle:hover, .input-group:focus-within .btn-pw-toggle {
   background-color: var(--card-bg);
@@ -242,77 +245,108 @@ body {
   background: var(--primary-color);
   color: #ffffff;
   border: none;
-  border-radius: 6px;
-  padding: 0.8rem 1.5rem;
+  border-radius: 100px;
+  padding: 0.7rem 1.5rem;
   font-family: 'Inter', sans-serif;
   font-size: 0.95rem;
   font-weight: 500;
   width: 100%;
-  transition: all 0.2s ease;
+  transition: box-shadow 0.2s ease, background 0.2s ease;
   cursor: pointer;
-  margin-top: 1rem;
+  margin-top: 0.75rem;
+  letter-spacing: 0.01em;
 }
 .btn-signin:hover:not(:disabled) {
   background: var(--primary-hover);
-  transform: translateY(-1px);
+  box-shadow: 0 1px 3px rgba(26,115,232,0.3);
 }
 .btn-signin:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
-  transform: none;
 }
 
 /* Helper note */
 .helper-note {
-  font-size: 0.8rem;
+  font-size: 0.78rem;
   color: var(--text-muted);
   text-align: center;
-  margin-top: 1.5rem;
+  margin-top: 1.25rem;
   line-height: 1.5;
-  background: var(--bg-color);
-  padding: 1rem;
-  border-radius: 6px;
-}
-.helper-note i {
-  color: var(--accent-color);
+  background: #f8f9fa;
+  padding: 0.85rem 1rem;
+  border-radius: 8px;
 }
 
 /* Alert */
 .alert-login {
   font-size: 0.85rem;
-  border-radius: 6px;
-  padding: 0.75rem 1rem;
-  margin-bottom: 1.25rem;
+  border-radius: 8px;
+  padding: 0.7rem 1rem;
+  margin-bottom: 1rem;
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
   border: 1px solid transparent;
 }
 .alert-danger {
-  background-color: #FEF2F2;
-  border-color: #FCA5A5;
-  color: #991B1B;
+  background-color: #fce8e6;
+  border-color: #f5c6c2;
+  color: #c5221f;
 }
 
 /* ── Footer ── */
 .login-footer {
   text-align: center;
-  padding: 1.5rem;
-  font-size: 0.8rem;
+  padding: 1.25rem;
+  font-size: 0.78rem;
   color: var(--text-muted);
 }
 
 /* Input border-radius fix */
-.input-group > .form-control:not(:last-child) { border-radius: 6px 0 0 6px !important; }
-.input-group > :first-child { border-radius: 6px 0 0 6px !important; }
+.input-group > .form-control:not(:last-child) { border-radius: 0 !important; }
+.input-group > :first-child { border-radius: 8px 0 0 8px !important; }
 
-/* ── Anti-Gravity Particle Canvas ── */
-#particle-canvas {
+/* ── Glow Aura Effect ── */
+#glow-aura {
   position: fixed;
   top: 0; left: 0;
   width: 100%; height: 100%;
   pointer-events: none;
   z-index: 0;
+  transition: opacity 0.3s ease;
+}
+/* Rainbow glow layers */
+#glow-aura::before,
+#glow-aura::after {
+  content: '';
+  position: absolute;
+  top: 0; left: 0;
+  width: 100%; height: 100%;
+  transition: transform 0.08s ease-out;
+}
+#glow-aura::before {
+  background:
+    radial-gradient(600px circle at 50% 50%, rgba(255,60,120,0.12) 0%, transparent 50%),
+    radial-gradient(450px circle at 50% 50%, rgba(120,60,255,0.10) 0%, transparent 40%);
+  filter: blur(18px);
+  animation: hueShift1 6s linear infinite;
+}
+#glow-aura::after {
+  background:
+    radial-gradient(500px circle at 50% 50%, rgba(60,200,255,0.10) 0%, transparent 50%),
+    radial-gradient(350px circle at 50% 50%, rgba(255,200,60,0.08) 0%, transparent 40%);
+  filter: blur(24px);
+  animation: hueShift2 8s linear infinite;
+}
+@keyframes hueShift1 {
+  0%   { filter: hue-rotate(0deg) blur(18px); }
+  50%  { filter: hue-rotate(180deg) blur(18px); }
+  100% { filter: hue-rotate(360deg) blur(18px); }
+}
+@keyframes hueShift2 {
+  0%   { filter: hue-rotate(0deg) blur(24px); }
+  50%  { filter: hue-rotate(-180deg) blur(24px); }
+  100% { filter: hue-rotate(-360deg) blur(24px); }
 }
 .login-wrapper, .brand-bar, .login-footer {
   position: relative;
@@ -322,8 +356,8 @@ body {
 </head>
 <body>
 
-<!-- Anti-Gravity Particle Canvas -->
-<canvas id="particle-canvas"></canvas>
+<!-- Glow effect -->
+<div id="glow-aura"></div>
 
 <!-- Top brand bar -->
 <div class="brand-bar">
@@ -362,7 +396,7 @@ body {
         Swal.fire({
           icon: 'warning', title: 'Account Temporarily Locked',
           html: `Too many failed attempts.<br>Please wait <b id="sw-count">${s}</b> second(s).`,
-          background: '#fff', confirmButtonColor: '#6B1A2A',
+          background: '#fff', confirmButtonColor: '#1a73e8',
           showConfirmButton: false, allowOutsideClick: false,
           didOpen: () => {
             const el = document.getElementById('sw-count');
@@ -443,7 +477,7 @@ document.getElementById('login-form').addEventListener('submit', function(e) {
     Swal.fire({
       icon: 'info', title: 'Fields Required',
       text: 'Please enter both your username and password.',
-      confirmButtonColor: '#6B1A2A',
+          confirmButtonColor: '#1a73e8',
       confirmButtonText: 'Okay'
     }).then(() => { (!u.value.trim() ? u : p).focus(); });
     return;
@@ -459,143 +493,52 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 <?php endif; ?>
 </script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script src="<?php echo htmlspecialchars(asset_url('js/vendor/bootstrap.bundle.min.js'), ENT_QUOTES, 'UTF-8'); ?>"></script>
 
-<!-- Anti-Gravity Mouse Particle Effect -->
+<!-- Glow Aura - Rainbow interactive mouse-following glow (Google Gemini style) -->
 <script>
 (function() {
-  const canvas = document.getElementById('particle-canvas');
-  if (!canvas) return;
-  const ctx = canvas.getContext('2d');
-  let W, H;
-  function resize() {
-    W = canvas.width = window.innerWidth;
-    H = canvas.height = window.innerHeight;
-  }
-  resize();
-  window.addEventListener('resize', resize);
+  const aura = document.getElementById('glow-aura');
+  if (!aura) return;
 
-  const particles = [];
-  const PARTICLE_COUNT = 80;
-  const colors = ['#6B1A2A', '#8B2240', '#A12E4F', '#C45A77', '#D97A96', '#E8A0B5'];
-
-  class Particle {
-    constructor() {
-      this.reset();
-    }
-    reset() {
-      this.x = Math.random() * W;
-      this.y = H + 20;
-      this.size = Math.random() * 4 + 2;
-      this.speedY = -(Math.random() * 0.4 + 0.15);
-      this.speedX = (Math.random() - 0.5) * 0.3;
-      this.color = colors[Math.floor(Math.random() * colors.length)];
-      this.opacity = Math.random() * 0.5 + 0.2;
-      this.wobble = Math.random() * Math.PI * 2;
-      this.wobbleSpeed = Math.random() * 0.02 + 0.005;
-      this.wobbleAmp = Math.random() * 0.5 + 0.2;
-    }
-    update(mouse) {
-      this.wobble += this.wobbleSpeed;
-      this.x += this.speedX + Math.sin(this.wobble) * this.wobbleAmp;
-      this.y += this.speedY;
-
-      // Mouse repulsion
-      if (mouse) {
-        const dx = this.x - mouse.x;
-        const dy = this.y - mouse.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < 120) {
-          const force = (120 - dist) / 120;
-          const angle = Math.atan2(dy, dx);
-          this.x += Math.cos(angle) * force * 4;
-          this.y += Math.sin(angle) * force * 4;
-        }
-      }
-
-      if (this.y < -20 || this.x < -20 || this.x > W + 20) {
-        this.reset();
-        this.y = H + 20;
-      }
-    }
-    draw() {
-      ctx.beginPath();
-      ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-      ctx.fillStyle = this.color;
-      ctx.globalAlpha = this.opacity;
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-  }
-
-  for (let i = 0; i < PARTICLE_COUNT; i++) {
-    const p = new Particle();
-    p.y = Math.random() * H;
-    particles.push(p);
-  }
-
-  let mouse = null;
-  let mouseTimeout = null;
-  let mouseClickBurst = [];
-  let animId;
+  let mx = window.innerWidth / 2, my = window.innerHeight / 2;
+  let tx = mx, ty = my;
 
   document.addEventListener('mousemove', function(e) {
-    mouse = { x: e.clientX, y: e.clientY };
-    clearTimeout(mouseTimeout);
-    mouseTimeout = setTimeout(function() { mouse = null; }, 2000);
+    tx = e.clientX;
+    ty = e.clientY;
   });
+  document.addEventListener('touchmove', function(e) {
+    const t = e.touches[0];
+    if (t) { tx = t.clientX; ty = t.clientY; }
+  }, { passive: true });
 
-  document.addEventListener('mouseleave', function() { mouse = null; });
+  const before = window.getComputedStyle(aura, '::before');
+  const after = window.getComputedStyle(aura, '::after');
 
+  function smoothGlow() {
+    mx += (tx - mx) * 0.07;
+    my += (ty - my) * 0.07;
+    // Move pseudo-element backgrounds via CSS custom properties on the parent
+    aura.style.setProperty('--mx', mx + 'px');
+    aura.style.setProperty('--my', my + 'px');
+    aura.style.background =
+      'radial-gradient(600px circle at ' + mx + 'px ' + my + 'px, rgba(255,60,120,0.10) 0%, transparent 50%),' +
+      'radial-gradient(400px circle at ' + mx + 'px ' + my + 'px, rgba(120,60,255,0.08) 0%, transparent 40%)';
+    requestAnimationFrame(smoothGlow);
+  }
+  smoothGlow();
+
+  // Click burst
   document.addEventListener('click', function(e) {
-    for (let i = 0; i < 12; i++) {
-      const angle = (Math.PI * 2 / 12) * i;
-      const speed = Math.random() * 3 + 2;
-      mouseClickBurst.push({
-        x: e.clientX, y: e.clientY,
-        vx: Math.cos(angle) * speed,
-        vy: Math.sin(angle) * speed,
-        size: Math.random() * 3 + 1,
-        life: 1,
-        color: colors[Math.floor(Math.random() * colors.length)]
-      });
-    }
+    aura.style.transition = 'background 0.05s ease';
+    aura.style.background =
+      'radial-gradient(500px circle at ' + e.clientX + 'px ' + e.clientY + 'px, rgba(255,100,150,0.22) 0%, transparent 50%),' +
+      'radial-gradient(300px circle at ' + e.clientX + 'px ' + e.clientY + 'px, rgba(100,150,255,0.16) 0%, transparent 40%)';
+    setTimeout(function() {
+      aura.style.transition = '';
+    }, 50);
   });
-
-  function animate() {
-    ctx.clearRect(0, 0, W, H);
-
-    // Update & draw particles
-    for (const p of particles) {
-      p.update(mouse);
-      p.draw();
-    }
-
-    // Draw click burst particles
-    for (let i = mouseClickBurst.length - 1; i >= 0; i--) {
-      const b = mouseClickBurst[i];
-      b.x += b.vx;
-      b.y += b.vy;
-      b.vy += 0.05;
-      b.life -= 0.025;
-      if (b.life <= 0) { mouseClickBurst.splice(i, 1); continue; }
-      ctx.beginPath();
-      ctx.arc(b.x, b.y, b.size * b.life, 0, Math.PI * 2);
-      ctx.fillStyle = b.color;
-      ctx.globalAlpha = b.life * 0.6;
-      ctx.fill();
-      ctx.globalAlpha = 1;
-    }
-
-    animId = requestAnimationFrame(animate);
-  }
-
-  if (window.innerWidth > 768) {
-    animate();
-  } else {
-    // On mobile, just show static particles
-    for (const p of particles) { p.draw(); }
-  }
 })();
 </script>
 </body>

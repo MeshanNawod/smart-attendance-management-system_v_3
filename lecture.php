@@ -271,18 +271,18 @@ try {
                 <div class="mb-3">
                     <label class="form-label small fw-bold text-muted mb-1">CSV Columns</label>
                     <div class="row g-1">
-                        <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="csv-col-student_no" checked><label class="form-check-label small" for="csv-col-student_no">Student No</label></div></div>
-                        <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="csv-col-student_name" checked><label class="form-check-label small" for="csv-col-student_name">Student Name</label></div></div>
-                        <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="csv-col-course_code" checked><label class="form-check-label small" for="csv-col-course_code">Course Code</label></div></div>
-                        <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="csv-col-device" checked><label class="form-check-label small" for="csv-col-device">Device</label></div></div>
-                        <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="csv-col-timestamp" checked><label class="form-check-label small" for="csv-col-timestamp">Timestamp</label></div></div>
-                        <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="csv-col-modality" checked><label class="form-check-label small" for="csv-col-modality">Modality</label></div></div>
-                        <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="csv-col-is_offline"><label class="form-check-label small" for="csv-col-is_offline">Offline Sync</label></div></div>
-                        <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="csv-col-ip_address"><label class="form-check-label small" for="csv-col-ip_address">Device IP</label></div></div>
-                        <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="csv-col-id"><label class="form-check-label small" for="csv-col-id">Log ID</label></div></div>
+                        <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="csv-col-student_no" value="student_no" checked><label class="form-check-label small" for="csv-col-student_no">Student No</label></div></div>
+                        <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="csv-col-student_name" value="student_name" checked><label class="form-check-label small" for="csv-col-student_name">Student Name</label></div></div>
+                        <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="csv-col-course_code" value="course_code" checked><label class="form-check-label small" for="csv-col-course_code">Course Code</label></div></div>
+                        <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="csv-col-device" value="device" checked><label class="form-check-label small" for="csv-col-device">Device</label></div></div>
+                        <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="csv-col-timestamp" value="timestamp" checked><label class="form-check-label small" for="csv-col-timestamp">Timestamp</label></div></div>
+                        <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="csv-col-modality" value="modality" checked><label class="form-check-label small" for="csv-col-modality">Modality</label></div></div>
+                        <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="csv-col-is_offline" value="is_offline"><label class="form-check-label small" for="csv-col-is_offline">Offline Sync</label></div></div>
+                        <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="csv-col-ip_address" value="ip_address"><label class="form-check-label small" for="csv-col-ip_address">Device IP</label></div></div>
+                        <div class="col-4"><div class="form-check"><input class="form-check-input" type="checkbox" id="csv-col-id" value="id"><label class="form-check-label small" for="csv-col-id">Log ID</label></div></div>
                     </div>
                 </div>
-                <button class="btn btn-success w-100 fw-semibold shadow-sm mb-2" onclick="exportFilteredCSV()">
+                <button class="btn btn-success w-100 fw-semibold shadow-sm mb-2" onclick="exportLectureFilteredCSV()">
                     <i class="bi bi-download me-2"></i>Download Relevant CSV
                 </button>
                 <a href="export_csv.php" class="btn btn-outline-success btn-sm w-100 fw-semibold">

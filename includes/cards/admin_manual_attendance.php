@@ -29,21 +29,46 @@
             </div>
         </div>
 
-        <div class="input-group shadow-sm" style="border-radius:8px;overflow:hidden;">
+        <div class="input-group shadow-sm" style="border-radius:8px;overflow:visible;">
             <span class="input-group-text bg-white" style="border-color:#e0d0d0;">
                 <i class="bi bi-person-check" style="color:#ffd30a;"></i>
             </span>
-            <input type="text" id="manual-student-no"
-                   class="form-control"
-                   style="border-color:#e0d0d0;font-size:0.88rem;"
-                   placeholder="e.g. S/20/123"
-                   oninput="searchStudentName(this.value)">
+            <div class="searchable-select-wrapper position-relative flex-grow-1" style="z-index: 1050;">
+                <input type="text" id="manual-student-search"
+                       class="form-control"
+                       style="border-color:#e0d0d0;font-size:0.88rem;border-radius:0;"
+                       placeholder="Search student no or name..."
+                       autocomplete="off"
+                       oninput="filterDropdown(this,'manual-student-dropdown','manual-student-no')"
+                       onfocus="showDropdown('manual-student-dropdown')">
+                <input type="hidden" id="manual-student-no" value="">
+                <div id="manual-student-dropdown" class="searchable-dropdown d-none" style="max-height:200px; overflow-y:auto; width: 100%;">
+                    <?php foreach ($allStudents as $s): ?>
+                        <div class="searchable-dropdown-item" data-value="<?php echo htmlspecialchars($s['student_no']); ?>" onclick="selectDropdownItem(this, 'manual-student-search', 'manual-student-no', 'manual-student-dropdown')">
+                            <?php echo htmlspecialchars($s['student_no'] . ' - ' . $s['student_name']); ?>
+                        </div>
+                    <?php endforeach; ?>
+                </div>
+            </div>
             <button class="btn btn-gold fw-semibold"
                     onclick="markManualAttendance()"
-                    style="border-radius:0 8px 8px 0;font-size:0.85rem;padding:0 14px;">
+                    style="border-radius:0 8px 8px 0;font-size:0.85rem;padding:0 14px;z-index:1000;">
                 <i class="bi bi-check-lg me-1"></i>Present
             </button>
         </div>
         <div id="manual-student-name-display" class="form-text px-1 min-h-xs" style="color:#64748b;font-size:0.78rem;"></div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    var hiddenNo = document.getElementById('manual-student-no');
+    if (hiddenNo) {
+        hiddenNo.addEventListener('change', function() {
+            if (typeof searchStudentName === 'function') {
+                searchStudentName(this.value);
+            }
+        });
+    }
+});
+</script>

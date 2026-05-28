@@ -4,10 +4,29 @@ require_once 'includes/header.php';
 <div class="row mt-2">
     <div class="col-lg-10 mx-auto">
 
-        <!-- ═══ Getting Started ═══ -->
+        <!-- ═══ Table of Contents ═══ -->
         <div class="card shadow-sm mb-4 border-0">
+            <div class="card-header bg-dark text-white py-2">
+                <strong><i class="bi bi-list me-2"></i>On This Page</strong>
+            </div>
+            <div class="card-body bg-light py-2">
+                <div class="row g-1 small">
+                    <div class="col-md-4"><a href="#getting-started" class="text-decoration-none"><i class="bi bi-rocket-takeoff me-1"></i>Getting Started</a></div>
+                    <div class="col-md-4"><a href="#dashboard" class="text-decoration-none"><i class="bi bi-display me-1"></i>Dashboard</a></div>
+                    <div class="col-md-4"><a href="#students-base" class="text-decoration-none"><i class="bi bi-journal-bookmark-fill me-1"></i>Students Base</a></div>
+                    <div class="col-md-4"><a href="#lectures" class="text-decoration-none"><i class="bi bi-journal-album me-1"></i>Lectures &amp; Export</a></div>
+                    <div class="col-md-4"><a href="#ai-assistant" class="text-decoration-none"><i class="bi bi-robot me-1"></i>AI Assistant</a></div>
+                    <div class="col-md-4"><a href="#hardware-nodes" class="text-decoration-none"><i class="bi bi-motherboard me-1"></i>Hardware Nodes</a></div>
+                    <div class="col-md-4"><a href="#glossary" class="text-decoration-none"><i class="bi bi-book me-1"></i>Key Terms Glossary</a></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ═══ Getting Started ═══ -->
+        <div class="card shadow-sm mb-4 border-0" id="getting-started">
             <div class="card-header bg-gradient-primary text-white py-3">
                 <strong><i class="bi bi-rocket-takeoff me-2"></i>Getting Started</strong>
+                <a href="#" class="float-end text-white-50 small text-decoration-none back-to-top"><i class="bi bi-arrow-up"></i></a>
             </div>
             <div class="card-body bg-light">
                 <div class="row g-3">
@@ -24,9 +43,10 @@ require_once 'includes/header.php';
         </div>
 
         <!-- ═══ Dashboard ═══ -->
-        <div class="card shadow-sm mb-4 border-0">
+        <div class="card shadow-sm mb-4 border-0" id="dashboard">
             <div class="card-header bg-dark text-white py-3">
                 <strong><i class="bi bi-display me-2"></i>Dashboard (index.php)</strong>
+                <a href="#" class="float-end text-white-50 small text-decoration-none back-to-top"><i class="bi bi-arrow-up"></i></a>
             </div>
             <div class="card-body bg-light">
                 <h6 class="fw-bold text-dark"><i class="bi bi-speedometer2 me-1"></i>Stats Row</h6>
@@ -82,9 +102,10 @@ require_once 'includes/header.php';
         </div>
 
         <!-- ═══ Students Base ═══ -->
-        <div class="card shadow-sm mb-4 border-0">
+        <div class="card shadow-sm mb-4 border-0" id="students-base">
             <div class="card-header bg-primary text-white py-3">
                 <strong><i class="bi bi-journal-bookmark-fill me-2"></i>Students Base (students.php)</strong>
+                <a href="#" class="float-end text-white-50 small text-decoration-none back-to-top"><i class="bi bi-arrow-up"></i></a>
             </div>
             <div class="card-body bg-light">
                 <h6 class="fw-bold text-dark"><i class="bi bi-tag me-1"></i>Course Management</h6>
@@ -161,9 +182,10 @@ require_once 'includes/header.php';
         </div>
 
         <!-- ═══ Lectures & Export ═══ -->
-        <div class="card shadow-sm mb-4 border-0">
+        <div class="card shadow-sm mb-4 border-0" id="lectures">
             <div class="card-header bg-warning text-dark py-3">
                 <strong><i class="bi bi-journal-album me-2"></i>Lectures &amp; Export (lecture.php)</strong>
+                <a href="#" class="float-end text-dark small text-decoration-none back-to-top"><i class="bi bi-arrow-up"></i></a>
             </div>
             <div class="card-body bg-light">
                 <h6 class="fw-bold text-dark"><i class="bi bi-envelope-paper me-1"></i>Email Sender Configuration</h6>
@@ -222,9 +244,10 @@ require_once 'includes/header.php';
         </div>
 
         <!-- ═══ AI Assistant ═══ -->
-        <div class="card shadow-sm mb-4 border-0">
+        <div class="card shadow-sm mb-4 border-0" id="ai-assistant">
             <div class="card-header bg-info text-white py-3">
                 <strong><i class="bi bi-robot me-2"></i>AI Assistant</strong>
+                <a href="#" class="float-end text-white-50 small text-decoration-none back-to-top"><i class="bi bi-arrow-up"></i></a>
             </div>
             <div class="card-body bg-light">
                 <p class="small text-muted mb-2">The <strong>AI Assistant</strong> (robot icon, bottom-right corner) is available on every page. Click it to open a chat interface that can answer questions about:</p>
@@ -251,9 +274,10 @@ require_once 'includes/header.php';
         </div>
 
         <!-- ═══ Hardware Nodes ═══ -->
-        <div class="card shadow-sm mb-4 border-0">
+        <div class="card shadow-sm mb-4 border-0" id="hardware-nodes">
             <div class="card-header bg-success text-white py-3">
                 <strong><i class="bi bi-motherboard me-2"></i>Hardware Nodes &amp; Devices (device.php)</strong>
+                <a href="#" class="float-end text-white-50 small text-decoration-none back-to-top"><i class="bi bi-arrow-up"></i></a>
             </div>
             <div class="card-body bg-light">
                 <h6 class="fw-bold text-dark"><i class="bi bi-cpu me-1"></i>ESP32 Control Center</h6>
@@ -359,9 +383,10 @@ require_once 'includes/header.php';
         </div>
 
         <!-- ═══ Key Terms Glossary ═══ -->
-        <div class="card shadow-sm mb-4 border-0">
+        <div class="card shadow-sm mb-4 border-0" id="glossary">
             <div class="card-header bg-info text-white py-3">
                 <strong><i class="bi bi-book me-2"></i>Key Terms Glossary</strong>
+                <a href="#" class="float-end text-white-50 small text-decoration-none back-to-top"><i class="bi bi-arrow-up"></i></a>
             </div>
             <div class="card-body bg-light">
                 <div class="input-group mb-3">
@@ -433,12 +458,45 @@ require_once 'includes/header.php';
                         <span class="badge bg-primary me-2">Bulk Enrollment</span>
                         <span class="small text-muted">Import many students at once via CSV (course enrollment) or image files (face descriptors). For images, name files as student numbers: <code>S-20-123.jpg</code>. Hyphens/underscores convert to slashes automatically.</span>
                     </div>
+                    <div class="glossary-item" data-keywords="ble bluetooth low energy esp32 scan">
+                        <span class="badge bg-info text-dark me-2">BLE</span>
+                        <span class="small text-muted">Bluetooth Low Energy. The ESP32 can scan for nearby BLE devices. Send <code>SCANBT</code> via OTA to trigger a 5-second scan. Returns device names and MAC addresses.</span>
+                    </div>
+                    <div class="glossary-item" data-keywords="enroll count fingers scans template reliability">
+                        <span class="badge bg-warning text-dark me-2">Enroll Count</span>
+                        <span class="small text-muted">The number of times a finger must be placed on the FM10A sensor during enrollment (1–5, default 5). More scans produce a more reliable fingerprint template by building an incremental model across scans.</span>
+                    </div>
+                    <div class="glossary-item" data-keywords="session stats scanned denied offline counters lecture">
+                        <span class="badge bg-secondary me-2">Session Stats</span>
+                        <span class="small text-muted">Per-lecture counters tracked by the ESP32: <strong>Scanned</strong> (successful attendance), <strong>Denied</strong> (unknown fingerprint/RFID), and <strong>Offline</strong> (queued due to no internet). Visible in the <code>GETSTATUS</code> response.</span>
+                    </div>
+                    <div class="glossary-item" data-keywords="ota queue pending command server esp32 rpi">
+                        <span class="badge bg-dark me-2">OTA Queue</span>
+                        <span class="small text-muted">Commands queued in the server's <code>api/ota.php</code> table. When a device polls (Raspberry Pi) or the dashboard sends via HTTP (ESP32), the command is dequeued and executed. Used for delayed or batch operations.</span>
+                    </div>
+                    <div class="glossary-item" data-keywords="lcd i2c display 20x4 mirror digital twin">
+                        <span class="badge bg-success me-2">I2C LCD</span>
+                        <span class="small text-muted">The 20×4 character LCD module connected to the ESP32 via I2C (SDA/D21, SCL/D22). Displays current mode, course code, and status. Mirrored in real-time via the <strong>Digital Twin</strong> interface.</span>
+                    </div>
+                    <div class="glossary-item" data-keywords="keypad 4x4 matrix virtual keypad esp32">
+                        <span class="badge bg-danger me-2">Keypad</span>
+                        <span class="small text-muted">A 4×4 matrix membrane keypad connected to the ESP32 (rows: D13, D12, D14, D5; cols: D26, D25, D33, D32). Used for menu navigation (A=Menu, B=Up, C=Down, D=OK, *=Delete). The <strong>Virtual Keypad</strong> in the Digital Twin sends <code>KEYPAD &lt;key&gt;</code> OTA commands.</span>
+                    </div>
                 </div>
             </div>
         </div>
 
     </div>
 </div>
+
+<style>
+html { scroll-behavior: smooth; }
+.back-to-top { opacity: 0.5; transition: opacity 0.2s; }
+.back-to-top:hover { opacity: 1; }
+.glossary-item { padding: 0.35rem 0; border-bottom: 1px solid rgba(0,0,0,0.04); }
+.glossary-item:last-child { border-bottom: none; }
+#glossary-list .badge { min-width: 100px; font-size: 0.7rem; }
+</style>
 
 <script>
 function filterGlossary(query) {

@@ -13,9 +13,9 @@ $discovered_devices = $discovered_devices ?? [];
                 <i class="bi bi-people-fill" style="font-size:1.6rem;color:#fcd40d;"></i>
             </div>
             <div class="flex-grow-1 min-width-0">
-                <div class="stat-label" style="color:rgba(255,255,255,0.65);" data-i18n="total_enrolled">Total Enrolled</div>
-                <div class="stat-value" style="color:#fff;"><?php echo $total_students; ?></div>
-                <div class="stat-sub" style="color:rgba(255,255,255,0.55);" data-i18n="registered_students">Registered students</div>
+                <div class="stat-label" style="color:#64748b;" data-i18n="total_enrolled">Total Enrolled</div>
+                <div class="stat-value" style="color:#a11e17;"><?php echo $total_students; ?></div>
+                <div class="stat-sub" style="color:#64748b;" data-i18n="registered_students">Registered students</div>
             </div>
             <div class="stat-blob"></div>
         </div>

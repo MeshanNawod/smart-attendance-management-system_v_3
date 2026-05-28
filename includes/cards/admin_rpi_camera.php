@@ -18,6 +18,11 @@
                     onclick="refreshRpiStatus()" title="Refresh">
                 <i class="bi bi-arrow-clockwise"></i>
             </button>
+            <button class="btn btn-xs rounded py-0 px-2"
+                    style="background:rgba(255,255,255,0.12);color:#fff;border:1px solid rgba(255,255,255,0.2);font-size:0.7rem;"
+                    onclick="toggleRpiPanel()" id="rpi-toggle-btn" title="Expand / Collapse">
+                <i class="bi bi-chevron-down" id="rpi-toggle-icon"></i>
+            </button>
         </div>
     </div>
 

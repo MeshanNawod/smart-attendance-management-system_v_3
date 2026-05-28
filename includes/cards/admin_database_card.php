@@ -2,8 +2,19 @@
 // admin_database_card.php
 ?>
 <div class="card card-clean shadow-none mb-4 border-0">
-    <div class="card-header bg-danger text-white py-3">
+    <div class="card-header bg-danger text-white py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
         <strong><i class="bi bi-shield-lock-fill me-2"></i>Admin Database</strong>
+        <div class="d-flex align-items-center gap-2">
+            <label class="form-label small text-white mb-0 fw-bold"><i class="bi bi-cpu me-1"></i>Target Device:</label>
+            <select id="admin-device-select" class="form-select form-select-sm bg-dark text-white border-light" style="min-width:180px;max-width:260px;" onchange="onAdminDeviceChange(this.value)">
+                <option value="">&#x26A0;&#xFE0F; Select device first…</option>
+            </select>
+            <span id="admin-device-status" class="badge bg-light text-dark">None</span>
+        </div>
+    </div>
+    <div id="admin-device-required-alert" class="alert alert-warning border-0 rounded-0 mb-0 py-2 px-3 d-flex align-items-center gap-2">
+        <i class="bi bi-exclamation-triangle-fill text-warning fs-5"></i>
+        <span class="small"><strong>No hardware device selected.</strong> Choose an active ESP32 node above before using <em>Enroll Finger</em> or <em>Scan RFID</em>. Name/face/voice operations work without a device.</span>
     </div>
     <div class="card-body bg-light">
         <div class="row">
@@ -16,15 +27,17 @@
                 </div>
                 <div class="input-group mb-2">
                     <span class="input-group-text bg-white border-danger-subtle"><i class="bi bi-fingerprint text-danger"></i></span>
-                    <input type="number" id="enroll-admin-id" class="form-control bg-light text-muted border-danger-subtle" placeholder="Slot ID (1-127)">
-                    <button class="btn btn-outline-danger fw-semibold" onclick="triggerAdminEnroll()">
+                    <input type="number" id="enroll-admin-id" class="form-control bg-light text-muted border-danger-subtle" value="<?php echo $admin_next_id ?? 1; ?>" readonly title="Auto-assigned ID">
+                    <button class="btn btn-outline-danger fw-semibold" onclick="if(requireAdminDevice()) triggerAdminEnroll()">
                         <i class="bi bi-plus-circle me-1"></i>Enroll Finger
                     </button>
                 </div>
                 <div class="input-group mb-2">
                     <span class="input-group-text bg-white border-danger-subtle"><i class="bi bi-credit-card text-danger"></i></span>
-                    <input type="text" id="enroll-admin-rfid" class="form-control border-danger-subtle" placeholder="RFID Tag UID">
-                    <button class="btn btn-outline-danger fw-semibold px-2" onclick="autoFindRfid('enroll-admin-rfid')" title="Auto Find Latest Scan"><i class="bi bi-search"></i></button>
+                    <input type="text" id="enroll-admin-rfid" class="form-control border-danger-subtle" placeholder="Scan RFID on device or type UID">
+                    <button class="btn btn-outline-danger fw-semibold" onclick="if(requireAdminDevice()) triggerRfidScan('enroll-admin-rfid')" title="Trigger device to scan RFID card">
+                        <i class="bi bi-credit-card-2-front me-1"></i>Scan RFID
+                    </button>
                     <button class="btn btn-danger text-white fw-semibold" onclick="triggerAdminEnrollRfid()">
                         <i class="bi bi-link me-1"></i>Link RFID
                     </button>
@@ -35,6 +48,13 @@
                     <button class="btn btn-outline-danger fw-semibold px-2" onclick="autoFindFace('enroll-admin-face')" title="Auto Find Latest Scan"><i class="bi bi-search"></i></button>
                     <button class="btn btn-danger text-white fw-semibold" onclick="triggerAdminEnrollFace()">
                         <i class="bi bi-link me-1"></i>Link Face
+                    </button>
+                </div>
+                <div class="input-group mb-3">
+                    <span class="input-group-text bg-white border-danger-subtle"><i class="bi bi-mic text-danger"></i></span>
+                    <input type="text" id="enroll-admin-voice" class="form-control border-danger-subtle" placeholder="Admin Name">
+                    <button class="btn btn-outline-danger fw-semibold" onclick="window.goToVoiceEnroll('enroll-admin-voice')" title="Go to Voice tab">
+                        <i class="bi bi-mic me-1"></i>Enroll Voice
                     </button>
                 </div>
 
@@ -113,3 +133,42 @@
         </div>
     </div>
 </div>
+
+<script>
+window.requireAdminDevice = function() {
+    const sel = document.getElementById('admin-device-select');
+    if (!sel || !sel.value || sel.value === '' || sel.value === 'WEB_DASHBOARD') {
+        showToast('&#x26A0;&#xFE0F; Please select an active ESP32 hardware device first.', 'warning');
+        return false;
+    }
+    return true;
+};
+window.onAdminDeviceChange = function(val) {
+    const status = document.getElementById('admin-device-status');
+    const alert = document.getElementById('admin-device-required-alert');
+    if (val && val !== '') {
+        status.textContent = val === 'WEB_DASHBOARD' ? 'Web Only' : val;
+        status.className = 'badge bg-success text-white';
+        if (alert) alert.style.display = 'none';
+    } else {
+        status.textContent = 'None';
+        status.className = 'badge bg-light text-dark';
+        if (alert) alert.style.display = 'flex';
+    }
+};
+// Populate admin device select from students-device-select
+(function() {
+    const stuSel = document.getElementById('students-device-select');
+    const adminSel = document.getElementById('admin-device-select');
+    if (stuSel && adminSel) {
+        function syncAdminDevices() {
+            const val = stuSel.value;
+            adminSel.innerHTML = stuSel.innerHTML;
+            adminSel.value = val;
+            onAdminDeviceChange(val);
+        }
+        syncAdminDevices();
+        stuSel.addEventListener('change', syncAdminDevices);
+    }
+})();
+</script>

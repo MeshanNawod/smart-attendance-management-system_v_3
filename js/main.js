@@ -62,6 +62,19 @@ function getCsrfToken() {
     return meta ? meta.content : '';
 }
 
+// Auto-attach CSRF token to all POST requests using FormData (covers all API calls)
+(function() {
+    const origFetch = window.fetch;
+    window.fetch = function(url, opts) {
+        if (opts && opts.method && opts.method.toUpperCase() === 'POST' && opts.body instanceof FormData) {
+            if (!opts.body.has('csrf_token') && !opts.body.has('hardware_key')) {
+                opts.body.append('csrf_token', getCsrfToken());
+            }
+        }
+        return origFetch.call(this, url, opts);
+    };
+})();
+
 const OTA_API_KEY = 'ss_hw_api_key_2052';
 
 function getEspIp() {
@@ -107,7 +120,7 @@ async function refreshDeviceList() {
 
 function populateDeviceSelector() {
     const sel = document.getElementById('action-target-device');
-    if (!sel) return;
+    if (!sel || sel.tagName !== 'SELECT') return;
 
     const currentVal = sel.value;
 
@@ -129,8 +142,10 @@ function populateDeviceSelector() {
         sel.appendChild(opt);
     }
 
-    if (currentVal && [...sel.options].some(o => o.value === currentVal)) {
-        sel.value = currentVal;
+    if (currentVal) {
+        for (let i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value === currentVal) { sel.value = currentVal; break; }
+        }
     }
 }
 
@@ -325,9 +340,10 @@ function populateStudentsDeviceSelector() {
         sel.appendChild(opt);
     }
 
-    if (currentVal && [...sel.options].some(o => o.value === currentVal)) {
-        sel.value = currentVal;
-        onStudentsDeviceChange(currentVal);
+    if (currentVal) {
+        for (let i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].value === currentVal) { sel.value = currentVal; onStudentsDeviceChange(currentVal); break; }
+        }
     }
 }
 
@@ -369,7 +385,7 @@ document.addEventListener('DOMContentLoaded', () => {
     refreshAllCourseDropdowns();
 
     // Auto-discover hardware nodes immediately and every 10s
-    if (document.getElementById('action-target-device')) {
+    if (document.getElementById('action-target-device') || document.getElementById('students-device-select')) {
         refreshDeviceList();
         refreshDeviceDropdown();
         refreshLectureButtons();
@@ -675,9 +691,9 @@ async function sendOtaCommand(command) {
         return;
     }
     
-    // ESP32: direct HTTP request
+    // ESP32: proxy through PHP to avoid CORS/network issues
     try {
-        const response = await fetch(`http://${targetIP}/cmd?command=${encodeURIComponent(command)}`, { signal: AbortSignal.timeout(3000) });
+        const response = await fetch(`/csc2052/api/esp_ota_proxy.php?ip=${encodeURIComponent(targetIP)}&command=${encodeURIComponent(command)}`, { signal: AbortSignal.timeout(8000) });
         const data = await response.text();
         
         if (data.startsWith("WIFILIST:")) {
@@ -694,7 +710,7 @@ async function sendOtaCommand(command) {
 
 async function sendOtaCommandToIp(ip, command) {
     try {
-        await fetch(`http://${ip}/cmd?command=${encodeURIComponent(command)}`, { signal: AbortSignal.timeout(3000) });
+        await fetch(`/csc2052/api/esp_ota_proxy.php?ip=${encodeURIComponent(ip)}&command=${encodeURIComponent(command)}`, { signal: AbortSignal.timeout(8000) });
     } catch (e) {
         console.warn('[OTA] Failed to reach ' + ip + ':', e.message);
     }
@@ -783,6 +799,24 @@ window.startCourseToDevice = function() {
     const isHardware = device !== 'WEB_DASHBOARD' && device !== '__loading__';
     const deviceName = document.getElementById('action-target-device')?.selectedOptions?.[0]?.dataset?.name || 'Web Dashboard';
 
+    // Create lecture session via API
+    var fd = new FormData();
+    fd.append('action', 'start_course_session');
+    fd.append('course_code', code);
+    fd.append('device', device);
+    const timerEl = document.getElementById('lecture-timer-preset');
+    let timerMinutes = 0;
+    if (timerEl) {
+        const preset = timerEl.value;
+        if (preset === 'custom') {
+            timerMinutes = parseInt(document.getElementById('lecture-timer-custom')?.value || '0');
+        } else {
+            timerMinutes = parseInt(preset);
+        }
+    }
+    if (timerMinutes > 0) fd.append('timer_minutes', timerMinutes);
+    fetch('/csc2052/api/teacher.php', { method: 'POST', body: fd }).catch(function(e) { console.error('[Lecture] Failed to create session:', e); });
+
     if (isHardware) {
         sendOtaCommandToIp(device, 'START_COURSE ' + code);
         logToTerminal('[CMD] Pushed course to ' + deviceName + ' (' + device + '): ' + code);
@@ -790,13 +824,6 @@ window.startCourseToDevice = function() {
         logToTerminal('[CMD] Started Web Dashboard lecture: ' + code);
     }
 
-    const preset = document.getElementById('lecture-timer-preset')?.value || '0';
-    let timerMinutes = 0;
-    if (preset === 'custom') {
-        timerMinutes = parseInt(document.getElementById('lecture-timer-custom')?.value || '0');
-    } else {
-        timerMinutes = parseInt(preset);
-    }
     const endTime = timerMinutes > 0 ? Date.now() + timerMinutes * 60000 : null;
 
     const section = document.getElementById('lecture-section-input')?.value?.trim() || '';
@@ -927,15 +954,15 @@ window.downloadAbsentReport = function() {
     let csv = 'Student No,Name,Course\n';
     rows.forEach(row => {
         const cells = row.querySelectorAll('td');
-        if (cells.length >= 3) {
-            const stuNo = cells[0].textContent.trim();
-            const name = cells[1].textContent.trim();
-            const courseCode = cells[2].textContent.trim();
+        if (cells.length >= 4) {
+            const stuNo = cells[1].textContent.trim();
+            const name = cells[2].textContent.trim();
+            const courseCode = cells[3].textContent.trim();
             csv += `"${stuNo}","${name}","${courseCode}"\n`;
         }
     });
     
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -957,18 +984,18 @@ window.downloadAnalyticsReport = function() {
     let csv = 'Student No,Name,Attended,Total Sessions,Percentage\n';
     rows.forEach(row => {
         const cells = row.querySelectorAll('td');
-        if (cells.length >= 4) {
-            const stuNo = cells[0].textContent.trim();
-            const name = cells[1].textContent.trim();
-            const attended = cells[2].textContent.trim();
+        if (cells.length >= 5) {
+            const stuNo = cells[1].textContent.trim();
+            const name = cells[2].textContent.trim();
+            const attended = cells[3].textContent.trim();
             const total = document.getElementById('analytics-total-sessions')?.textContent || '0';
-            const pctCell = cells[3].querySelector('.badge');
+            const pctCell = cells[4].querySelector('.badge');
             const percentage = pctCell ? pctCell.textContent.trim() : '0%';
             csv += `"${stuNo}","${name}","${attended}","${total}","${percentage}"\n`;
         }
     });
     
-    const blob = new Blob([csv], { type: 'text/csv' });
+    const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -1023,6 +1050,12 @@ window.endLectureByDevice = function(deviceIp) {
     
     const endedCourse = lec.course;
     const endedSection = lec.section || '';
+
+    // End lecture session via API
+    var fd = new FormData();
+    fd.append('action', 'end_course_session');
+    fd.append('course_code', endedCourse);
+    fetch('/csc2052/api/teacher.php', { method: 'POST', body: fd }).catch(function(e) { console.error('[Lecture] Failed to end session:', e); });
     
     delete window.activeLectures[deviceIp];
     localStorage.setItem('active_lectures', JSON.stringify(window.activeLectures));
@@ -1326,7 +1359,7 @@ window.scanNetworks = async function() {
         const sel = document.getElementById('action-target-device');
         const devType = 'esp32';
         const ip = sel?.value && sel.value !== 'WEB_DASHBOARD' ? sel.value : getEspIp();
-        const res = await fetch(`http://${ip}/cmd?command=SCANWIFI`, { signal: AbortSignal.timeout(15000) });
+        const res = await fetch(`/csc2052/api/esp_ota_proxy.php?ip=${encodeURIComponent(ip)}&command=${encodeURIComponent('SCANWIFI')}`, { signal: AbortSignal.timeout(15000) });
         if (!res.ok) throw new Error("HTTP " + res.status);
         const networks = await res.json();
         if (select) {
@@ -1389,7 +1422,7 @@ window.scanBluetooth = async function() {
     try {
         const sel = document.getElementById('action-target-device');
         const ip = sel?.value && sel.value !== 'WEB_DASHBOARD' ? sel.value : getEspIp();
-        const res = await fetch(`http://${ip}/cmd?command=SCANBT`, { signal: AbortSignal.timeout(15000) });
+        const res = await fetch(`/csc2052/api/esp_ota_proxy.php?ip=${encodeURIComponent(ip)}&command=${encodeURIComponent('SCANBT')}`, { signal: AbortSignal.timeout(15000) });
         if (!res.ok) throw new Error("HTTP " + res.status);
         const devices = await res.json();
         if (select) {
@@ -1490,7 +1523,7 @@ window.downloadFingerprintTemplate = async function() {
     try {
         const sel = document.getElementById('action-target-device');
         const ip = sel?.value && sel.value !== 'WEB_DASHBOARD' ? sel.value : getEspIp();
-        const res = await fetch(`http://${ip}/cmd?command=GETTEMPLATE ${slot}`, { signal: AbortSignal.timeout(10000) });
+        const res = await fetch(`/csc2052/api/esp_ota_proxy.php?ip=${encodeURIComponent(ip)}&command=${encodeURIComponent('GETTEMPLATE ' + slot)}`, { signal: AbortSignal.timeout(10000) });
         const text = await res.text();
         if (text.startsWith('TEMPLATE:')) {
             const b64 = text.replace('TEMPLATE:', '').trim();
@@ -1519,7 +1552,7 @@ window.uploadFingerprintTemplate = async function(fileInput) {
         try {
             const sel = document.getElementById('action-target-device');
             const ip = sel?.value && sel.value !== 'WEB_DASHBOARD' ? sel.value : getEspIp();
-            const res = await fetch(`http://${ip}/cmd?command=SETTEMPLATE ${slot} ${b64}`, { signal: AbortSignal.timeout(10000) });
+            const res = await fetch(`/csc2052/api/esp_ota_proxy.php?ip=${encodeURIComponent(ip)}&command=${encodeURIComponent('SETTEMPLATE ' + slot + ' ' + b64)}`, { signal: AbortSignal.timeout(10000) });
             const text = await res.text();
             logToTerminal('[RX] ' + text);
             alert(text.includes('ACK') ? `Template uploaded to slot #${slot} successfully!` : 'Upload result: ' + text);
@@ -1678,11 +1711,6 @@ async function refreshAllCourseDropdowns() {
             { id: 'filter-course-dropdown', inputId: 'filter-course-search', hiddenId: 'filter-course-input', mode: 'select' },
             { id: 'chart-course-dropdown', inputId: 'chart-course-search', hiddenId: 'chart-course-input', mode: 'select' },
         ];
-        // Wire chart course selection to load chart (listen on search input change event)
-        const chartCourseSearch = document.getElementById('chart-course-search');
-        if (chartCourseSearch) {
-            chartCourseSearch.addEventListener('change', loadCourseDetailChart);
-        }
         courseDropdowns.forEach(cfg => {
             const dd = document.getElementById(cfg.id);
             if (!dd) return;
@@ -1952,155 +1980,6 @@ async function fetchLogs() {
         console.error("[Logs] Failed to fetch logs:", e);
         container.innerHTML = '<div class="text-center text-danger py-4"><em>Error loading logs.</em></div>';
     }
-};
-
-/* ─── ADMIN CHARTS ────────────────────────────────────────── */
-let chartInstances = {};
-
-async function loadOverallSummary() {
-    try {
-        const r = await fetch('/csc2052/api/charts.php?action=overall_summary');
-        const d = await r.json();
-        if (d.error) return;
-        document.getElementById('summary-total').textContent = d.total_attendance ?? '-';
-        document.getElementById('summary-today').textContent = d.today_attendance ?? '-';
-        document.getElementById('summary-students').textContent = d.unique_students ?? '-';
-        document.getElementById('summary-courses').textContent = d.unique_courses ?? '-';
-    } catch (e) { console.error('[Charts] Overall summary:', e); }
-}
-
-async function loadCharts() {
-    const days = document.getElementById('chart-days')?.value || 30;
-
-    loadOverallSummary();
-
-    // Daily trend
-    try {
-        const r1 = await fetch(`/csc2052/api/charts.php?action=daily_trend&days=${days}`);
-        const d1 = await r1.json();
-        const ctx1 = document.getElementById('dailyTrendChart');
-        if (!ctx1) return;
-        if (chartInstances.daily) chartInstances.daily.destroy();
-        chartInstances.daily = new Chart(ctx1, {
-            type: 'line',
-            data: {
-                labels: d1.labels,
-                datasets: [{ label: 'Attendance', data: d1.data, borderColor: '#a11e17', backgroundColor: 'rgba(161,30,23,0.08)', fill: true, tension: 0.3, pointRadius: 3, pointBackgroundColor: '#a11e17' }]
-            },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-        });
-    } catch (e) { console.error('[Charts] Daily trend:', e); }
-
-    // Modality pie
-    try {
-        const r2 = await fetch('/csc2052/api/charts.php?action=modality_distribution');
-        const d2 = await r2.json();
-        const ctx2 = document.getElementById('modalityChart');
-        if (!ctx2) return;
-        if (chartInstances.modality) chartInstances.modality.destroy();
-        chartInstances.modality = new Chart(ctx2, {
-            type: 'doughnut',
-            data: {
-                labels: d2.labels,
-                datasets: [{ data: d2.data, backgroundColor: d2.colors, borderWidth: 0 }]
-            },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: 'bottom', labels: { boxWidth: 12, padding: 8, font: { size: 10 } } } } }
-        });
-    } catch (e) { console.error('[Charts] Modality:', e); }
-
-    // Course distribution
-    try {
-        const r3 = await fetch('/csc2052/api/charts.php?action=course_distribution');
-        const d3 = await r3.json();
-        const ctx3 = document.getElementById('courseChart');
-        if (!ctx3) return;
-        if (chartInstances.course) chartInstances.course.destroy();
-        chartInstances.course = new Chart(ctx3, {
-            type: 'bar',
-            data: {
-                labels: d3.labels,
-                datasets: [{ label: 'Attendance', data: d3.data, backgroundColor: d3.colors, borderRadius: 4 }]
-            },
-            options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-        });
-    } catch (e) { console.error('[Charts] Course:', e); }
-
-    // Hourly pattern
-    try {
-        const r4 = await fetch('/csc2052/api/charts.php?action=hourly_heat');
-        const d4 = await r4.json();
-        const ctx4 = document.getElementById('hourlyChart');
-        if (!ctx4) return;
-        if (chartInstances.hourly) chartInstances.hourly.destroy();
-        chartInstances.hourly = new Chart(ctx4, {
-            type: 'bar',
-            data: {
-                labels: d4.labels,
-                datasets: [{ label: 'Check-ins', data: d4.data, backgroundColor: '#1e293b', borderRadius: 3 }]
-            },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-        });
-    } catch (e) { console.error('[Charts] Hourly:', e); }
-
-    // Teacher chart
-    try {
-        const r5 = await fetch('/csc2052/api/charts.php?action=per_teacher');
-        const d5 = await r5.json();
-        const ctx5 = document.getElementById('teacherChart');
-        if (ctx5) {
-            if (chartInstances.teacher) chartInstances.teacher.destroy();
-            if (d5.labels && d5.labels.length) {
-                chartInstances.teacher = new Chart(ctx5, {
-                    type: 'bar',
-                    data: {
-                        labels: d5.labels,
-                        datasets: [{ label: 'Attendance', data: d5.data, backgroundColor: d5.colors, borderRadius: 3 }]
-                    },
-                    options: { responsive: true, maintainAspectRatio: false, indexAxis: 'y', plugins: { legend: { display: false } }, scales: { x: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-                });
-            }
-        }
-    } catch (e) { console.error('[Charts] Teacher:', e); }
-}
-
-window.loadStudentChart = async function() {
-    const studentNo = document.getElementById('chart-student-no')?.value.trim();
-    if (!studentNo || studentNo.length < 3) return;
-    try {
-        const r = await fetch(`/csc2052/api/charts.php?action=student_trend&student_no=${encodeURIComponent(studentNo)}&days=30`);
-        const d = await r.json();
-        const ctx = document.getElementById('studentChart');
-        if (!ctx) return;
-        if (chartInstances.student) chartInstances.student.destroy();
-        chartInstances.student = new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: d.labels || [],
-                datasets: [{ label: 'Attendance', data: d.data || [], backgroundColor: '#a11e17', borderRadius: 3 }]
-            },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-        });
-    } catch (e) { console.error('[Charts] Student:', e); }
-};
-
-window.loadCourseDetailChart = async function() {
-    const course = document.getElementById('chart-course-input')?.value || '';
-    if (!course) return;
-    try {
-        const r = await fetch(`/csc2052/api/charts.php?action=per_course&course=${encodeURIComponent(course)}&days=30`);
-        const d = await r.json();
-        const ctx = document.getElementById('courseDetailChart');
-        if (!ctx) return;
-        if (chartInstances.courseDetail) chartInstances.courseDetail.destroy();
-        chartInstances.courseDetail = new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: d.labels || [],
-                datasets: [{ label: 'Attendance', data: d.data || [], borderColor: '#0d6efd', backgroundColor: 'rgba(13,110,253,0.08)', fill: true, tension: 0.3, pointRadius: 2, pointBackgroundColor: '#0d6efd' }]
-            },
-            options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } }
-        });
-    } catch (e) { console.error('[Charts] Course detail:', e); }
 };
 
 /* ─── ADMIN RATINGS BOARD ─────────────────────────────────── */
@@ -2931,6 +2810,7 @@ window.triggerEnroll = async function() {
         formData.append('student_no', studentNo);
         formData.append('student_name', studentName);
         formData.append('finger_id', fId);
+        formData.append('csrf_token', getCsrfToken());
         const res = await fetch('/csc2052/api/student.php', { method: 'POST', body: formData });
         const data = await res.json();
         if (data.status === 'success') {
@@ -2953,7 +2833,7 @@ window.triggerEnrollRfid = async function() {
     if (rfidInput) rfidInput.classList.remove('is-invalid');
     
     if (!studentNo) { showToast("Student No is required.", 'error'); stuNoInput.classList.add('is-invalid'); stuNoInput.focus(); return; }
-    if (!rfidUid) { showToast("RFID UID is required. Use 'Auto Find' or enter manually.", 'error'); if(rfidInput) { rfidInput.classList.add('is-invalid'); rfidInput.focus(); } return; }
+    if (!rfidUid) { showToast("RFID UID is required. Click 'Scan RFID' and scan a card on the device.", 'error'); if(rfidInput) { rfidInput.classList.add('is-invalid'); rfidInput.focus(); } return; }
     
     try {
         const formData = new FormData();
@@ -3053,13 +2933,24 @@ function speakVoice(text) {
     if ('speechSynthesis' in window) {
         const globalMute = document.getElementById('global-voice-mute')?.checked;
         if (globalMute) return;
-        
         const utter = new SpeechSynthesisUtterance(text);
         utter.rate = 1;
         utter.pitch = 1;
         window.speechSynthesis.speak(utter);
     }
 }
+
+// ─── Voice settings cache (loaded from API) ─────────────────────────
+window.voiceSettingsCache = null;
+window.getVoiceSettings = async function() {
+    if (window.voiceSettingsCache) return window.voiceSettingsCache;
+    try {
+        const r = await fetch('/csc2052/api/voice_settings.php');
+        const d = await r.json();
+        if (d.status === 'success') window.voiceSettingsCache = d.settings;
+        return window.voiceSettingsCache || {};
+    } catch(e) { return {}; }
+};
 
 window.autoFindRfid = async function(inputId) {
     try {
@@ -3125,7 +3016,7 @@ window.triggerAdminEnrollRfid = async function() {
     if (rfidInput) rfidInput.classList.remove('is-invalid');
     
     if (!adminName) { showToast("Admin Name is required.", 'error'); adminNameInput.classList.add('is-invalid'); adminNameInput.focus(); return; }
-    if (!rfidUid) { showToast("RFID UID is required.", 'error'); if (rfidInput) { rfidInput.classList.add('is-invalid'); rfidInput.focus(); } return; }
+    if (!rfidUid) { showToast("RFID UID is required. Click 'Scan RFID' and scan a card on the device.", 'error'); if (rfidInput) { rfidInput.classList.add('is-invalid'); rfidInput.focus(); } return; }
     
     try {
         const formData = new FormData();
@@ -3135,10 +3026,11 @@ window.triggerAdminEnrollRfid = async function() {
         const res = await fetch('/csc2052/api/student.php', { method: 'POST', body: formData });
         const data = await res.json();
         if (data.status === 'success') {
-            alert("Admin RFID mapped successfully!");
+            showToast(data.message || "Admin RFID mapped successfully!", 'success');
+            speakVoice(adminName + ' RFID linked');
             document.getElementById('enroll-admin-rfid').value = '';
-        } else alert("Failed: " + data.message);
-    } catch (e) { alert("Network Error: " + e.message); }
+        } else showToast("Failed: " + data.message, 'error');
+    } catch (e) { showToast("Network Error: " + e.message, 'error'); }
 };
 
 window.triggerAdminEnrollFace = async function() {
@@ -3292,21 +3184,55 @@ window.loadTemplateAttendance = function() {
 };
 
 async function pollRfidFill() {
-    const rfidInput = document.getElementById('enroll-rfid');
-    if (rfidInput && rfidInput.offsetParent !== null && !isCommandActive) { 
+    const targets = ['enroll-rfid', 'enroll-admin-rfid'];
+    let activeInput = null;
+    for (const id of targets) {
+        const el = document.getElementById(id);
+        if (el && el.offsetParent !== null) { activeInput = el; break; }
+    }
+    // RFID auto-fill runs even during OTA commands — scanning is independent
+    if (activeInput) { 
         try {
             const res = await fetch('/csc2052/api/rfid_scanned.php?action=consume');
             if (!res.ok) return;
             const data = await res.json();
             if (data && data.status === 'success' && data.uid) {
-                rfidInput.value = data.uid;
-                rfidInput.style.backgroundColor = '#d1e7dd';
-                setTimeout(() => rfidInput.style.backgroundColor = '', 1000);
+                activeInput.value = data.uid;
+                activeInput.style.backgroundColor = '#d1e7dd';
+                setTimeout(() => activeInput.style.backgroundColor = '', 1000);
                 speakVoice('RFID scanned: ' + data.uid);
             }
         } catch (e) {}
     }
 }
+
+// ─── Trigger RFID scan on hardware device ──────────────────────────
+window.triggerRfidScan = function(inputId) {
+    const input = document.getElementById(inputId);
+    if (!input) return;
+    // Get device IP from the students selector or global selector
+    const stuSel = document.getElementById('students-device-select');
+    const globalSel = document.getElementById('action-target-device');
+    const targetIP = (stuSel && stuSel.value && stuSel.value !== '' && stuSel.value !== 'WEB_DASHBOARD') ? stuSel.value
+                   : (globalSel && globalSel.value && globalSel.value !== '' && globalSel.value !== 'WEB_DASHBOARD' && globalSel.value !== '__loading__') ? globalSel.value
+                   : null;
+
+    if (!targetIP) {
+        showToast('⚠️ Please select an active ESP32 hardware device first.', 'warning');
+        return;
+    }
+
+    input.value = '';
+    input.placeholder = 'Scanning...';
+    input.style.backgroundColor = '#fff3cd';
+    showToast('📱 Scan an RFID card on the hardware device...', 'info');
+
+    // Send SCAN_RFID command to device
+    fetch(`/csc2052/api/esp_ota_proxy.php?ip=${encodeURIComponent(targetIP)}&command=${encodeURIComponent('SCAN_RFID')}`, { signal: AbortSignal.timeout(5000) })
+        .catch(function(e) { /* ignore — SCAN_RFID is best-effort */ });
+
+    // pollRfidFill will auto-populate when the card is scanned
+};
 
 // ─── RASPBERRY PI ──────────────────────────────────────────────────
 window.connectRpiCamera = function() {
@@ -3487,7 +3413,25 @@ window.downloadSdConfigFromForm = function() {
     const method = document.getElementById('sd-enc-method')?.value || 'plaintext';
     const token = document.getElementById('sd-enc-token')?.value?.trim() || '';
     if ((method === 'hmac' || method === 'aes') && !token) { alert('Enter a Secret Token for ' + method + ' mode.'); return; }
-    const content = `# Sentinel Swarm ESP32 Config File\n# Place this file as config.txt on SD card root\nDEVICE_NAME=${name}\nWIFI_SSID=${ssid}\nWIFI_PASS=${pass}\nSERVER_URL=${serverUrl}\nENCRYPT_METHOD=${method}\nSECRET_TOKEN=${token}\n`;
+    // Extract IP from server URL
+    let serverIp = '10.0.0.5';
+    try {
+        const urlObj = new URL(serverUrl);
+        serverIp = urlObj.hostname;
+    } catch(e) { /* keep default */ }
+    // Static IP
+    const sip   = document.getElementById('sd-static-ip')?.value?.trim() || '';
+    const sgw   = document.getElementById('sd-static-gateway')?.value?.trim() || '';
+    const ssn   = document.getElementById('sd-static-subnet')?.value?.trim() || '';
+    const sdns  = document.getElementById('sd-static-dns')?.value?.trim() || '';
+    let staticBlock = '';
+    if (sip) {
+        staticBlock = `STATIC_IP=${sip}\n`;
+        if (sgw) staticBlock += `STATIC_GATEWAY=${sgw}\n`;
+        if (ssn) staticBlock += `STATIC_SUBNET=${ssn}\n`;
+        if (sdns) staticBlock += `STATIC_DNS=${sdns}\n`;
+    }
+    const content = `# Sentinel Swarm ESP32 Config File\n# Place this file as config.txt on SD card root\nDEVICE_NAME=${name}\nWIFI_SSID=${ssid}\nWIFI_PASS=${pass}\nSERVER_IP=${serverIp}\nSERVER_URL=${serverUrl}\nENCRYPT_METHOD=${method}\nSECRET_TOKEN=${token}\n${staticBlock}`;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -3546,7 +3490,8 @@ SENTINEL SWARM - ESP32 Node Setup Guide
    - Optional: SD Card module + microSD card
    - Optional: LCD 16x2/20x4 (I2C)
    - Optional: Fingerprint sensor (R307/AS608/FM10A)
-   - Optional: RFID reader (MFRC522)
+    - Optional: RFID reader (MFRC522 / RC522)
+    - Optional: HW-084 sound sensor / clap detector
 
 2. ARDUINO IDE SETUP
    a. Install Arduino IDE 2.x from arduino.cc
@@ -3561,20 +3506,22 @@ SENTINEL SWARM - ESP32 Node Setup Guide
    - Adafruit GFX Library (for LCD)
    - Adafruit SSD1306 (for OLED) or LiquidCrystal I2C
    - Adafruit Fingerprint Sensor (for AS608/FM10A)
-   - MFRC522 (for RFID)
-   - RTClib (for DS3231 RTC)
-   - ArduinoJson (by Benoit Blanchon)
-   NOTE: BLE, SD, Fingerprint, RFID, LCD are optional!
+    - MFRC522 (for RFID / RC522)
+    - RTClib (for DS3231 RTC)
+    - ArduinoJson (by Benoit Blanchon)
+    - HW-084: no library needed (analog read only)
+    NOTE: BLE, SD, Fingerprint, RFID, LCD, HW-084 are optional!
 
 4. FLASH SPACE MANAGEMENT (IMPORTANT!)
    The ESP32 has limited flash. The firmware uses FEATURE FLAGS
    at the top of esp32_firmware.ino to save space:
 
-   #define USE_FINGERPRINT     // Enable fingerprint (~40KB)
-   #define USE_RFID            // Enable RFID (~15KB)
-   #define USE_LCD             // Enable LCD display (~10KB)
-   #define USE_SD              // Enable SD card boot (~8KB)
-   // #define USE_BLE          // BLE scanner DISABLED by default (~200KB!)
+    #define USE_FINGERPRINT     // Enable FM10A fingerprint sensor (~40KB)
+    #define USE_RFID            // Enable MFRC522 RFID-RC522 reader (~15KB)
+    #define USE_LCD             // Enable I2C LCD display 16x2/20x4 (~10KB)
+    #define USE_HW084           // Enable HW-084 sound sensor module (~2KB)
+    #define USE_SD              // Enable SD card boot (~8KB)
+    // #define USE_BLE          // BLE scanner DISABLED by default (~200KB!)
 
    If you get "Sketch too big" error:
    a. Comment out features you don't need with //
@@ -4207,6 +4154,30 @@ window.exportVisibleLogsCsv = function() {
     document.body.removeChild(a);
 };
 
+/* ─── EXPORT FROM LECTURE PAGE FORM (lecture.php) ──────────── */
+window.exportLectureFilteredCSV = function() {
+    const startTime = document.getElementById('export-start')?.value?.replace('T', ' ') || '';
+    const endTime = document.getElementById('export-end')?.value?.replace('T', ' ') || '';
+    const course = document.getElementById('export-course-input')?.value || document.getElementById('export-course-search')?.value || '';
+    const device = document.getElementById('export-device')?.value || '';
+
+    // Collect selected columns from csv-col-* checkboxes
+    const cols = [];
+    document.querySelectorAll('[id^="csv-col-"]:checked').forEach(cb => {
+        if (cb.value && cb.value !== 'on') cols.push(cb.value);
+    });
+
+    const params = new URLSearchParams();
+    if (startTime) params.set('start_time', startTime);
+    if (endTime) params.set('end_time', endTime);
+    if (course) params.set('course_code', course);
+    if (device) params.set('device', device);
+    if (cols.length) params.set('columns', cols.join(','));
+
+    const url = '/csc2052/export_csv.php?' + params.toString();
+    window.location.href = url;
+};
+
 window.exportLogsCsv = function() {
     const modal = document.getElementById('exportCsvModal');
     if (!modal) return;
@@ -4265,7 +4236,48 @@ window.doExportCsv = function() {
     window.location.href = url;
 };
 
-// On DOMContentLoaded — render preset cards if the container exists
+/* ─── TEACHER LECTURE GLOW ────────────────────────────────── */
+window._lectureGlowInterval = null;
+window.startLectureGlow = function(el) {
+    if (window._lectureGlowInterval) clearInterval(window._lectureGlowInterval);
+    if (!el) el = document.querySelector('.start-hero');
+    if (!el) return;
+    el.classList.add('glow-card');
+
+    function update() {
+        const x = Math.floor(Math.random() * 40) - 20;
+        const y = Math.floor(Math.random() * 40) - 20;
+        const blur = Math.floor(Math.random() * 60) + 30;
+        const spread = Math.floor(Math.random() * 6) + 1;
+        const hue = Math.floor(Math.random() * 360);
+        const opacity = (Math.random() * 0.3 + 0.12).toFixed(2);
+        el.style.setProperty('--glow-x', x + 'px');
+        el.style.setProperty('--glow-y', y + 'px');
+        el.style.setProperty('--glow-blur', blur + 'px');
+        el.style.setProperty('--glow-spread', spread + 'px');
+        el.style.setProperty('--glow-color', 'hsla(' + hue + ', 85%, 60%, ' + opacity + ')');
+    }
+    update();
+    window._lectureGlowInterval = setInterval(update, 800);
+};
+
+window.stopLectureGlow = function() {
+    if (window._lectureGlowInterval) {
+        clearInterval(window._lectureGlowInterval);
+        window._lectureGlowInterval = null;
+    }
+    const el = document.querySelector('.start-hero');
+    if (el) {
+        el.classList.remove('glow-card');
+        el.style.removeProperty('--glow-x');
+        el.style.removeProperty('--glow-y');
+        el.style.removeProperty('--glow-blur');
+        el.style.removeProperty('--glow-spread');
+        el.style.removeProperty('--glow-color');
+    }
+};
+
+// On DOMContentLoaded — render preset cards
 document.addEventListener('DOMContentLoaded', () => {
     if (document.getElementById('email-presets-container')) {
         renderEmailPresetsCard();

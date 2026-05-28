@@ -171,6 +171,7 @@ window.startWebFaceEnrollment = async function (studentNo, studentName, captureC
         fd.append('student_no', studentNo);
         fd.append('student_name', studentName || 'Unknown');
         fd.append('descriptor', JSON.stringify(descriptors));
+        fd.append('csrf_token', (document.querySelector('meta[name="csrf-token"]') || {}).content || '');
 
         try {
             const res = await fetch('api/student.php', { method: 'POST', body: fd });

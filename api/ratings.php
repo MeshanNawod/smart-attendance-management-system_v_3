@@ -133,14 +133,14 @@ case 'get_comments': {
         $stmt = $pdo->prepare(
             "SELECT fc.id, fc.user_id, fc.user_role, fc.body, fc.is_pinned,
                     fc.created_at, fc.updated_at, fc.parent_id,
-                    COALESCE(u.full_name, u.username) as author_name,
+                    CASE WHEN fc.user_role='student' THEN COALESCE(u.full_name, 'Student') ELSE COALESCE(u.full_name, u.username) END as author_name,
                     (SELECT COUNT(*) FROM comment_likes cl WHERE cl.comment_id=fc.id) as like_count,
                     (SELECT COUNT(*) FROM comment_likes cl WHERE cl.comment_id=fc.id AND cl.user_id=?) as i_liked
              FROM forum_comments fc
              LEFT JOIN users u ON u.id = fc.user_id
              WHERE fc.target_type=? AND fc.target_id=? AND fc.parent_id IS NULL AND fc.is_deleted=0
              ORDER BY fc.is_pinned DESC, fc.created_at DESC
-             LIMIT " . (int)$limit . " OFFSET " . (int)$offset . "
+             LIMIT " . (int)$limit . " OFFSET " . (int)$offset
         );
         $stmt->execute([$userId, $tt, $tid]);
         $topLevel = $stmt->fetchAll();
@@ -153,7 +153,7 @@ case 'get_comments': {
             $stmt2 = $pdo->prepare(
                 "SELECT fc.id, fc.user_id, fc.user_role, fc.body, fc.parent_id,
                         fc.created_at, fc.updated_at,
-                        COALESCE(u.full_name, u.username) as author_name,
+                        CASE WHEN fc.user_role='student' THEN COALESCE(u.full_name, 'Student') ELSE COALESCE(u.full_name, u.username) END as author_name,
                         (SELECT COUNT(*) FROM comment_likes cl WHERE cl.comment_id=fc.id) as like_count,
                         (SELECT COUNT(*) FROM comment_likes cl WHERE cl.comment_id=fc.id AND cl.user_id=?) as i_liked
                  FROM forum_comments fc

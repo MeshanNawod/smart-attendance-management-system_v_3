@@ -1,0 +1,5 @@
+face_data/
+venv/
+__pycache__/
+*.pyc
+config.json

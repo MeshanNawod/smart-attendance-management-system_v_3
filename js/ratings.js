@@ -210,6 +210,8 @@ const I18N = {
     per_student: 'Per Student',
     per_course: 'Per Course',
     per_teacher: 'Per Teacher',
+    course_trend: 'Course Trend',
+    student_trend: 'Student Trend',
   },
   si: {
     lang_name: 'සිංහල',
@@ -397,6 +399,8 @@ const I18N = {
     per_student: 'සිසුවෙකු අනුව',
     per_course: 'පාඨමාලාවක් අනුව',
     per_teacher: 'ගුරුවරයෙකු අනුව',
+    course_trend: 'පාඨමාලා ප්රවණතාව',
+    student_trend: 'සිසු ප්රවණතාව',
   },
   ta: {
     lang_name: 'தமிழ்',
@@ -584,6 +588,8 @@ const I18N = {
     per_student: 'மாணவர் வாரியாக',
     per_course: 'பாடம் வாரியாக',
     per_teacher: 'ஆசிரியர் வாரியாக',
+    course_trend: 'பாடப் போக்கு',
+    student_trend: 'மாணவர் போக்கு',
   }
 };
 

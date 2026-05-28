@@ -171,6 +171,7 @@ $csrf_token = $_SESSION['csrf_token'] ?? '';
                                 <div>
                                     <h6 class="fw-bold mb-0 text-primary"><?php echo htmlspecialchars($t['teacher_name']); ?></h6>
                                     <div class="small text-muted"><?php echo htmlspecialchars($t['email']); ?></div>
+                                    <div class="mt-1" id="rating-summary-teacher-<?php echo $t['id']; ?>"></div>
                                 </div>
                                 <div class="d-flex gap-1">
                                     <button class="btn btn-sm btn-outline-secondary" data-bs-toggle="modal" data-bs-target="#pwModal<?php echo $t['id']; ?>" title="Reset Password">
@@ -303,4 +304,13 @@ $csrf_token = $_SESSION['csrf_token'] ?? '';
     </div>
 </div>
 
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    <?php foreach ($teachers as $t): ?>
+    if (typeof loadRatingSummary === 'function') {
+        loadRatingSummary('teacher', <?php echo $t['id']; ?>);
+    }
+    <?php endforeach; ?>
+});
+</script>
 <?php require 'includes/footer.php'; ?>

@@ -33,7 +33,6 @@ $page = basename($_SERVER['PHP_SELF']);
             <div class="collapse navbar-collapse" id="navBar">
                 <ul class="navbar-nav me-auto mb-2 mb-lg-0 ms-lg-3">
                     <li class="nav-item"><a class="nav-link nav-link-premium <?php echo $page=='student_dashboard.php'?'active':''; ?>" href="student_dashboard.php"><i class="bi bi-display me-1"></i><span data-i18n="dashboard">Dashboard</span></a></li>
-                    <li class="nav-item ms-lg-2"><a class="nav-link nav-link-premium <?php echo $page=='instructions.php'?'active':''; ?>" href="instructions.php"><i class="bi bi-info-circle me-1"></i><span data-i18n="help">Help</span></a></li>
                 </ul>
                 <div class="d-flex flex-column flex-lg-row align-items-lg-center gap-2 mt-3 mt-lg-0">
                     <div id="lang-switcher-header"></div>
@@ -47,4 +46,3 @@ $page = basename($_SERVER['PHP_SELF']);
     </nav>
 </div>
 <div class="container pb-5 mt-3">
-<meta name="csrf-token" content="<?php echo htmlspecialchars($_SESSION['csrf_token']??'', ENT_QUOTES, 'UTF-8'); ?>">

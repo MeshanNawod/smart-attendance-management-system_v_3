@@ -46,12 +46,14 @@ if (isset($registry[$ip]) && !empty($registry[$ip]['blocked'])) {
     exit;
 }
 
+$existing = $registry[$ip] ?? [];
+
 $registry[$ip] = [
     'type'      => $device_type,
-    'name'      => $device_name,
+    'name'      => $existing['name'] ?? $device_name,
     'last_seen' => $time,
     'method'    => $method,
-    'blocked'   => $registry[$ip]['blocked'] ?? false,
+    'blocked'   => $existing['blocked'] ?? false,
 ];
 
 file_put_contents($registry_file, json_encode($registry, JSON_PRETTY_PRINT), LOCK_EX);
