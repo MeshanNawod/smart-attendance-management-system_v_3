@@ -161,6 +161,11 @@ try {
                             </select>
                         </div>
                         <div class="mb-2">
+                            <label class="form-label small fw-bold mb-0">Hardware Key <span class="badge bg-secondary">API auth</span></label>
+                            <input type="text" id="sd-hw-key" class="form-control form-control-sm font-monospace" value="ss_hw_api_key_2052">
+                            <small class="text-muted">Used for API authentication. Must match config.php.</small>
+                        </div>
+                        <div class="mb-2">
                             <label class="form-label small fw-bold mb-0">Secret Token <span class="badge bg-info">Required for HMAC/AES</span></label>
                             <input type="text" id="sd-enc-token" class="form-control form-control-sm font-monospace" placeholder="ss_secret_key_2052">
                             <small class="text-muted">Enter a shared secret key. Same value must be set in config.php HEARTBEAT_SECRET.</small>

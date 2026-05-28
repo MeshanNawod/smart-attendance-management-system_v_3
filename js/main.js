@@ -891,14 +891,15 @@ window.cancelLectureTimer = function() {
 };
 
 window.restoreLectureTimer = function() {
-    const lec = window.activeLectures[window.activeWebDevice] || window.activeLectures['WEB_DASHBOARD'];
+    const deviceIp = window.activeWebDevice || 'WEB_DASHBOARD';
+    const lec = window.activeLectures[deviceIp];
     if (lec && lec.endTime) {
         const remaining = lec.endTime - Date.now();
         if (remaining > 0) {
-            startLectureTimer(lec.endTime, window.activeWebDevice || 'WEB_DASHBOARD');
+            startLectureTimer(lec.endTime, deviceIp);
         } else {
-            delete lec.endTime;
-            localStorage.setItem('active_lectures', JSON.stringify(window.activeLectures));
+            logToTerminal('[TIMER] Restored expired lecture — ending: ' + (lec.course || 'unknown'));
+            window.endLectureByDevice(deviceIp);
         }
     }
 };
@@ -3411,6 +3412,7 @@ window.downloadSdConfigFromForm = function() {
     const pass = document.getElementById('sd-wifi-pass')?.value?.trim() || '';
     const serverUrl = document.getElementById('sd-server-url')?.value?.trim() || 'http://10.0.0.5/csc2052';
     const method = document.getElementById('sd-enc-method')?.value || 'plaintext';
+    const hwKey = document.getElementById('sd-hw-key')?.value?.trim() || 'ss_hw_api_key_2052';
     const token = document.getElementById('sd-enc-token')?.value?.trim() || '';
     if ((method === 'hmac' || method === 'aes') && !token) { alert('Enter a Secret Token for ' + method + ' mode.'); return; }
     // Extract IP from server URL
@@ -3431,7 +3433,9 @@ window.downloadSdConfigFromForm = function() {
         if (ssn) staticBlock += `STATIC_SUBNET=${ssn}\n`;
         if (sdns) staticBlock += `STATIC_DNS=${sdns}\n`;
     }
-    const content = `# Sentinel Swarm ESP32 Config File\n# Place this file as config.txt on SD card root\nDEVICE_NAME=${name}\nWIFI_SSID=${ssid}\nWIFI_PASS=${pass}\nSERVER_IP=${serverIp}\nSERVER_URL=${serverUrl}\nENCRYPT_METHOD=${method}\nSECRET_TOKEN=${token}\n${staticBlock}`;
+    let extraKeys = `HARDWARE_KEY=${hwKey}\n`;
+    if (token) extraKeys += `SECRET_KEY=${token}\n`;
+    const content = `# Sentinel Swarm ESP32 Config File\n# Place this file as config.txt on SD card root\nDEVICE_NAME=${name}\nWIFI_SSID=${ssid}\nWIFI_PASS=${pass}\nSERVER_IP=${serverIp}\nSERVER_URL=${serverUrl}\nENCRYPT_METHOD=${method}\n${extraKeys}${staticBlock}`;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -3453,7 +3457,10 @@ window.downloadSdConfig = function() {
     const method = prompt('Encryption Method (plaintext/hmac/aes):', 'hmac');
     if (!method) return;
     const token = prompt('Enter Secret Token (leave empty for legacy):', '');
-    const content = `# Sentinel Swarm ESP32 Config File\n# Place this file as config.txt on SD card root\nDEVICE_NAME=${name}\nWIFI_SSID=${ssid}\nWIFI_PASS=${pass}\nSERVER_URL=${serverUrl}\nENCRYPT_METHOD=${method}\nSECRET_TOKEN=${token}\n`;
+    const hwKey = 'ss_hw_api_key_2052';
+    let extraKeys = `HARDWARE_KEY=${hwKey}\n`;
+    if (token) extraKeys += `SECRET_KEY=${token}\n`;
+    const content = `# Sentinel Swarm ESP32 Config File\n# Place this file as config.txt on SD card root\nDEVICE_NAME=${name}\nWIFI_SSID=${ssid}\nWIFI_PASS=${pass}\nSERVER_URL=${serverUrl}\nENCRYPT_METHOD=${method}\n${extraKeys}`;
     const blob = new Blob([content], { type: 'text/plain' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');

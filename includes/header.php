@@ -35,6 +35,8 @@ $showHardware = isAdmin();
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>UoP AMS | Sentinel Swarm</title>
+    <link rel="icon" type="image/svg+xml" href="<?php echo htmlspecialchars(asset_url('assets/favicon.svg'), ENT_QUOTES, 'UTF-8'); ?>">
+    <link rel="stylesheet" href="<?php echo htmlspecialchars(asset_url('css/vendor/bootstrap.min.css'), ENT_QUOTES, 'UTF-8'); ?>">
     <link rel="stylesheet" href="<?php echo htmlspecialchars(asset_url('css/vendor/bootstrap.min.css'), ENT_QUOTES, 'UTF-8'); ?>">
     <link rel="stylesheet" href="<?php echo htmlspecialchars(asset_url('css/vendor/bootstrap-icons.css'), ENT_QUOTES, 'UTF-8'); ?>">
     <link rel="stylesheet" href="<?php echo htmlspecialchars(asset_url('css/style.css'), ENT_QUOTES, 'UTF-8'); ?>">

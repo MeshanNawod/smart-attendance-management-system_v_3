@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/sentinel_swarm_logo.svg" alt="Sentinel Swarm" width="200">
+</p>
+
 # Sentinel Swarm AMS
 
 A full-stack, multi-modal **Attendance Management System** that fuses IoT hardware (ESP32 + Raspberry Pi) with a PHP/React web dashboard.

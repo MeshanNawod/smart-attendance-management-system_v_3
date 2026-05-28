@@ -1,0 +1,26 @@
+# Sentinel Swarm — ESP32 Configuration
+# Place this file on the SD card root (/config.txt)
+# Lines starting with # are ignored.
+# Format: KEY=VALUE  (no spaces around =)
+
+# ── Device Identity ──────────────────────────────────
+DEVICE_NAME=ESP32-Lab1
+
+# ── Wi-Fi ────────────────────────────────────────────
+WIFI_SSID=Card ekak daganin bn
+WIFI_PASS=meshan1234
+
+# ── Server (use either SERVER_URL or SERVER_IP) ──────
+SERVER_URL=http://10.0.0.5/csc2052
+# SERVER_IP=10.0.0.5
+
+# ── Static IP (optional — leave empty for DHCP) ─────
+STATIC_IP=10.193.54.212
+STATIC_GATEWAY=10.193.54.1
+STATIC_SUBNET=255.255.255.0
+STATIC_DNS=8.8.8.8
+
+# ── Security Keys ────────────────────────────────────
+# Must match config.php values on the server
+HARDWARE_KEY=ss_hw_api_key_2052
+SECRET_KEY=ss_secret_key_2052

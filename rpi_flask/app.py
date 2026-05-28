@@ -307,30 +307,6 @@ def _camera_health_check():
     elif _camera is None and _camera_ok:
         _camera_ok = False
     return _camera_ok
-        try:
-            if CAMERA_TYPE == "picamera":
-                if _picam2 is None:
-                    return None
-                frame = _picam2.capture_array()  # RGB numpy array
-                if frame is None or frame.size == 0:
-                    _camera_ok = False
-                    return None
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)  # to BGR for opencv
-                _camera_ok = True
-                return frame
-            else:
-                ret, frame = _camera.read()
-                if not ret:
-                    _camera_ok = False
-                    _camera_close()
-                    return None
-                _camera_ok = True
-                return frame
-        except Exception as e:
-            log.warning("Camera read error: %s", e)
-            _camera_ok = False
-            _camera_close()
-            return None
 
 def _camera_set_prop(prop, val):
     with _camera_lock:

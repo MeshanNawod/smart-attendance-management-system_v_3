@@ -119,15 +119,19 @@ void pollKeypad() {
 const char* DEFAULT_SSID = "Card ekak daganin bn";
 const char* DEFAULT_PASS = "meshan1234";
 const char* DEFAULT_SERVER_IP = "10.193.54.212";
+const char* DEFAULT_DEVICE_NAME = "ESP32-Lab1";
 
 // Active configuration loaded dynamically from Preferences + SD config.txt on boot
 String WIFI_SSID;
 String WIFI_PASS;
 String SERVER_IP;
+String DEVICE_NAME;
 String staticIP;
 String staticGateway;
 String staticSubnet;
 String staticDNS;
+String secretKey;
+String hardwareKey = "ss_hw_api_key_2052";
 
 // Pin mappings
 const int FINGER_RX2  = 16;
@@ -320,7 +324,7 @@ const char* T9_MAP[] = {
 };
 
 // Device Metadata
-const char* DEVICE_NAME = "UoP_Scanner_1";
+// (DEVICE_NAME is now a runtime String set from config.txt / NVRAM)
 const char* OFFLINE_LOG_FILE = "/offline_queue.csv";
 const char* ENROLL_QUEUE_FILE = "/enroll_queue.csv";
 
@@ -434,7 +438,7 @@ void logToServer(const String &logType, const String &source, const String &mess
   String postData = "action=insert&log_type=" + logType +
                     "&source=" + source +
                     "&message=" + urlEncode(message) +
-                    "&hardware_key=ss_hw_api_key_2052";
+                    "&hardware_key=" + hardwareKey;
   int code = h.POST(postData);
   if (code <= 0) {
     espPrintln("[LOG] Server log push failed: " + String(code));
@@ -444,7 +448,11 @@ void logToServer(const String &logType, const String &source, const String &mess
 
 void logAttendanceSD(const String &studentNo, const String &method) {
   String ts = getTimestamp();
-  logToSD("attendance.csv", ts + "," + studentNo + "," + method);
+  // Write header if file is new/empty
+  if (!SD.exists("/logs/attendance.csv")) {
+    logToSD("attendance.csv", "timestamp,studentNo,method,course,device");
+  }
+  logToSD("attendance.csv", ts + "," + studentNo + "," + method + "," + currentCourse + "," + DEVICE_NAME);
 }
 
 void logErrorSD(const String &context, const String &msg) {
@@ -633,12 +641,11 @@ void readSDConfig() {
     if      (key == "WIFI_SSID")    { WIFI_SSID = val; espPrintln("[SD-CONFIG]  SSID = " + val); }
     else if (key == "WIFI_PASS")    { WIFI_PASS = val; espPrintln("[SD-CONFIG]  Password set."); }
     else if (key == "SERVER_IP")    { SERVER_IP = val; espPrintln("[SD-CONFIG]  Server IP = " + val); }
-    else if (key == "DEVICE_NAME")  { /* reserved */ }
-    else if (key == "STATIC_IP")    { staticIP = val; espPrintln("[SD-CONFIG]  Static IP = " + val); }
-    else if (key == "STATIC_GATEWAY") { staticGateway = val; espPrintln("[SD-CONFIG]  Gateway = " + val); }
-    else if (key == "STATIC_SUBNET")  { staticSubnet = val; espPrintln("[SD-CONFIG]  Subnet = " + val); }
+    else if (key == "SERVER_URL")   { SERVER_IP = val; SERVER_IP.replace("http://", ""); SERVER_IP.replace("/csc2052", ""); SERVER_IP.replace("/", ""); espPrintln("[SD-CONFIG]  Server URL → IP: " + SERVER_IP); }
+    else if (key == "DEVICE_NAME")  { DEVICE_NAME = val; espPrintln("[SD-CONFIG]  Device Name = " + val); }
+    else if (key == "SECRET_KEY")   { secretKey = val; espPrintln("[SD-CONFIG]  Secret Key set."); }
+    else if (key == "HARDWARE_KEY") { hardwareKey = val; espPrintln("[SD-CONFIG]  Hardware Key set."); }
     else if (key == "STATIC_DNS")     { staticDNS = val; espPrintln("[SD-CONFIG]  DNS = " + val); }
-    else if (key == "SERVER_URL")   { /* deprecated — use SERVER_IP */ }
   }
   f.close();
   if (!wasAlreadyInit) SD.end();
@@ -651,6 +658,10 @@ void readSDConfig() {
   preferences.begin("server", false);
   preferences.putString("ip", SERVER_IP);
   preferences.end();
+  preferences.begin("config", false);
+  if (DEVICE_NAME.length() > 0) preferences.putString("device_name", DEVICE_NAME);
+  preferences.end();
+
   preferences.begin("network", false);
   if (staticIP.length() > 0) preferences.putString("static_ip", staticIP);
   if (staticGateway.length() > 0) preferences.putString("static_gateway", staticGateway);
@@ -688,6 +699,10 @@ void loadDeviceConfig() {
 
   preferences.begin("server", true);
   SERVER_IP = preferences.getString("ip", String(DEFAULT_SERVER_IP));
+  preferences.end();
+
+  preferences.begin("config", true);
+  DEVICE_NAME = preferences.getString("device_name", String(DEFAULT_DEVICE_NAME));
   preferences.end();
 
   // Load device PIN
@@ -838,7 +853,7 @@ void syncEnrollmentQueue() {
     String postData = "action=" + action + "&student_no=" + stuNo +
                       "&finger_id=" + String(slot) +
                       "&hardware_override=1" +
-                      "&hardware_key=ss_hw_api_key_2052";
+                      "&hardware_key=" + (hardwareKey.length() > 0 ? hardwareKey : "ss_hw_api_key_2052");
     int code = http.POST(postData);
     if (code == 200) {
       espPrintln("[SYNC] Enrollment synced: " + stuNo + " -> Slot #" + String(slot));
@@ -918,12 +933,12 @@ void syncOfflineQueue() {
     tsEncoded.replace(" ", "%20");
     
     String postData = "finger_id=" + fId +
-                      "&device_name=" + String(DEVICE_NAME) +
+                      "&device_name=" + DEVICE_NAME +
                       "&course_code=" + currentCourse +
                       "&timestamp=" + tsEncoded +
                       "&modality=" + modality +
                       "&offline_sync=1" +
-                      "&hardware_key=ss_hw_api_key_2052";
+                      "&hardware_key=" + (hardwareKey.length() > 0 ? hardwareKey : "ss_hw_api_key_2052");
 
     int code = http.POST(postData);
     if (code > 0) {
@@ -976,7 +991,7 @@ void sendHeartbeat() {
   WiFiClient client;
   HTTPClient http;
   http.setTimeout(4000);
-  String hbUrl = heartbeatURL + "?device=esp32&name=" + String(DEVICE_NAME) + "&hardware_key=ss_hw_api_key_2052";
+  String hbUrl = heartbeatURL + "?device=esp32&name=" + DEVICE_NAME + "&hardware_key=" + hardwareKey;
   http.begin(client, hbUrl);
   
   int code = http.GET();
@@ -1035,11 +1050,11 @@ void markAttendance(String fingerId, String modality, String ts) {
   tsEncoded.replace(" ", "%20");
   
   String postData = "finger_id=" + fingerId +
-                    "&device_name=" + String(DEVICE_NAME) +
+                    "&device_name=" + DEVICE_NAME +
                     "&course_code=" + currentCourse +
                     "&timestamp=" + tsEncoded +
                     "&modality=" + modality +
-                    "&hardware_key=ss_hw_api_key_2052";
+                    "&hardware_key=" + hardwareKey;
 
   int code = http.POST(postData);
   if (code > 0) {
@@ -1304,7 +1319,7 @@ void runEnrollment(int overrideSlot) {
       HTTPClient http;
       http.setTimeout(6000);
       
-      String queryUrl = studentApiURL + "?action=get_next_slot&hardware_override=1&hardware_key=ss_hw_api_key_2052";
+      String queryUrl = studentApiURL + "?action=get_next_slot&hardware_override=1&hardware_key=" + hardwareKey;
       http.begin(client, queryUrl);
       
       int code = http.GET();
@@ -1538,7 +1553,7 @@ enroll_restart:
       String postData = "action=link_student&student_no=" + studentNo +
                         "&finger_id=" + String(slotId) +
                         "&hardware_override=1" +
-                        "&hardware_key=ss_hw_api_key_2052";
+                        "&hardware_key=" + (hardwareKey.length() > 0 ? hardwareKey : "ss_hw_api_key_2052");
 
       int code = http.POST(postData);
       if (code == 200) {
@@ -1663,7 +1678,7 @@ void scanForAttendance() {
       WiFiClient rClient;
       HTTPClient rHttp;
       rHttp.setTimeout(2000);
-      rHttp.begin(rClient, "http://" + SERVER_IP + "/csc2052/api/rfid_scanned.php?uid=" + rfidUid + "&hardware_key=ss_hw_api_key_2052");
+      rHttp.begin(rClient, "http://" + SERVER_IP + "/csc2052/api/rfid_scanned.php?uid=" + rfidUid + "&hardware_key=" + hardwareKey);
       rHttp.GET();
       rHttp.end();
     }
@@ -1673,7 +1688,7 @@ void scanForAttendance() {
       WiFiClient rfidClient;
       HTTPClient rfidHttp;
       rfidHttp.setTimeout(5000);
-      rfidHttp.begin(rfidClient, coursesApiURL + "?action=lookup_rfid&uid=" + rfidUid + "&hardware_key=ss_hw_api_key_2052");
+      rfidHttp.begin(rfidClient, coursesApiURL + "?action=lookup_rfid&uid=" + rfidUid + "&hardware_key=" + hardwareKey);
       int rfidCode = rfidHttp.GET();
       String rfidResp = "";
       if (rfidCode == 200) rfidResp = rfidHttp.getString();
@@ -1769,7 +1784,7 @@ void scanForAttendance() {
         WiFiClient fclient;
         HTTPClient fhttp;
         fhttp.setTimeout(4000);
-        String fquery = coursesApiURL + "?action=lookup_fingerprint&slot=" + String(finger.fingerID) + "&hardware_key=ss_hw_api_key_2052";
+        String fquery = coursesApiURL + "?action=lookup_fingerprint&slot=" + String(finger.fingerID) + "&hardware_key=" + hardwareKey;
         fhttp.begin(fclient, fquery);
         int fcode = fhttp.GET();
         if (fcode == 200) {
@@ -1802,7 +1817,7 @@ void scanForAttendance() {
             WiFiClient fclient;
             HTTPClient fhttp;
             fhttp.setTimeout(4000);
-            String fquery = coursesApiURL + "?action=lookup_fingerprint&slot=" + String(finger.fingerID) + "&hardware_key=ss_hw_api_key_2052";
+            String fquery = coursesApiURL + "?action=lookup_fingerprint&slot=" + String(finger.fingerID) + "&hardware_key=" + hardwareKey;
             fhttp.begin(fclient, fquery);
             int fcode = fhttp.GET();
             if (fcode == 200) {
@@ -2093,7 +2108,7 @@ void runRfidEnrollment() {
 
         String postData = "action=link_rfid&student_no=" + rfidEnrollStudent +
                           "&rfid_uid=" + uid +
-                          "&hardware_key=ss_hw_api_key_2052";
+                          "&hardware_key=" + (hardwareKey.length() > 0 ? hardwareKey : "ss_hw_api_key_2052");
 
         int code = http.POST(postData);
         if (code == 200) {
@@ -2168,7 +2183,7 @@ void runRfidScanForWeb() {
         WiFiClient rClient;
         HTTPClient rHttp;
         rHttp.setTimeout(5000);
-        rHttp.begin(rClient, "http://" + SERVER_IP + "/csc2052/api/rfid_scanned.php?uid=" + uid + "&hardware_key=ss_hw_api_key_2052");
+        rHttp.begin(rClient, "http://" + SERVER_IP + "/csc2052/api/rfid_scanned.php?uid=" + uid + "&hardware_key=" + hardwareKey);
         int rCode = rHttp.GET();
         if (rCode == 200) {
           espPrintln("[RFID-WEB] UID pushed to server (HTTP " + String(rCode) + ")");
@@ -2209,7 +2224,7 @@ void fetchCourseList() {
   WiFiClient client;
   HTTPClient http;
   http.setTimeout(5000);
-  http.begin(client, coursesApiURL + "?action=list_courses&hardware_key=ss_hw_api_key_2052");
+  http.begin(client, coursesApiURL + "?action=list_courses&hardware_key=" + hardwareKey);
   int code = http.GET();
   if (code != 200) {
     espPrintln("[COURSES] HTTP " + String(code) + " — could not fetch list.");
@@ -2425,7 +2440,7 @@ void backupAllFpTemplatesToServer() {
     http.setTimeout(6000);
     http.begin(client, coursesApiURL +
       "?action=get_fp_template&slot=" + String(slot) +
-      "&hardware_key=ss_hw_api_key_2052");
+      "&hardware_key=" + hardwareKey);
     http.GET();
     String resp = http.getString();
     http.end();
@@ -2443,7 +2458,7 @@ void backupAllFpTemplatesToServer() {
     http2.setTimeout(8000);
     http2.begin(c2, coursesApiURL);
     http2.addHeader("Content-Type", "application/x-www-form-urlencoded");
-    String body = "action=save_fp_template&hardware_key=ss_hw_api_key_2052";
+    String body = "action=save_fp_template&hardware_key=" + hardwareKey;
     body += "&slot=" + String(slot);
     body += "&student_no=" + studentNo;
     body += "&hex=" + hex;
@@ -2486,7 +2501,7 @@ void restoreFpTemplatesFromServer() {
   HTTPClient http;
   http.setTimeout(5000);
   http.begin(client, coursesApiURL +
-    "?action=list_fp_slots&hardware_key=ss_hw_api_key_2052");
+    "?action=list_fp_slots&hardware_key=" + hardwareKey);
   int code = http.GET();
   String body = http.getString();
   http.end();
@@ -2517,7 +2532,7 @@ void restoreFpTemplatesFromServer() {
     http2.setTimeout(8000);
     http2.begin(c2, coursesApiURL +
       "?action=get_fp_template&slot=" + String(slot) +
-      "&hardware_key=ss_hw_api_key_2052");
+      "&hardware_key=" + hardwareKey);
     int code2 = http2.GET();
     String resp2 = http2.getString();
     http2.end();
@@ -3087,7 +3102,7 @@ void handleDashboardCommand() {
     resp += "FS_USED: " + String(LittleFS.usedBytes()) + "\n";
     resp += "FS_TOTAL: " + String(LittleFS.totalBytes()) + "\n";
     resp += "HEAP: " + String(ESP.getFreeHeap()) + "\n";
-    resp += "DEVICE: " + String(DEVICE_NAME) + "\n";
+    resp += "DEVICE: " + DEVICE_NAME + "\n";
     resp += "IP: " + WiFi.localIP().toString() + "\n";
     resp += "SESSION_SCANNED: " + String(sessionScanned) + "\n";  // Feature 6
     resp += "SESSION_DENIED: " + String(sessionDenied) + "\n";
@@ -3104,7 +3119,7 @@ void handleDashboardCommand() {
                   "\",\"MODE\":\"" + currentMode +
                   "\",\"COURSE\":\"" + currentCourse +
                   "\",\"QUEUE\":" + String(offlineQueueCount()) +
-                  ",\"DEVICE\":\"" + String(DEVICE_NAME) +
+                  ",\"DEVICE\":\"" + DEVICE_NAME +
                   "\",\"RSSI\":" + String(rssi) +
                   ",\"UPTIME\":" + String(millis() / 1000) +
                   ",\"HEAP\":" + String(ESP.getFreeHeap()) +
@@ -3644,7 +3659,7 @@ void loop() {
     WiFiClient testClient;
     HTTPClient testHttp;
     testHttp.setTimeout(3000);
-    testHttp.begin(testClient, heartbeatURL + "?ping=1&hardware_key=ss_hw_api_key_2052");
+    testHttp.begin(testClient, heartbeatURL + "?ping=1&hardware_key=" + hardwareKey);
     int code = testHttp.GET();
     if (code > 0) {
       isOnline = true;

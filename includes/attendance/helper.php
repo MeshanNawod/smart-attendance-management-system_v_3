@@ -1,4 +1,6 @@
 <?php
+define('MAX_SESSION_DURATION_HOURS', 8);
+
 function ensureLectureSessionsTable(PDO $pdo): void {
     $pdo->exec("CREATE TABLE IF NOT EXISTS lecture_sessions (
         id INT AUTO_INCREMENT PRIMARY KEY,
@@ -22,7 +24,16 @@ function ensureLectureSessionsTable(PDO $pdo): void {
     }
 }
 
+function cleanupStaleSessions(PDO $pdo): int {
+    $cutoff = date('Y-m-d H:i:s', time() - MAX_SESSION_DURATION_HOURS * 3600);
+    $stmt = $pdo->prepare("UPDATE lecture_sessions SET is_active = 0, ended_at = NOW()
+        WHERE is_active = 1 AND started_at < ?");
+    $stmt->execute([$cutoff]);
+    return $stmt->rowCount();
+}
+
 function getActiveSession(PDO $pdo, string $courseCode): ?int {
+    cleanupStaleSessions($pdo);
     $stmt = $pdo->prepare("SELECT id FROM lecture_sessions WHERE course_code = ? AND is_active = 1 ORDER BY started_at DESC LIMIT 1");
     $stmt->execute([$courseCode]);
     $id = $stmt->fetchColumn();
