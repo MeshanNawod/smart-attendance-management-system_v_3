@@ -2,6 +2,37 @@
 
 A full-stack, multi-modal **Attendance Management System** that fuses IoT hardware (ESP32 + Raspberry Pi) with a PHP/React web dashboard.
 
+## About
+
+Sentinel Swarm is an academic project developed at **University of Peradeniya** that solves a real classroom problem: **taking attendance manually is slow, error-prone, and eats into lecture time.**
+
+The system replaces manual roll-call with **autonomous hardware nodes** that detect students and record attendance in real time — using **face recognition** (Raspberry Pi with camera), **RFID cards** (ESP32 + RC522), **QR codes**, and **voice verification**. All devices report back to a central PHP server that manages courses, schedules, and generates reports. Administrators and teachers monitor everything through a web dashboard with live device status, attendance stats, and analytics charts.
+
+### How It Works
+
+1. A **lecture session** is started from the web dashboard — this activates attendance recording for a specific course.
+2. **Hardware nodes** (RPi cameras, ESP32 RFID/QR scanners) deployed at classroom entrances detect students as they enter.
+3. Each detection is posted to the PHP server's API, which validates the student's enrollment in the active session and records the timestamp.
+4. Devices send a **heartbeat every 30 seconds** — the admin dashboard shows live online/offline status for every node.
+5. **ESP32 nodes** can also receive **OTA firmware updates** pushed from the server, so firmware can be updated remotely without physical access.
+
+### Why Three Detection Methods?
+
+| Method          | Best for                                         |
+|-----------------|--------------------------------------------------|
+| Face Recognition | Hands-free, fastest throughput, no physical token needed |
+| RFID            | Students already carry ID cards; simple tap      |
+| QR Code         | Backup method — works with any smartphone screen |
+| Voice           | Alternative for students without cards or visibility to camera |
+
+All methods converge into the same attendance records, so a student can be marked present via any modality.
+
+### Who It's For
+
+- **Students** — View their own attendance record and punctuality
+- **Teachers** — Start/stop lecture sessions, see who's present, rate courses
+- **Administrators** — Manage users, courses, devices; monitor system health; push firmware updates; view analytics
+
 ---
 
 ## Architecture Overview
@@ -193,4 +224,4 @@ Key settings in `rpi_flask/config.json`:
 
 ## License
 
-This project is developed for academic purposes at CINEC Campus.
+This project is developed for academic purposes at University of Peradeniya.
