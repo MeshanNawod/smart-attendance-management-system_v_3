@@ -225,3 +225,5 @@ Key settings in `rpi_flask/config.json`:
 ## License
 
 This project is developed for academic purposes at University of Peradeniya.
+
+<img width="1536" height="1024" alt="ChatGPT Image May 28, 2026, 09_05_45 PM" src="https://github.com/user-attachments/assets/37781c65-0a66-4494-a833-e8c453848056" />
