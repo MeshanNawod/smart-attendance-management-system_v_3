@@ -1,16 +1,29 @@
-# React + Vite
+# Sentinel Swarm AMS — Frontend (PWA)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+React SPA with **Progressive Web App** support. Can be installed on mobile/desktop home screen.
 
-Currently, two official plugins are available:
+## PWA Features
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Installable** — Add to home screen on Android (Chrome), iOS (Safari), and desktop (Chrome/Edge)
+- **Offline fallback** — Service worker caches static assets; API calls gracefully degrade
+- **Standalone mode** — Runs without browser chrome when installed
 
-## React Compiler
+## Development
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm install
+npm run dev
+```
 
-## Expanding the ESLint configuration
+## Build for Production
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+```bash
+npm run build
+```
+
+The output goes to `dist/`. Point your web server to serve this directory (or copy contents into the PHP project root).
+
+## Icon
+
+The app icon is at `public/icon.svg`.  
+For iOS, create a PNG version named `icon-192.png` and `icon-512.png` in `public/` using any SVG-to-PNG converter (e.g. `rsvg-convert`, Inkscape, or online tools).
