@@ -199,6 +199,13 @@ try {
                         <div class="row g-2 mb-3">
                             <div class="col-12"><button class="btn btn-sm btn-outline-dark w-100" onclick="sendEspOta('UPLOAD_FP_TEMPLATES')"><i class="bi bi-upload me-1"></i>Upload Templates to ESP</button></div>
                             <div class="col-12"><button class="btn btn-sm btn-outline-secondary w-100" onclick="sendEspOta('DOWNLOAD_FP_TEMPLATES')"><i class="bi bi-download me-1"></i>Download Templates from ESP</button></div>
+                            <div class="col-12">
+                                <div class="input-group input-group-sm mb-1">
+                                    <span class="input-group-text bg-white small"><i class="bi bi-fingerprint"></i></span>
+                                    <input type="number" id="delete-fp-slot" class="form-control form-control-sm" placeholder="Slot (1-127)" min="1" max="127">
+                                    <button class="btn btn-sm btn-outline-danger" onclick="var s=document.getElementById('delete-fp-slot');if(s.value>=1&&s.value<=127){sendEspOta('DELETE_FP_SLOT '+s.value);s.value=''}else{alert('Enter slot 1-127')}"><i class="bi bi-trash me-1"></i>Delete Slot from Sensor</button>
+                                </div>
+                            </div>
                             <div class="col-12"><button class="btn btn-sm btn-outline-danger w-100" onclick="sendEspOta('WIPE_FP_TEMPLATES')"><i class="bi bi-eraser me-1"></i>Wipe All FP Templates</button></div>
                         </div>
                     </div>
@@ -571,11 +578,13 @@ function toggleCmdRef() {
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text bg-white"><i class="bi bi-hdd-network text-danger"></i></span>
                                 <div class="position-relative flex-grow-1">
-                                    <input type="text" id="rpi-ip-search" class="form-control font-monospace searchable-select-input" data-target="rpi-ip-select" data-list="rpi-ip-dropdown" placeholder="Search or enter IP..." oninput="filterSearchableSelect(this)">
+<?php $rpi_ip = ''; foreach($discovered_devices as $dev): if($dev['type']==='rpi'): $rpi_ip = $dev['ip']; break; endif; endforeach; ?>
+<script>window._RPI_IP = <?php echo json_encode($rpi_ip); ?>;</script>
+                                    <input type="text" id="rpi-ip-search" class="form-control font-monospace searchable-select-input" data-target="rpi-ip-select" data-list="rpi-ip-dropdown" placeholder="Search or enter IP..." value="<?php echo htmlspecialchars($rpi_ip); ?>" oninput="filterSearchableSelect(this)">
                                     <select id="rpi-ip-select" class="form-select d-none">
                                         <option value="">Select or type IP...</option>
                                         <?php foreach($discovered_devices as $dev): ?>
-                                        <option value="<?php echo htmlspecialchars($dev['ip']);?>" data-name="<?php echo htmlspecialchars($dev['name']);?>"><?php echo htmlspecialchars($dev['name']);?> (<?php echo $dev['ip'];?>)</option>
+                                        <option value="<?php echo htmlspecialchars($dev['ip']);?>" data-name="<?php echo htmlspecialchars($dev['name']);?>" data-type="<?php echo htmlspecialchars($dev['type']);?>"><?php echo htmlspecialchars($dev['name']);?> (<?php echo $dev['ip'];?>)</option>
                                         <?php endforeach; ?>
                                     </select>
                                     <div id="rpi-ip-dropdown" class="searchable-dropdown d-none"></div>
@@ -1554,7 +1563,9 @@ function getRpiIp() {
     if (sel && sel.value) return sel.value;
     const search = document.getElementById('rpi-ip-search');
     if (search && search.value.trim()) return search.value.trim();
-    return localStorage.getItem('rpi_node_ip') || '';
+    const v = window._RPI_IP || localStorage.getItem('rpi_node_ip') || '';
+    if (search && v) search.value = v;
+    return v;
 }
 
 window.updateRpiWifi = function() {
@@ -1747,6 +1758,20 @@ document.addEventListener('DOMContentLoaded', function() {
     // Re-run with device.php version to update all selectors
     if (document.getElementById('action-target-device')) {
         window.refreshDeviceList();
+    }
+    // Auto-select RPi in dropdown to match pre-filled IP
+    const sel = document.getElementById('rpi-ip-select');
+    const search = document.getElementById('rpi-ip-search');
+    const ip = search ? search.value.trim() : '';
+    if (sel && ip) {
+        for (let o of sel.options) {
+            if (o.value === ip) {
+                sel.value = ip;
+                break;
+            }
+        }
+        localStorage.setItem('rpi_node_ip', ip);
+        window.refreshRpiStatus();
     }
 });
 

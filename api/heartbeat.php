@@ -17,13 +17,11 @@ $method      = $_GET['method'] ?? 'plaintext';
 
 // ─── Authentication ───────────────────────────────────────────────
 $hw_key     = $_SERVER['HTTP_X_HARDWARE_KEY'] ?? ($_GET['hardware_key'] ?? '');
-$user_agent = $_SERVER['HTTP_USER_AGENT'] ?? '';
 
 $valid_token  = !empty($token)  && hash_equals(HEARTBEAT_SECRET, $token);
 $valid_hwkey  = !empty($hw_key) && hash_equals(HARDWARE_API_KEY, $hw_key);
-$legacy_esp   = empty($token)   && empty($hw_key) && strpos($user_agent, 'ESP32HTTPClient') !== false;
 
-if (!$valid_token && !$valid_hwkey && !$legacy_esp) {
+if (!$valid_token && !$valid_hwkey) {
     http_response_code(401);
     echo json_encode(['status' => 'error', 'message' => 'Unauthorized: invalid or missing token.']);
     exit;

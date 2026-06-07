@@ -32,8 +32,9 @@ try {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
     ");
 } catch (PDOException $e) {
+    error_log('[system_logs] Table create error: ' . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['status'=>'error','message'=>'Failed to create system_logs table: '.$e->getMessage()]);
+    echo json_encode(['status'=>'error','message'=>'Failed to initialize system_logs.']);
     exit;
 }
 
@@ -42,7 +43,7 @@ $action = strtolower(trim($_GET['action'] ?? $_POST['action'] ?? ''));
 // ─── Check hardware key (used by ESP32) ──────────────────────────────
 function authHardwareOrSession(): string {
     $hw_key = $_SERVER['HTTP_X_HARDWARE_KEY'] ?? ($_GET['hardware_key'] ?? ($_POST['hardware_key'] ?? ''));
-    $valid_hw = !empty($hw_key) && hash_equals('ss_hw_api_key_2052', $hw_key);
+    $valid_hw = !empty($hw_key) && defined('HARDWARE_API_KEY') && hash_equals(HARDWARE_API_KEY, $hw_key);
     if ($valid_hw) return 'hw';
     if (isset($_SESSION['user_role']) && in_array($_SESSION['user_role'], ['admin','teacher'])) return 'session';
     return '';
@@ -81,7 +82,7 @@ if ($action === 'insert') {
         echo json_encode(['status'=>'ok','id'=>(int)$pdo->lastInsertId()]);
     } catch (PDOException $e) {
         http_response_code(500);
-        echo json_encode(['status'=>'error','message'=>'DB error: '.$e->getMessage()]);
+        error_log('[system_logs] DB error: '.$e->getMessage()); echo json_encode(['status'=>'error','message'=>'Database error.']);
     }
     exit;
 }
@@ -144,7 +145,7 @@ if ($action === 'fetch') {
         echo json_encode(['status'=>'ok','total'=>$total,'data'=>$rows]);
     } catch (PDOException $e) {
         http_response_code(500);
-        echo json_encode(['status'=>'error','message'=>'DB error: '.$e->getMessage()]);
+        error_log('[system_logs] DB error: '.$e->getMessage()); echo json_encode(['status'=>'error','message'=>'Database error.']);
     }
     exit;
 }
@@ -193,6 +194,18 @@ if ($action === 'esp_sd_log') {
     if (empty($esp_ip)) {
         http_response_code(400);
         echo json_encode(['status'=>'error','message'=>'esp_ip is required']);
+        exit;
+    }
+
+    // SSRF prevention: validate IP and reject private ranges
+    if (!filter_var($esp_ip, FILTER_VALIDATE_IP)) {
+        http_response_code(400);
+        echo json_encode(['status'=>'error','message'=>'Invalid esp_ip format.']);
+        exit;
+    }
+    if (!filter_var($esp_ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+        http_response_code(403);
+        echo json_encode(['status'=>'error','message'=>'Private IP ranges not allowed.']);
         exit;
     }
 
@@ -247,7 +260,7 @@ if ($action === 'clear') {
         echo json_encode(['status'=>'ok','deleted'=>$deleted]);
     } catch (PDOException $e) {
         http_response_code(500);
-        echo json_encode(['status'=>'error','message'=>'DB error: '.$e->getMessage()]);
+        error_log('[system_logs] DB error: '.$e->getMessage()); echo json_encode(['status'=>'error','message'=>'Database error.']);
     }
     exit;
 }

@@ -19,6 +19,7 @@
 #include <WebServer.h>
 #include <Preferences.h>
 #include <Wire.h>
+#include <vector>
 #include <LittleFS.h>
 #include <SD.h>
 #include <time.h>
@@ -84,16 +85,31 @@ void initKeypad() {
 }
 
 char scanKeypad() {
+  // Noise check: if any column reads LOW while ALL rows are HIGH,
+  // there's a short or noise — reject all readings
+  for (int r = 0; r < KEYPAD_ROWS; r++) digitalWrite(KP_ROW[r], HIGH);
+  delay(2);
+  for (int c = 0; c < KEYPAD_COLS; c++) {
+    if (digitalRead(KP_COL[c]) == LOW) return 0;
+  }
+
   for (int r = 0; r < KEYPAD_ROWS; r++) {
     digitalWrite(KP_ROW[r], LOW);
-    delayMicroseconds(500);
+    delay(2);
+    int lowCol = -1;
+    int lowCount = 0;
     for (int c = 0; c < KEYPAD_COLS; c++) {
       if (digitalRead(KP_COL[c]) == LOW) {
-        delayMicroseconds(500);
-        if (digitalRead(KP_COL[c]) == LOW) {
-          digitalWrite(KP_ROW[r], HIGH);
-          return KP_MAP[r][c];
-        }
+        lowCol = c;
+        lowCount++;
+      }
+    }
+    if (lowCount == 1) {
+      delay(2);
+      if (digitalRead(KP_COL[lowCol]) == LOW) {
+        digitalWrite(KP_ROW[r], HIGH);
+        delay(1);
+        return KP_MAP[r][lowCol];
       }
     }
     digitalWrite(KP_ROW[r], HIGH);
@@ -118,7 +134,7 @@ void pollKeypad() {
 // Default Configuration Parameters
 const char* DEFAULT_SSID = "Card ekak daganin bn";
 const char* DEFAULT_PASS = "meshan1234";
-const char* DEFAULT_SERVER_IP = "10.193.54.212";
+const char* DEFAULT_SERVER_IP = "10.32.245.212";
 const char* DEFAULT_DEVICE_NAME = "ESP32-Lab1";
 
 // Active configuration loaded dynamically from Preferences + SD config.txt on boot
@@ -243,7 +259,7 @@ bool timeSynced         = false;
 unsigned long bootMillis = 0;
 
 // PIN lock
-bool systemLocked       = true;
+bool systemLocked       = false;
 String pinBuffer        = "";
 const String SYSTEM_PIN_DEFAULT = "123";
 String SYSTEM_PIN = "123";
@@ -259,8 +275,8 @@ unsigned long lastWifiRetry     = 0;
 unsigned long lastServerRetry   = 0;
 const unsigned long HEARTBEAT_INTERVAL = 10000;
 const unsigned long SYNC_INTERVAL      = 30000;
-const unsigned long WIFI_RETRY_MS      = 15000;
-const unsigned long SERVER_RETRY_MS    = 5000;
+const unsigned long WIFI_RETRY_MS      = 5000;   // faster reconnect
+const unsigned long SERVER_RETRY_MS    = 3000;   // faster server recovery
 
 // Dynamic settings (loaded from Preferences)
 bool enableFingerprint = true;
@@ -274,6 +290,7 @@ int fpBaudRate        = 57600; // working baud rate saved after init
 #define FP_SD_DIR "/fingerprints"
 bool pendingRfidScan  = false;  // Set by BEEP web command, processed in loop
 bool i2cBusDirty      = true;   // Tracks if I2C was used since the last RFID check
+bool sdCardReady      = false;  // Tracks general SD card initialization
 #ifdef USE_FINGERPRINT
 bool sdFpReady = false;
 #endif
@@ -342,9 +359,20 @@ int sessionOffline = 0;   // offline saves this session
 const int LCD_COLS = 16;           // 16x4 character display
 const int LCD_ROWS = 4;
 String lcdLine[4] = {"", "", "", ""};
+bool lcdDirty[4] = {true, true, true, true}; // track which lines need hardware update
 
 // Web rolling serial terminal buffer
 String webLogBuffer = "";
+
+// Admin unlock data (synced from server)
+std::vector<String> adminRFIDs;
+std::vector<String> adminFPSlots;
+unsigned long lastAdminSync = 0;
+const unsigned long ADMIN_SYNC_INTERVAL = 60000;
+bool adminListLoaded = false;
+
+// Unrecognized attempt logging
+const char* UNRECOGNIZED_LOG = "/unrecognized.csv";
 
 // ============================================================
 // WRAPPER UTILITIES (Serial + Web rolling logger)
@@ -417,8 +445,27 @@ bool ensureLogDir() {
 }
 
 bool logToSD(const char *filename, const String &line) {
-  if (!SD.begin(SD_CS_PIN)) return false;
+  if (!sdCardReady) {
+    static unsigned long lastSdRetry = 0;
+    if (millis() - lastSdRetry > 15000) {
+      lastSdRetry = millis();
+      pinMode(SD_CS_PIN, OUTPUT);
+      digitalWrite(SD_CS_PIN, HIGH);
+      SPI.begin(18, 19, 23, -1);
+      SPI.setFrequency(1000000);
+      sdCardReady = SD.begin(SD_CS_PIN, SPI, 1000000);
+      #ifdef USE_FINGERPRINT
+      if (sdCardReady) sdFpReady = true;
+      #endif
+    }
+    if (!sdCardReady) return false;
+  }
   if (!ensureLogDir()) return false;
+  
+  #ifdef USE_RFID
+  digitalWrite(SS_PIN, HIGH); // deselect RFID reader to prevent SPI bus contention
+  #endif
+  
   File f = SD.open(String(SD_LOG_DIR) + "/" + filename, FILE_APPEND);
   if (!f) return false;
   f.println(line);
@@ -497,18 +544,20 @@ void lcdWrite(int row, String text) {
   if (row < 0 || row > 3) return;
   while (text.length() < LCD_COLS) text += ' ';
   if (text.length() > LCD_COLS) text = text.substring(0, LCD_COLS);
+  if (lcdLine[row] == text && !lcdDirty[row]) return;
   lcdLine[row] = text;
+  lcdDirty[row] = true;
 
 #ifdef USE_LCD
   if (lcdOK) {
-    restoreI2cForLcd();
+#ifdef USE_RFID
+    if (!i2cBusDirty) restoreI2cForLcd();
+#endif
     lcdPtr->setCursor(0, row);
     lcdPtr->print(text);
-    reclaimRstForRfid();
+    lcdDirty[row] = false;
   }
 #endif
-
-  espPrintln("[LCD] | " + text + " |");
 }
 
 void lcdClear() {
@@ -516,16 +565,18 @@ void lcdClear() {
   while (blank.length() < LCD_COLS) blank += ' ';
   for (int i = 0; i < 4; i++) {
     lcdLine[i] = blank;
+    lcdDirty[i] = true;
 #ifdef USE_LCD
     if (lcdOK) {
-      restoreI2cForLcd();
+#ifdef USE_RFID
+      if (!i2cBusDirty) restoreI2cForLcd();
+#endif
       lcdPtr->setCursor(0, i);
       lcdPtr->print(lcdLine[i]);
-      reclaimRstForRfid();
+      lcdDirty[i] = false;
     }
 #endif
   }
-  espPrintln("[LCD] | ------ CLEARED ------ |");
 }
 
 // ============================================================
@@ -609,21 +660,16 @@ String getTimestamp() {
 // SD CARD CONFIG.TXT PARSER
 // ============================================================
 void readSDConfig() {
-  bool wasAlreadyInit = sdFpReady; // fingerprint SD may already be active
-  if (!wasAlreadyInit) {
-    if (!SD.begin(SD_CS_PIN)) {
-      espPrintln("[SD-CONFIG] SD card not available. Using NVRAM defaults.");
-      return;
-    }
+  if (!sdCardReady) {
+    espPrintln("[SD-CONFIG] SD card not initialized. Using NVRAM defaults.");
+    return;
   }
   if (!SD.exists("/config.txt")) {
-    if (!wasAlreadyInit) SD.end();
     espPrintln("[SD-CONFIG] No config.txt on SD card. Using NVRAM defaults.");
     return;
   }
   File f = SD.open("/config.txt", FILE_READ);
   if (!f) {
-    if (!wasAlreadyInit) SD.end();
     espPrintln("[SD-CONFIG] Cannot open config.txt. Using NVRAM defaults.");
     return;
   }
@@ -648,7 +694,8 @@ void readSDConfig() {
     else if (key == "STATIC_DNS")     { staticDNS = val; espPrintln("[SD-CONFIG]  DNS = " + val); }
   }
   f.close();
-  if (!wasAlreadyInit) SD.end();
+  // wasAlreadyInit not needed — sdCardReady guards are sufficient
+
   
   // Save SD config to NVRAM for future boots
   preferences.begin("wifi", false);
@@ -678,7 +725,7 @@ void readSDConfig() {
 void loadDeviceConfig() {
   preferences.begin("config", true); // read-only mode
   enableFingerprint = preferences.getString("ENABLE_FP", "1") == "1";
-  enableRfid        = preferences.getString("ENABLE_RFID", "1") == "1";
+  enableRfid        = true; // Always enabled when USE_RFID is defined
   enableFace        = preferences.getString("ENABLE_FACE", "0") == "1";
   requireMfa        = preferences.getString("MFA", "0") == "1";
   enableLcd         = preferences.getString("ENABLE_LCD", "1") == "1";
@@ -769,11 +816,13 @@ bool tryConnectWifi() {
     espPrintln("[WIFI] Using DHCP.");
   }
   
+  WiFi.setSleep(WIFI_PS_NONE); // prevent power-save disconnects
   WiFi.begin(WIFI_SSID.c_str(), WIFI_PASS.c_str());
 
   unsigned long start = millis();
   while (WiFi.status() != WL_CONNECTED && millis() - start < 8000) {
-    delay(450);
+    webServer.handleClient();
+    delay(50);
     espPrint(".");
   }
   espPrintln();
@@ -980,6 +1029,256 @@ void syncOfflineQueue() {
 }
 
 // ============================================================
+// ADMIN SYNC & LOCAL UNLOCK
+// ============================================================
+void syncAdmins() {
+  if (WiFi.status() != WL_CONNECTED || !isOnline) return;
+  WiFiClient client;
+  HTTPClient http;
+  http.setTimeout(5000);
+  http.begin(client, coursesApiURL + "?action=list_admins&hardware_key=" + hardwareKey);
+  int code = http.GET();
+  if (code == 200) {
+    String resp = http.getString();
+    resp.trim();
+    adminRFIDs.clear();
+    adminFPSlots.clear();
+    if (resp.startsWith("ERR")) {
+      espPrintln("[ADMIN] Sync error: " + resp);
+    } else if (resp.length() > 0) {
+      int pos = 0;
+      while (pos < (int)resp.length()) {
+        int nl = resp.indexOf('\n', pos);
+        String line = (nl > 0) ? resp.substring(pos, nl) : resp.substring(pos);
+        line.trim();
+        if (line.length() > 0) {
+          int p1 = line.indexOf('|');
+          int p2 = line.indexOf('|', p1 + 1);
+          if (p1 > 0 && p2 > p1) {
+            String rfid = line.substring(p1 + 1, p2);
+            String fp   = line.substring(p2 + 1);
+            rfid.trim(); fp.trim();
+            if (rfid.length() > 0) adminRFIDs.push_back(rfid);
+            if (fp.length() > 0)   adminFPSlots.push_back(fp);
+          }
+        }
+        if (nl < 0) break;
+        pos = nl + 1;
+      }
+      adminListLoaded = true;
+      espPrintln("[ADMIN] Synced: " + String(adminRFIDs.size()) + " RFID(s), " + String(adminFPSlots.size()) + " FP slot(s)");
+    }
+  }
+  http.end();
+}
+
+bool checkLocalAdminRFID(String uid) {
+  uid.toUpperCase();
+  for (auto& a : adminRFIDs) {
+    if (a == uid) return true;
+  }
+  return false;
+}
+
+bool checkLocalAdminFingerprint(String slot) {
+  slot.trim();
+  for (auto& a : adminFPSlots) {
+    if (a == slot) return true;
+  }
+  return false;
+}
+
+void logUnrecognizedAttempt(String fingerId, String modality) {
+  File f = LittleFS.open(UNRECOGNIZED_LOG, FILE_APPEND);
+  if (!f) return;
+  f.printf("%s,%s,%s\n", fingerId.c_str(), modality.c_str(), getTimestamp().c_str());
+  f.close();
+}
+
+// ============================================================
+// SD INSERTION MONITOR & FILESYSTEM SELECTOR
+// ============================================================
+void checkSDInsertion() {
+  bool wasReady = sdCardReady;
+  pinMode(SD_CS_PIN, OUTPUT);
+  digitalWrite(SD_CS_PIN, HIGH);
+  delay(5);
+  SPI.begin(18, 19, 23, -1);
+  SPI.setFrequency(1000000);
+  delay(10);
+  bool nowReady = SD.begin(SD_CS_PIN, SPI, 1000000);
+  if (nowReady) {
+    sdCardReady = true;
+    if (!wasReady) espPrintln("[SD] Card inserted and ready.");
+  } else {
+    if (wasReady) espPrintln("[SD] Card removed. Falling back to LittleFS.");
+    sdCardReady = false;
+  }
+}
+
+// ============================================================
+// COURSE TEMPLATE DOWNLOAD (fingerprint slot mappings)
+// ============================================================
+void checkAndDownloadCourseTemplates() {
+  if (WiFi.status() != WL_CONNECTED || !isOnline) return;
+  if (currentCourse.length() == 0 || currentCourse == "Unassigned Session" || currentCourse == "none") return;
+
+  WiFiClient client;
+  HTTPClient http;
+  http.setTimeout(5000);
+  String url = coursesApiURL + "?action=list_course_templates&code=" + currentCourse + "&hardware_key=" + hardwareKey;
+  http.begin(client, url);
+  int code = http.GET();
+  if (code == 200) {
+    String resp = http.getString();
+    resp.trim();
+    if (resp.length() > 0 && !resp.startsWith("ERR")) {
+      File f = LittleFS.open("/course_slots_" + currentCourse + ".txt", FILE_WRITE);
+      if (f) { f.print(resp); f.close(); }
+      espPrintln("[TEMPLATES] Cached " + String(resp.length()) + " bytes for course " + currentCourse);
+    }
+  }
+  http.end();
+}
+
+// ============================================================
+// AUTO-DOWNLOAD MISSING FP TEMPLATES FROM SERVER
+// ============================================================
+#ifdef USE_FINGERPRINT
+bool isSlotOnSensor(int slot) {
+  return finger.loadModel(slot) == FINGERPRINT_OK;
+}
+
+int downloadAndImportMissingTemplates() {
+  if (!fpOK || !isOnline || WiFi.status() != WL_CONNECTED) return -1;
+  if (currentCourse.length() == 0 || currentCourse == "Unassigned Session" || currentCourse == "none") return -1;
+
+  espPrintln("[FP-SYNC] Checking missing templates for course: " + currentCourse);
+  lcdWrite(2, "Syncing FP...");
+
+  WiFiClient client;
+  HTTPClient http;
+  http.setTimeout(8000);
+  String url = coursesApiURL + "?action=list_course_templates&code=" + currentCourse + "&hardware_key=" + hardwareKey;
+  http.begin(client, url);
+  int code = http.GET();
+  String body = http.getString();
+  http.end();
+
+  if (code != 200 || body.startsWith("ERR")) {
+    espPrintln("[FP-SYNC] Failed to get course templates: " + body);
+    return -1;
+  }
+
+  // body = "1:S/20/001,2:S/20/002,..." or empty
+  body.trim();
+  if (body.length() == 0) {
+    espPrintln("[FP-SYNC] No templates registered for this course.");
+    return 0;
+  }
+
+  int downloaded = 0;
+  int pos = 0;
+  while (pos < (int)body.length()) {
+    int comma = body.indexOf(',', pos);
+    String entry = (comma == -1) ? body.substring(pos) : body.substring(pos, comma);
+    entry.trim();
+    pos = (comma == -1) ? body.length() : comma + 1;
+    if (entry.length() == 0) continue;
+
+    int colon = entry.indexOf(':');
+    if (colon < 0) continue;
+    int slot = entry.substring(0, colon).toInt();
+    if (slot < 1 || slot > 127) continue;
+
+    if (isSlotOnSensor(slot)) continue;
+
+    espPrintln("[FP-SYNC] Slot #" + String(slot) + " missing. Downloading from server...");
+    WiFiClient c2;
+    HTTPClient http2;
+    http2.setTimeout(8000);
+    http2.begin(c2, coursesApiURL + "?action=get_fp_template&slot=" + String(slot) + "&hardware_key=" + hardwareKey);
+    int code2 = http2.GET();
+    String resp2 = http2.getString();
+    http2.end();
+
+    if (code2 != 200 || resp2.startsWith("ERR")) {
+      espPrintln("[FP-SYNC] Slot " + String(slot) + " no data on server.");
+      continue;
+    }
+
+    int pipe = resp2.indexOf('|');
+    if (pipe < 0) continue;
+    String hexBlob = resp2.substring(pipe + 1);
+    if ((int)hexBlob.length() < 1024) continue;
+
+    uint8_t tmpl[512];
+    memset(tmpl, 0xff, 512);
+    for (int i = 0; i < 512 && (i * 2 + 1) < (int)hexBlob.length(); i++) {
+      char hi = hexBlob.charAt(i * 2);
+      char lo = hexBlob.charAt(i * 2 + 1);
+      auto hd = [](char c) -> uint8_t {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        return 0;
+      };
+      tmpl[i] = (hd(hi) << 4) | hd(lo);
+    }
+
+    while (mySerial.available()) mySerial.read();
+    uint8_t dcd[] = {0x09, 0x01};
+    Adafruit_Fingerprint_Packet dcp(FINGERPRINT_COMMANDPACKET, sizeof(dcd), dcd);
+    finger.writeStructuredPacket(dcp);
+    if (finger.getStructuredPacket(&dcp) != FINGERPRINT_OK || dcp.data[0] != FINGERPRINT_OK) {
+      espPrintln("[FP-SYNC] Slot " + String(slot) + " DownChar failed.");
+      continue;
+    }
+
+    auto writePkt = [&](uint8_t pktType, const uint8_t *data256) {
+      mySerial.write(0xEF); mySerial.write(0x01);
+      mySerial.write(0xFF); mySerial.write(0xFF);
+      mySerial.write(0xFF); mySerial.write(0xFF);
+      mySerial.write(pktType); mySerial.write(0x01); mySerial.write(0x02);
+      uint16_t sum = pktType + 0x01 + 0x02;
+      for (int i = 0; i < 256; i++) { mySerial.write(data256[i]); sum += data256[i]; }
+      mySerial.write((uint8_t)(sum >> 8)); mySerial.write((uint8_t)(sum & 0xFF));
+    };
+
+    writePkt(FINGERPRINT_DATAPACKET, tmpl);
+    writePkt(FINGERPRINT_ENDDATAPACKET, tmpl + 256);
+
+    if (finger.getStructuredPacket(&dcp) != FINGERPRINT_OK || dcp.data[0] != FINGERPRINT_OK) {
+      espPrintln("[FP-SYNC] Slot " + String(slot) + " data transfer rejected.");
+      continue;
+    }
+
+    if (finger.storeModel(slot) == FINGERPRINT_OK) {
+      downloaded++;
+      espPrintln("[FP-SYNC] Slot " + String(slot) + " imported successfully.");
+    } else {
+      espPrintln("[FP-SYNC] Slot " + String(slot) + " store FAILED.");
+    }
+    webServer.handleClient();
+    delay(10);
+  }
+
+  espPrintln("[FP-SYNC] Done. " + String(downloaded) + " templates downloaded and imported.");
+  return downloaded;
+}
+#endif
+
+// ============================================================
+// QUEUE FILESYSTEM SELECTOR
+// ============================================================
+String getQueueFS() {
+  // Use SD card for queue persistence when available (more robust),
+  // fall back to LittleFS otherwise.
+  if (sdCardReady) return "sd";
+  return "lfs";
+}
+
+// ============================================================
 // HEARTBEAT SYNC & SERVER REGISTRY
 // ============================================================
 void sendHeartbeat() {
@@ -1131,15 +1430,14 @@ bool fpOK = false;
 
 // ─── SD Card Fingerprint Template Storage ───────────────────
 bool initFingerprintSD() {
-  if (!SD.begin(SD_CS_PIN)) {
-    espPrintln("[SD] SD card init FAILED");
-    sdFpReady = false;
-    return false;
+  if (sdCardReady) {
+    if (!SD.exists(FP_SD_DIR)) SD.mkdir(FP_SD_DIR);
+    sdFpReady = true;
+    espPrintln("[SD] Fingerprint directory ready on SD card.");
+    return true;
   }
-  if (!SD.exists(FP_SD_DIR)) SD.mkdir(FP_SD_DIR);
-  sdFpReady = true;
-  espPrintln("[SD] SD card ready for fingerprint templates.");
-  return true;
+  sdFpReady = false;
+  return false;
 }
 
 bool saveFingerprintToSD(uint16_t slot) {
@@ -1538,7 +1836,7 @@ enroll_restart:
   // Save template to SD card for backup/restore
   if (sdFpReady) saveFingerprintToSD(slotId);
 
-  delay(2000);
+  { unsigned long _t = millis(); while (millis() - _t < 2000) { webServer.handleClient(); delay(20); } }
 
   // Link slot ID to student number
   if (studentNo != "") {
@@ -1591,8 +1889,13 @@ void reclaimRstForRfid() {
   delay(100);
   digitalWrite(RST_PIN, HIGH);
   delay(100);
+  
+  // Deselect SD Card before initializing RFID to prevent contentions
+  digitalWrite(SD_CS_PIN, HIGH);
+  
   SPI.end();
   SPI.begin(18, 19, 23, -1);
+  SPI.setFrequency(1000000); // 1 MHz stable SPI clock
   delay(10);
   mfrc522.PCD_Init();
   mfrc522.PCD_AntennaOn();
@@ -1607,21 +1910,15 @@ void reclaimRstForRfid() {
 void restoreI2cForLcd() {
   i2cBusDirty = true;
   pinMode(RST_PIN, INPUT);
-  delay(2);
+  delay(1);
   Wire.end();
-  delay(2);
+  delay(1);
   Wire.begin(21, 22);
-  delay(10);
+  delay(5);
   #ifdef USE_LCD
   if (lcdOK && lcdPtr) {
     lcdPtr->init();
     lcdPtr->backlight();
-    for (int r = 0; r < 4; r++) {
-      if (lcdLine[r].length() > 0) {
-        lcdPtr->setCursor(0, r);
-        lcdPtr->print(lcdLine[r]);
-      }
-    }
   }
   #endif
 }
@@ -1698,6 +1995,7 @@ void scanForAttendance() {
       if (rfidResp.startsWith("ERR") || rfidResp.length() == 0) {
         espPrintln("[RFID] Unknown card UID: " + rfidUid);
         lcdWrite(2, "Unknown Card!");
+        logUnrecognizedAttempt(rfidUid, "rfid");
         mfrc522.PICC_HaltA();
         mfrc522.PCD_StopCrypto1();
         // BUG FIX: was delay(2000) — blocked webServer.handleClient() so web commands were dropped
@@ -1770,7 +2068,7 @@ void scanForAttendance() {
     if (finger.image2Tz() != FINGERPRINT_OK) {
       espPrintln("[FP] Scan quality too low. Try placing finger again.");
       lcdWrite(2, "Bad image quality");
-      delay(1500);
+      { unsigned long _t = millis(); while (millis() - _t < 800) { webServer.handleClient(); delay(10); } }
       printMenu();
       return;
     }
@@ -1838,13 +2136,55 @@ void scanForAttendance() {
           espPrintln("[FP] Still no match after SD import. Access Denied.");
           lcdWrite(2, "Access Denied!");
           sessionDenied++;
+          logUnrecognizedAttempt(String(finger.fingerID), "fingerprint");
           flashLED(1, 400);
         }
       } else {
-        espPrintln("[FP] No new templates on SD. Access Denied.");
-        lcdWrite(2, "Access Denied!");
-        sessionDenied++;
-        flashLED(1, 400);
+        espPrintln("[FP] No new templates on SD. Trying server download...");
+        lcdWrite(2, "Trying server...");
+        int dl = downloadAndImportMissingTemplates();
+        if (dl > 0) {
+          espPrintln("[FP] Downloaded " + String(dl) + " templates from server. Retrying match...");
+          lcdWrite(3, "Imported " + String(dl));
+          if (finger.fingerFastSearch() == FINGERPRINT_OK) {
+            espPrintln("[FP] Match Found (after server import)! Slot #" + String(finger.fingerID));
+            lcdWrite(2, "Match! Slot #" + String(finger.fingerID));
+            String fpStudentNo3 = String(finger.fingerID);
+            if (WiFi.status() == WL_CONNECTED && isOnline) {
+              WiFiClient fclient;
+              HTTPClient fhttp;
+              fhttp.setTimeout(4000);
+              String fquery = coursesApiURL + "?action=lookup_fingerprint&slot=" + String(finger.fingerID) + "&hardware_key=" + hardwareKey;
+              fhttp.begin(fclient, fquery);
+              int fcode = fhttp.GET();
+              if (fcode == 200) {
+                String fresp = fhttp.getString();
+                fresp.trim();
+                int fpipe = fresp.indexOf('|');
+                if (fpipe > 0) {
+                  fpStudentNo3 = fresp.substring(0, fpipe);
+                  String fpName = fresp.substring(fpipe + 1);
+                  lcdWrite(2, fpName.substring(0, LCD_COLS));
+                  lcdWrite(3, "Marked: " + fpStudentNo3);
+                }
+              }
+              fhttp.end();
+            }
+            markAttendance(fpStudentNo3, "fingerprint", ts);
+          } else {
+            espPrintln("[FP] Still no match after server import. Access Denied.");
+            lcdWrite(2, "Access Denied!");
+            sessionDenied++;
+            logUnrecognizedAttempt(String(finger.fingerID), "fingerprint");
+            flashLED(1, 400);
+          }
+        } else {
+          espPrintln("[FP] No templates from server. Access Denied.");
+          lcdWrite(2, "Access Denied!");
+          sessionDenied++;
+          logUnrecognizedAttempt(String(finger.fingerID), "fingerprint");
+          flashLED(1, 400);
+        }
       }
     }
 
@@ -1852,14 +2192,19 @@ void scanForAttendance() {
 
     // Wait for finger release (check VOUT + getImage for robustness)
     espPrintln("=> Release finger from sensor glass...");
-    delay(300);
+    unsigned long _releaseStart = millis();
+    while (millis() - _releaseStart < 300) {
+      webServer.handleClient();
+      delay(10);
+      if (digitalRead(FINGER_VOUT) == LOW || finger.getImage() == FINGERPRINT_NOFINGER) break;
+    }
     while (digitalRead(FINGER_VOUT) == HIGH) {
       webServer.handleClient();
       delay(50);
       if (finger.getImage() == FINGERPRINT_NOFINGER) break;
     }
     espPrintln(">> Waiting for next scan...");
-    delay(1000);
+    { unsigned long _t = millis(); while (millis() - _t < 800) { webServer.handleClient(); delay(10); } }
     printMenu();
   }
 #endif
@@ -1921,7 +2266,6 @@ void printMenu() {
   String statusShort = isOnline ? "ONLINE" : "OFFLINE";
   String queueStr = (qCount > 0) ? "Queue:" + String(qCount) : "Queue: Clear";
   String courseShort = currentCourse.substring(0, LCD_COLS);
-  lcdClear();
   lcdWrite(0, "Sentinel Swarm AMS");
   lcdWrite(1, courseShort);
   lcdWrite(2, String(currentMode == "ATTENDANCE_MODE" ? "ATTENDANCE" : "ENROLL") + " | " + statusShort);
@@ -3059,6 +3403,26 @@ void handleDashboardCommand() {
     return;
   }
 
+  // 13.5. DELETE_FP_SLOT <slot> — delete single template from FM10A
+  if (cmd.startsWith("DELETE_FP_SLOT ")) {
+#ifdef USE_FINGERPRINT
+    int slotId = cmd.substring(15).toInt();
+    if (slotId < 1 || slotId > 127) {
+      webServer.send(400, "text/plain", "ERR: Invalid slot (1-127)");
+      return;
+    }
+    espPrintln("[OTA] Deleting FP Slot #" + String(slotId) + " from sensor...");
+    if (finger.deleteModel(slotId) == FINGERPRINT_OK) {
+      webServer.send(200, "text/plain", "ACK: Slot " + String(slotId) + " deleted from sensor.");
+    } else {
+      webServer.send(200, "text/plain", "ERR: Slot may be empty or sensor error.");
+    }
+#else
+    webServer.send(200, "text/plain", "ERR: Fingerprint not compiled in.");
+#endif
+    return;
+  }
+
   // 14. GETLCD
   if (cmd == "GETLCD") {
     String resp = lcdLine[0] + "|" + lcdLine[1] + "|" + lcdLine[2] + "|" + lcdLine[3];
@@ -3285,6 +3649,105 @@ void handleDashboardCommand() {
     return;
   }
 
+  // 27.5. LOAD_TEMPLATE <slot> — download single template from server and import
+  if (cmd.startsWith("LOAD_TEMPLATE ")) {
+#ifdef USE_FINGERPRINT
+    if (!fpOK) {
+      webServer.send(200, "text/plain", "ERR: Fingerprint sensor not ready.");
+      return;
+    }
+    if (!isOnline || WiFi.status() != WL_CONNECTED) {
+      webServer.send(200, "text/plain", "ERR: Offline — cannot download template.");
+      return;
+    }
+    int slot = cmd.substring(13).toInt();
+    if (slot < 1 || slot > 127) {
+      webServer.send(200, "text/plain", "ERR: Invalid slot (1-127).");
+      return;
+    }
+    espPrintln("[OTA] LOAD_TEMPLATE Slot #" + String(slot) + " — downloading from server...");
+
+    WiFiClient c;
+    HTTPClient h;
+    h.setTimeout(10000);
+    h.begin(c, coursesApiURL + "?action=get_fp_template&slot=" + String(slot) + "&hardware_key=" + hardwareKey);
+    int code = h.GET();
+    String resp = h.getString();
+    h.end();
+
+    if (code != 200 || resp.startsWith("ERR")) {
+      webServer.send(200, "text/plain", "ERR: Server has no template for slot " + String(slot));
+      espPrintln("[OTA] Server response: " + resp);
+      return;
+    }
+
+    int pipe = resp.indexOf('|');
+    if (pipe < 0) {
+      webServer.send(200, "text/plain", "ERR: Bad template format from server.");
+      return;
+    }
+    String hexBlob = resp.substring(pipe + 1);
+    if ((int)hexBlob.length() < 1024) {
+      webServer.send(200, "text/plain", "ERR: Template too short (" + String(hexBlob.length()) + " hex chars).");
+      return;
+    }
+
+    uint8_t tmpl[512];
+    memset(tmpl, 0xff, 512);
+    for (int i = 0; i < 512 && (i * 2 + 1) < (int)hexBlob.length(); i++) {
+      char hi = hexBlob.charAt(i * 2);
+      char lo = hexBlob.charAt(i * 2 + 1);
+      auto hd = [](char c) -> uint8_t {
+        if (c >= '0' && c <= '9') return c - '0';
+        if (c >= 'A' && c <= 'F') return c - 'A' + 10;
+        if (c >= 'a' && c <= 'f') return c - 'a' + 10;
+        return 0;
+      };
+      tmpl[i] = (hd(hi) << 4) | hd(lo);
+    }
+
+    while (mySerial.available()) mySerial.read();
+    uint8_t dcd[] = {0x09, 0x01};
+    Adafruit_Fingerprint_Packet dcp(FINGERPRINT_COMMANDPACKET, sizeof(dcd), dcd);
+    finger.writeStructuredPacket(dcp);
+    if (finger.getStructuredPacket(&dcp) != FINGERPRINT_OK || dcp.data[0] != FINGERPRINT_OK) {
+      webServer.send(200, "text/plain", "ERR: DownChar failed.");
+      espPrintln("[OTA] DownChar failed for slot " + String(slot));
+      return;
+    }
+
+    auto writePkt = [&](uint8_t pktType, const uint8_t *data256) {
+      mySerial.write(0xEF); mySerial.write(0x01);
+      mySerial.write(0xFF); mySerial.write(0xFF);
+      mySerial.write(0xFF); mySerial.write(0xFF);
+      mySerial.write(pktType); mySerial.write(0x01); mySerial.write(0x02);
+      uint16_t sum = pktType + 0x01 + 0x02;
+      for (int i = 0; i < 256; i++) { mySerial.write(data256[i]); sum += data256[i]; }
+      mySerial.write((uint8_t)(sum >> 8)); mySerial.write((uint8_t)(sum & 0xFF));
+    };
+
+    writePkt(FINGERPRINT_DATAPACKET, tmpl);
+    writePkt(FINGERPRINT_ENDDATAPACKET, tmpl + 256);
+
+    if (finger.getStructuredPacket(&dcp) != FINGERPRINT_OK || dcp.data[0] != FINGERPRINT_OK) {
+      webServer.send(200, "text/plain", "ERR: Data transfer rejected.");
+      espPrintln("[OTA] Data transfer rejected for slot " + String(slot));
+      return;
+    }
+
+    if (finger.storeModel(slot) == FINGERPRINT_OK) {
+      webServer.send(200, "text/plain", "ACK: Template slot " + String(slot) + " imported.");
+      espPrintln("[OTA] Template slot " + String(slot) + " imported successfully.");
+    } else {
+      webServer.send(200, "text/plain", "ERR: Store failed for slot " + String(slot));
+      espPrintln("[OTA] Store failed for slot " + String(slot));
+    }
+#else
+    webServer.send(200, "text/plain", "ERR: Fingerprint not compiled in.");
+#endif
+    return;
+  }
+
   // 28. LISTFS
   if (cmd == "LISTFS") {
     String resp = "LittleFS Files:\n";
@@ -3309,6 +3772,33 @@ void handleDashboardCommand() {
 // ============================================================
 // SYSTEM RUNTIME INITIALIZATION
 // ============================================================
+bool initSDCard() {
+  espPrintln("[SD] Initializing MicroSD card on shared SPI bus...");
+  pinMode(SD_CS_PIN, OUTPUT);
+  digitalWrite(SD_CS_PIN, HIGH); // deselect initially
+  
+  // Re-establish SPI bus with 1 MHz clock for stable breadboard signaling
+  SPI.begin(18, 19, 23, -1);
+  SPI.setFrequency(1000000); 
+  delay(10);
+  
+  if (!SD.begin(SD_CS_PIN, SPI, 1000000)) {
+    espPrintln("[SD] MicroSD Card initialization FAILED!");
+    sdCardReady = false;
+    #ifdef USE_FINGERPRINT
+    sdFpReady = false;
+    #endif
+    return false;
+  }
+  
+  sdCardReady = true;
+  #ifdef USE_FINGERPRINT
+  sdFpReady = true;
+  #endif
+  espPrintln("[SD] MicroSD Card ready. Total space: " + String((uint64_t)(SD.totalBytes() / (1024 * 1024))) + " MB");
+  return true;
+}
+
 void setup() {
   Serial.begin(115200);
   delay(1000);
@@ -3416,8 +3906,12 @@ void setup() {
     espPrintln("[SYSTEM] LittleFS OK. Queue loaded: " + String(q) + " scan(s) cached.");
   }
 
-  // Init SPI bus (shared by RFID + SD card)
+  // Init SPI bus (shared by RFID + SD card) with stable 1 MHz clock for breadboards
   SPI.begin(18, 19, 23, -1);
+  SPI.setFrequency(1000000);
+
+  // Initialize general MicroSD card interface
+  initSDCard();
 
 #ifdef USE_RFID
   espPrintln("[SENSOR] Booting MFRC522 SPI RFID reader...");
@@ -3463,6 +3957,7 @@ void setup() {
   loadDeviceConfig();
 
   // 4. Initial network convergence + immediate time sync
+  WiFi.setSleep(WIFI_PS_NONE);
   tryConnectWifi();
   if (isOnline) sendHeartbeat(); // sync clock before any scan
 
@@ -3556,10 +4051,21 @@ void loop() {
   {
     char k = scanKeypad();
     if (k && k != lastKey) {
-      lastKey = k;
-      lastKeyTime = millis();
-      pendingKeypadKey = String(k);
+      if (millis() < 3000) {
+        lastKey = k;
+        lastKeyTime = millis();
+        if (pendingKeypadKey.length() == 0) espPrintln("[KEYPAD] Boot guard - ignoring '" + String(k) + "'");
+      } else {
+        lastKey = k;
+        lastKeyTime = millis();
+        pendingKeypadKey = String(k);
       espPrintln("[KEYPAD] Key pressed: " + String(k));
+      // Temporary diagnostic: print the intended key vs what's received
+      if (k == '2') espPrintln("[DIAG] Got '2' - if you pressed '1', mapping needs fixing");
+      if (k == '5') espPrintln("[DIAG] Got '5' - if you pressed '2', mapping needs fixing");
+      if (k == '8') espPrintln("[DIAG] Got '8' - if you pressed '3', mapping needs fixing");
+      if (k == 'B') espPrintln("[DIAG] Got 'B' - if you pressed '4', mapping needs fixing");
+      }
     }
     if (!k && millis() - lastKeyTime > 200) lastKey = 0;
   }
@@ -3610,6 +4116,65 @@ void loop() {
         } else { espPrintln("[PIN] Wrong PIN!"); lcdWrite(1, "Wrong PIN!"); pinBuffer = ""; delay(1200); lcdWrite(1, "Enter PIN:"); }
       }
     }
+
+    // Admin biometric unlock — poll RFID and fingerprint when locked
+    #ifdef USE_RFID
+    if (enableRfid && adminListLoaded) {
+      reclaimRstForRfid();
+      if (mfrc522.PICC_IsNewCardPresent() && mfrc522.PICC_ReadCardSerial()) {
+        String uid = "";
+        for (byte i = 0; i < mfrc522.uid.size; i++) {
+          if (mfrc522.uid.uidByte[i] < 0x10) uid += "0";
+          uid += String(mfrc522.uid.uidByte[i], HEX);
+        }
+        uid.toUpperCase();
+        mfrc522.PICC_HaltA();
+        mfrc522.PCD_StopCrypto1();
+        restoreI2cForLcd();
+        if (checkLocalAdminRFID(uid)) {
+          espPrintln("\n[ADMIN] Admin RFID unlock: " + uid);
+          systemLocked = false; pinBuffer = "";
+          lcdClear(); lcdWrite(0, "== UNLOCKED =="); lcdWrite(1, "Admin RFID");
+          delay(1000); lcdClear(); lcdWrite(0, "ATTENDANCE SCAN");
+          lcdWrite(1, currentCourse.substring(0, LCD_COLS));
+          lcdWrite(2, isOnline ? "ONLINE" : "OFFLINE");
+          lcdWrite(3, "Keys: A=Course"); printMenu();
+          delay(20); return;
+        } else {
+          espPrintln("[LOCK] Non-admin card rejected.");
+        }
+      }
+    }
+    #endif
+
+    #ifdef USE_FINGERPRINT
+    if (enableFingerprint && fpOK && adminListLoaded) {
+      static unsigned long lastFpPollLocked = 0;
+      if (millis() - lastFpPollLocked >= 300) {
+        lastFpPollLocked = millis();
+        if (finger.getImage() == FINGERPRINT_OK) {
+          if (finger.image2Tz() == FINGERPRINT_OK && finger.fingerSearch() == FINGERPRINT_OK) {
+            String slotStr = String(finger.fingerID);
+            restoreI2cForLcd();
+            if (checkLocalAdminFingerprint(slotStr)) {
+              espPrintln("\n[ADMIN] Admin FP unlock: Slot #" + slotStr);
+              systemLocked = false; pinBuffer = "";
+              lcdClear(); lcdWrite(0, "== UNLOCKED =="); lcdWrite(1, "Admin FP");
+              delay(1000); lcdClear(); lcdWrite(0, "ATTENDANCE SCAN");
+              lcdWrite(1, currentCourse.substring(0, LCD_COLS));
+              lcdWrite(2, isOnline ? "ONLINE" : "OFFLINE");
+              lcdWrite(3, "Keys: A=Course"); printMenu();
+              delay(20); return;
+            }
+          }
+          // Wait for finger removal
+          unsigned long _t = millis();
+          while (millis() - _t < 1500) { finger.getImage(); delay(50); webServer.handleClient(); }
+        }
+      }
+    }
+    #endif
+
     delay(20);
     return;
   }
@@ -3735,6 +4300,27 @@ void loop() {
       printMenu();
     }
     if (timeSynced) lastDay = timeinfo.tm_mday;
+  }
+
+  // 3.5. Periodic admin list sync (every 60s)
+  if (isOnline && WiFi.status() == WL_CONNECTED && millis() - lastAdminSync >= ADMIN_SYNC_INTERVAL) {
+    syncAdmins();
+    lastAdminSync = millis();
+    if (!adminListLoaded) espPrintln("[ADMIN] First sync deferred — will retry next cycle.");
+  }
+
+  // 3.6. Periodic SD card insertion check (every 30s)
+  static unsigned long lastSDCheck = 0;
+  if (millis() - lastSDCheck >= 30000) {
+    lastSDCheck = millis();
+    checkSDInsertion();
+  }
+
+  // 3.7. Course template cache download (every 60s when course is active)
+  static unsigned long lastTemplateDownload = 0;
+  if (isOnline && WiFi.status() == WL_CONNECTED && currentMode == "ATTENDANCE_MODE" && millis() - lastTemplateDownload >= 60000) {
+    lastTemplateDownload = millis();
+    checkAndDownloadCourseTemplates();
   }
 
   // 4. Process OTA Web-Triggered Enrollment requests
@@ -3968,15 +4554,7 @@ void loop() {
     scanForAttendance();
   }
 
-  // 7. Clock display — update only line 0 with system time (doesn't overwrite other lines)
-  static unsigned long lastClockShow = 0;
-  if (millis() - lastClockShow >= 5000) {
-    lastClockShow = millis();
-    String sysTime = getTimestamp();
-    if (sysTime.length() >= 19) sysTime = sysTime.substring(11, 19);
-    else sysTime = "No sync";
-    lcdWrite(0, sysTime);
-  }
+
 
   delay(20);
 }

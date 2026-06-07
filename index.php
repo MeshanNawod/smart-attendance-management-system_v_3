@@ -601,7 +601,9 @@ window.adminVoiceCardToggle = function() {
                     if (visEl) visEl.style.display = 'none';
                     var recordBtn = document.getElementById('voice-card-record-btn');
                     if (recordBtn) recordBtn.style.background = 'linear-gradient(135deg,#198754,#157347)';
-                    var mode = document.querySelector('input[name="voiceCardMode"]:checked').value;
+                    var modeEl = document.querySelector('input[name="voiceCardMode"]:checked');
+                    if (!modeEl) { if (labelEl) labelEl.textContent = 'Start Recording'; return; }
+                    var mode = modeEl.value;
                     if (mode === 'enroll') {
                         statusEl.innerHTML = '<span class="text-success"><i class="bi bi-upload me-1"></i>Enrolling voice sample...</span>';
                         var fd = new FormData();

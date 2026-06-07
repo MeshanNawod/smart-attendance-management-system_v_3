@@ -10,24 +10,44 @@ log = logging.getLogger(__name__)
 try:
     import cv2
     import numpy as np
-    import face_recognition
     from flask import Flask, jsonify, request, Response, render_template_string, stream_with_context
     from flask_cors import CORS
 except ImportError as e:
-    log.error("Missing dependency: %s. Run: pip install -r requirements.txt", e)
+    log.error("Missing dependency: %s. Run: pip install flask flask-cors opencv-python numpy", e)
     sys.exit(1)
 
-# ── Paths ──────────────────────────────────────────────────────────────
+FACE_W, FACE_H = 64, 64
+
 BASE_DIR = Path(__file__).resolve().parent
 FACE_DIR = BASE_DIR / "face_data"
 FACE_INDEX = FACE_DIR / "_index.json"
 CONFIG_FILE = BASE_DIR / "config.json"
 FACE_DIR.mkdir(parents=True, exist_ok=True)
 
-# ── Configuration ──────────────────────────────────────────────────────
+try:
+    _cv2_data_path = cv2.data.haarcascades
+except AttributeError:
+    _cv2_data_path = None
+_haar_paths = [
+    _cv2_data_path + "haarcascade_frontalface_default.xml" if _cv2_data_path else None,
+    "/usr/share/opencv4/haarcascades/haarcascade_frontalface_default.xml",
+    "/usr/local/share/opencv4/haarcascades/haarcascade_frontalface_default.xml",
+]
+face_cascade = cv2.CascadeClassifier()
+for p in _haar_paths:
+    if p is None:
+        continue
+    cc = cv2.CascadeClassifier(p)
+    if not cc.empty():
+        face_cascade = cc
+        break
+if face_cascade.empty():
+    log.error("Haar Cascade not found — searched: %s", [p for p in _haar_paths if p])
+    sys.exit(1)
+
 DEFAULT_CONFIG = OrderedDict([
-    ("threshold", 0.55),
-    ("camera_type", "usb"),    # "usb" or "picamera"
+    ("threshold", 0.45),
+    ("camera_type", "usb"),
     ("camera_id", 0),
     ("camera_width", 640),
     ("camera_height", 480),
@@ -43,7 +63,6 @@ DEFAULT_CONFIG = OrderedDict([
     ("stream_annotate", True),
     ("stream_show_confidence", True),
     ("log_max_lines", 500),
-    ("face_model", "hog"),
 ])
 
 config = DEFAULT_CONFIG.copy()
@@ -74,7 +93,6 @@ ENROLL_CAPTURES = int(config.get("enroll_captures", 3))
 ATTENDANCE_COOLDOWN = int(config.get("attendance_cooldown", 5))
 STREAM_ANNOTATE = bool(config.get("stream_annotate", True))
 STREAM_CONFIDENCE = bool(config.get("stream_show_confidence", True))
-FACE_MODEL = config.get("face_model", "hog")
 LOG_MAX = int(config.get("log_max_lines", 500))
 HEARTBEAT_INTERVAL = int(config.get("heartbeat_interval", 30))
 SERVER_POST_ATTENDANCE = bool(config.get("server_post_attendance", True))
@@ -84,11 +102,9 @@ RESTART_PENDING = False
 REBOOT_PENDING = False
 SERVICE_START_TIME = time.time()
 
-# ── Recognition cache ──────────────────────────────────────────────────
 _last_recognition = {"results": [], "time": 0, "frame": None}
-_last_attendance_post = {}  # student_no -> timestamp
+_last_attendance_post = {}
 
-# ── Circular log buffer ───────────────────────────────────────────────
 _log_buf = []
 _log_lock = threading.Lock()
 
@@ -104,9 +120,8 @@ _buf_handler = BufHandler()
 _buf_handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s"))
 logging.getLogger().addHandler(_buf_handler)
 
-# ── Face index helpers ─────────────────────────────────────────────────
 _index_lock = threading.Lock()
-_known_encodings = []
+_known_vectors = []
 _known_names = []
 _known_student_nos = []
 _encodings_dirty = True
@@ -129,15 +144,15 @@ def _face_path(student_no):
     return FACE_DIR / f"{safe}.npy"
 
 def _rebuild_encodings():
-    global _known_encodings, _known_names, _known_student_nos, _encodings_dirty
+    global _known_vectors, _known_names, _known_student_nos, _encodings_dirty
     idx = _load_index()
-    encodings, names, student_nos = [], [], []
+    vectors, names, student_nos = [], [], []
     for sid, entry in idx.items():
         fp = _face_path(sid)
         if fp.exists():
             try:
                 arr = np.load(fp)
-                encodings.append(arr)
+                vectors.append(arr)
                 names.append(entry.get("name", sid))
                 student_nos.append(sid)
             except Exception as e:
@@ -148,11 +163,11 @@ def _rebuild_encodings():
     if list(idx.keys()) != list(_load_index().keys()):
         _save_index(idx)
     with _index_lock:
-        _known_encodings = encodings
+        _known_vectors = vectors
         _known_names = names
         _known_student_nos = student_nos
         _encodings_dirty = False
-    log.info("Loaded %d face(s) for %d student(s)", len(encodings), len(student_nos))
+    log.info("Loaded %d face(s) for %d student(s)", len(vectors), len(student_nos))
 
 def _mark_dirty():
     global _encodings_dirty
@@ -169,20 +184,43 @@ def _check_cooldown(student_no):
     _attendance_cooldowns[student_no] = now
     return 0
 
-# ── Camera ─────────────────────────────────────────────────────────────
+def _detect_faces(gray):
+    faces = face_cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=5, minSize=(80, 80))
+    return faces
+
+def _extract_face_vector(gray, face_rect):
+    x, y, w, h = face_rect
+    face = gray[y:y+h, x:x+w]
+    face = cv2.resize(face, (FACE_W, FACE_H))
+    return face.flatten().astype(np.float32)
+
+def _normalize_vec(v):
+    norm = np.linalg.norm(v)
+    if norm > 0:
+        return v / norm
+    return v
+
+def _compare_faces(vec, known_vecs):
+    if not known_vecs:
+        return None, 0.0
+    kn = np.array(known_vecs)
+    dots = np.dot(kn, vec)
+    best_idx = int(np.argmax(dots))
+    score = float(dots[best_idx])
+    score = max(0.0, min(1.0, score))
+    return best_idx, score
+
 _camera = None
 _camera_lock = threading.Lock()
 _camera_ok = False
 _camera_alt_tried = False
-_picam2 = None  # picamera2 instance
+_picam2 = None
 
 def _camera_open():
     global _camera, _camera_ok, _camera_alt_tried, _picam2
     with _camera_lock:
         if _camera is not None:
             return True
-
-        # ── Pi Camera (CSI) via picamera2 ─────────────────────────────
         if CAMERA_TYPE == "picamera":
             try:
                 from picamera2 import Picamera2
@@ -193,11 +231,10 @@ def _camera_open():
                 )
                 _picam2.configure(video_config)
                 _picam2.start()
-                # Warm-up: grab a frame to let AEC/AGC settle
                 for _ in range(5):
                     _picam2.capture_array()
                     time.sleep(0.05)
-                _camera = True  # flag as opened (non-None)
+                _camera = True
                 _camera_ok = True
                 log.info("Pi Camera (CSI) opened (%dx%d)", CAMERA_W, CAMERA_H)
                 return True
@@ -211,8 +248,6 @@ def _camera_open():
                 _camera = None
                 _camera_ok = False
                 return False
-
-        # ── USB camera via OpenCV ─────────────────────────────────────
         for attempt in range(3):
             cid = CAMERA_ID
             if attempt > 0 and not _camera_alt_tried:
@@ -271,12 +306,12 @@ def _camera_read():
             if CAMERA_TYPE == "picamera":
                 if _picam2 is None:
                     return None
-                frame = _picam2.capture_array()  # RGB numpy array
+                frame = _picam2.capture_array()
                 if frame is None or frame.size == 0:
                     _camera_ok = False
                     _camera_close()
                     return None
-                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)  # to BGR for opencv
+                frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
                 _camera_ok = True
                 return frame
             else:
@@ -293,10 +328,9 @@ def _camera_read():
             _camera_close()
             return None
 
-# ── Camera health check (call periodically) ───────────────────────────
 _last_camera_check = 0
 def _camera_health_check():
-    global _last_camera_check
+    global _last_camera_check, _camera_ok, _camera
     now = time.time()
     if now - _last_camera_check < 15:
         return _camera_ok
@@ -316,7 +350,9 @@ def _camera_set_prop(prop, val):
             except:
                 pass
 
-# ── Face recognition ──────────────────────────────────────────────────
+def _face_rect_to_tblr(x, y, w, h):
+    return (y, x + w, y + h, x)
+
 def _recognize_faces(frame, force=False):
     global _last_recognition, _encodings_dirty
     now_ms = time.time() * 1000
@@ -324,32 +360,32 @@ def _recognize_faces(frame, force=False):
         return _last_recognition["results"]
     if _encodings_dirty:
         _rebuild_encodings()
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    boxes = face_recognition.face_locations(rgb, model=FACE_MODEL)
-    if not boxes:
-        results = []
-    elif not _known_encodings:
-        results = [{"face_detected": True, "student_no": None, "student_name": "Unknown",
-                     "confidence": 0.0, "bbox": list(map(int, b))} for b in boxes]
-    else:
-        encodings = face_recognition.face_encodings(rgb, boxes)
-        kn = np.array(_known_encodings)
-        results = []
-        for i, encoding in enumerate(encodings):
-            distances = np.linalg.norm(kn - encoding, axis=1)
-            min_idx = np.argmin(distances)
-            min_dist = float(distances[min_idx])
-            conf = 1.0 - min_dist
-            known = min_dist < (1.0 - THRESHOLD)
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    faces = _detect_faces(gray)
+    results = []
+    for (x, y, w, h) in faces:
+        vec = _extract_face_vector(gray, (x, y, w, h))
+        vec = _normalize_vec(vec)
+        best_idx, score = _compare_faces(vec, _known_vectors)
+        known = score >= THRESHOLD and best_idx is not None
+        tblr = _face_rect_to_tblr(x, y, w, h)
+        if known:
             results.append({
                 "face_detected": True,
-                "student_no": _known_student_nos[min_idx] if known else None,
-                "student_name": _known_names[min_idx] if known else "Unknown",
-                "confidence": round(conf, 4),
-                "bbox": list(map(int, boxes[i])),
+                "student_no": _known_student_nos[best_idx],
+                "student_name": _known_names[best_idx],
+                "confidence": round(score, 4),
+                "bbox": list(map(int, tblr)),
+            })
+        else:
+            results.append({
+                "face_detected": True,
+                "student_no": None,
+                "student_name": "Unknown",
+                "confidence": round(score, 4),
+                "bbox": list(map(int, tblr)),
             })
     _last_recognition = {"results": results, "time": now_ms, "frame": frame}
-    # Post attendance for newly recognized faces
     if SERVER_POST_ATTENDANCE and OTA_SERVER:
         for r in results:
             if r["student_no"] and r["student_no"] not in _last_attendance_post:
@@ -363,7 +399,6 @@ def _recognize_faces(frame, force=False):
 def _annotate_frame(frame, results):
     if not STREAM_ANNOTATE:
         return frame
-    h, w = frame.shape[:2]
     for r in results:
         top, right, bottom, left = r["bbox"]
         name = r["student_name"] or "Unknown"
@@ -380,7 +415,6 @@ def _annotate_frame(frame, results):
                     0.5, (0, 0, 0), 1, cv2.LINE_AA)
     return frame
 
-# ── Flask app ─────────────────────────────────────────────────────────
 app = Flask(__name__)
 CORS(app)
 
@@ -393,7 +427,6 @@ def json_ok(data=None, message="ok"):
 def json_error(message, code=400):
     return jsonify({"status": "error", "message": str(message)}), code
 
-# ── 1. Status ─────────────────────────────────────────────────────────
 @app.route("/api/status", methods=["GET"])
 def api_status():
     uptime_s = int(time.time() - SERVICE_START_TIME)
@@ -409,12 +442,11 @@ def api_status():
         "faces_enrolled": _get_face_count(),
         "threshold": round(THRESHOLD, 2),
         "threshold_pct": int(THRESHOLD * 100),
-        "face_model": FACE_MODEL,
+        "face_model": "haar_cascade",
         "timestamp": datetime.now().isoformat(),
-        "version": "2.0",
+        "version": "2.1",
     })
 
-# ── 2. MJPEG stream ───────────────────────────────────────────────────
 def _mjpeg_generator():
     while True:
         _camera_health_check()
@@ -454,7 +486,6 @@ def api_snapshot():
         return json_error("JPEG encode failed", 500)
     return Response(jpeg.tobytes(), mimetype="image/jpeg")
 
-# ── 3. Face status ────────────────────────────────────────────────────
 @app.route("/api/face-status", methods=["GET"])
 def api_face_status():
     _camera_health_check()
@@ -485,7 +516,6 @@ def api_face_status():
         "camera_ok": True,
     })
 
-# ── 4. Command execution ──────────────────────────────────────────────
 def _enroll_face(student_no):
     captures = []
     log.info("Enrolling %s — capturing %d frame(s)", student_no, ENROLL_CAPTURES)
@@ -497,37 +527,35 @@ def _enroll_face(student_no):
             time.sleep(0.1)
         if frame is None:
             return "Camera unavailable during capture"
-        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        boxes = face_recognition.face_locations(rgb, model=FACE_MODEL)
-        if not boxes:
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = _detect_faces(gray)
+        if len(faces) == 0:
             if i == 0:
                 return "No face detected — look at the camera"
             continue
-        if len(boxes) > 1:
+        if len(faces) > 1:
             return "Multiple faces detected — only one person at a time"
-        encodings = face_recognition.face_encodings(rgb, boxes)
-        if encodings:
-            captures.append(encodings[0])
-            log.info("  capture %d/%d: face found", i + 1, ENROLL_CAPTURES)
-            time.sleep(0.3)
-        else:
-            log.info("  capture %d/%d: could not encode", i + 1, ENROLL_CAPTURES)
+        vec = _extract_face_vector(gray, faces[0])
+        captures.append(vec)
+        log.info("  capture %d/%d: face found", i + 1, ENROLL_CAPTURES)
+        time.sleep(0.3)
     if not captures:
-        return "Could not capture any valid face encoding"
-    avg_encoding = np.mean(captures, axis=0)
+        return "Could not capture any valid face"
+    avg_vec = np.mean(captures, axis=0)
+    avg_vec = _normalize_vec(avg_vec)
     fp = _face_path(student_no)
-    np.save(fp, avg_encoding)
+    np.save(fp, avg_vec)
     idx = _load_index()
     idx[student_no] = {
         "name": student_no,
         "enrolled_at": datetime.now().isoformat(),
         "captures": len(captures),
-        "encoding_dim": int(avg_encoding.shape[0]),
+        "vec_dim": int(avg_vec.shape[0]),
     }
     _save_index(idx)
     _mark_dirty()
     log.info("Enrolled %s (%d captures averaged)", student_no, len(captures))
-    return f"Enrolled {student_no} ({len(captures)} captures, {round(float(np.linalg.norm(avg_encoding)), 4)} norm)"
+    return f"Enrolled {student_no} ({len(captures)} captures)"
 
 def _enroll_face_with_name(args):
     parts = args.split("|", 1)
@@ -613,7 +641,7 @@ def _save_config():
         json.dump(config, f, indent=2)
 
 def _reload_config():
-    global THRESHOLD, ENROLL_CAPTURES, ATTENDANCE_COOLDOWN, STREAM_ANNOTATE, STREAM_CONFIDENCE, FACE_MODEL
+    global THRESHOLD, ENROLL_CAPTURES, ATTENDANCE_COOLDOWN, STREAM_ANNOTATE, STREAM_CONFIDENCE
     if not CONFIG_FILE.exists():
         return "No config file"
     with open(CONFIG_FILE) as f:
@@ -625,10 +653,6 @@ def _reload_config():
     ATTENDANCE_COOLDOWN = int(config.get("attendance_cooldown", 5))
     STREAM_ANNOTATE = bool(config.get("stream_annotate", True))
     STREAM_CONFIDENCE = bool(config.get("stream_show_confidence", True))
-    old_model = FACE_MODEL
-    FACE_MODEL = config.get("face_model", "hog")
-    if old_model != FACE_MODEL and _get_face_count() > 0:
-        _mark_dirty()
     return "Config reloaded"
 
 _COMMANDS = OrderedDict([
@@ -704,7 +728,6 @@ def api_command():
         status = "error"
     return jsonify({"status": status, "message": output, "output": output})
 
-# ── 5. System info ────────────────────────────────────────────────────
 _sysinfo_cache = {}
 _sysinfo_ts = 0
 
@@ -767,7 +790,6 @@ def _update_sysinfo():
 def api_sysinfo():
     return jsonify(_update_sysinfo())
 
-# ── 6. OTA command delivery ───────────────────────────────────────────
 @app.route("/api/ota", methods=["POST"])
 def api_ota():
     data = request.get_json(silent=True) or request.form or {}
@@ -803,7 +825,6 @@ def _handle_ota_cmd(cmdline):
     else:
         log.info("Unhandled OTA cmd: %s", cmdline)
 
-# ── 7. WiFi / BT / legacy commands ────────────────────────────────────
 @app.route("/cmd", methods=["GET"])
 def cmd_legacy():
     cmd = (request.args.get("command") or "").strip()
@@ -842,7 +863,6 @@ def cmd_legacy():
         return jsonify({"status": "success", "output": out})
     return jsonify({"error": f"Unknown command: {cmd}"}), 400
 
-# ── 8. Log viewer ─────────────────────────────────────────────────────
 @app.route("/api/logs", methods=["GET"])
 def api_logs():
     n = request.args.get("n", 50, type=int)
@@ -851,7 +871,6 @@ def api_logs():
         lines = _log_buf[-n:]
     return jsonify({"logs": lines, "count": len(lines)})
 
-# ── 9. Face management ────────────────────────────────────────────────
 @app.route("/api/faces", methods=["GET"])
 def api_faces():
     idx = _load_index()
@@ -861,7 +880,7 @@ def api_faces():
             "student_no": sid,
             "name": entry.get("name", sid),
             "enrolled_at": entry.get("enrolled_at", "unknown"),
-            "encoding_dim": entry.get("encoding_dim", "unknown"),
+            "vec_dim": entry.get("vec_dim", "unknown"),
         })
     return jsonify({"faces": faces, "count": len(faces)})
 
@@ -870,7 +889,6 @@ def api_delete_face(student_no):
     out = _delete_face(student_no)
     return jsonify({"status": "success" if "Deleted" in out else "error", "message": out})
 
-# ── 10. Config management ─────────────────────────────────────────────
 @app.route("/api/config", methods=["GET"])
 def api_get_config():
     return jsonify(dict(config))
@@ -888,7 +906,6 @@ def api_set_config():
         _reload_config()
     return jsonify({"status": "success", "changed": changed, "config": dict(config)})
 
-# ── 11. Reload / restart / reboot ─────────────────────────────────────
 @app.route("/api/reload", methods=["POST"])
 def api_reload():
     msg = _reload_config()
@@ -904,7 +921,6 @@ def api_reboot_pi():
     msg = _reboot_pi()
     return jsonify({"status": "success", "message": msg})
 
-# ── 12. Web status page ───────────────────────────────────────────────
 @app.route("/")
 def web_index():
     idx = _load_index()
@@ -954,8 +970,8 @@ h1{color:#e94560;margin-bottom:20px}
 <div class="card">
 <h2>Faces ({{info.face_count}})</h2>
 <ul class="faces-list">
-{% for f in faces %}
-<li>{{f.student_no}} — {{f.name}}</li>
+{% for sid, entry in faces %}
+<li>{{sid}} — {{entry.get("name", sid)}}</li>
 {% else %}
 <li style="color:#888">No faces enrolled</li>
 {% endfor %}
@@ -967,7 +983,7 @@ h1{color:#e94560;margin-bottom:20px}
 <p>Uptime: <span class="val">{{info.service_uptime}}</span></p>
 <p>Camera: <span class="badge {{'badge-green' if info.camera_ok else 'badge-red'}}">{{"OK" if info.camera_ok else "OFFLINE"}}</span></p>
 <p>Faces Loaded: <span class="val">{{info.faces_loaded}}</span></p>
-<p>Model: <span class="val">{{config.face_model}}</span></p>
+<p>Model: <span class="val">Haar + Cosine</span></p>
 </div>
 <div class="log-box" id="log-box">
 {% for line in logs %}
@@ -986,7 +1002,6 @@ setInterval(()=>fetch('/api/logs?n=30').then(r=>r.json()).then(d=>{
 </html>
 """, info=info, faces=sorted(_load_index().items()), config=config, logs=_log_buf[-50:])
 
-# ── Background OTA polling ────────────────────────────────────────────
 def _post_attendance(student_no):
     if not OTA_SERVER:
         return
@@ -1023,7 +1038,7 @@ def _heartbeat_loop():
             with urllib.request.urlopen(req, timeout=8) as resp:
                 body = json.loads(resp.read())
                 if body.get("status") == "ok":
-                    pass  # heartbeat successful
+                    pass
         except Exception as e:
             if "timed out" not in str(e).lower():
                 log.debug("Heartbeat: %s", e)
@@ -1051,7 +1066,6 @@ def _ota_poll_loop():
                 log.debug("OTA poll: %s", e)
         time.sleep(OTA_INTERVAL)
 
-# ── Start / signal handlers ───────────────────────────────────────────
 def _graceful_shutdown(sig=None, frame=None):
     log.info("Shutting down...")
     _camera_close()
@@ -1062,15 +1076,16 @@ signal.signal(signal.SIGTERM, _graceful_shutdown)
 
 if __name__ == "__main__":
     log.info("=" * 50)
-    log.info("RPi Face Recognition Service v2")
+    log.info("RPi Face Recognition Service v2.1 (OpenCV)")
     log.info("=" * 50)
     log.info("  Camera:     %s (%dx%d)", CAMERA_ID, CAMERA_W, CAMERA_H)
     log.info("  Threshold:  %d%%", int(THRESHOLD * 100))
-    log.info("  Model:      %s", FACE_MODEL)
+    log.info("  Face size:  %dx%d", FACE_W, FACE_H)
     log.info("  Faces dir:  %s", FACE_DIR)
     log.info("  Port:       %d", FLASK_PORT)
     log.info("  Enroll cap: %d frame(s)", ENROLL_CAPTURES)
     log.info("  Cooldown:   %ds", ATTENDANCE_COOLDOWN)
+    log.info("  Engine:     Haar Cascade + Cosine Similarity")
     if OTA_SERVER:
         log.info("  OTA:        %s (device=%s, %ds interval)", OTA_SERVER, OTA_DEVICE, OTA_INTERVAL)
     else:

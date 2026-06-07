@@ -3088,8 +3088,13 @@ window.uploadFaceDataset = async function() {
     } catch (e) { alert("Network Error: " + e.message); }
 };
 
-window.deleteStudentMap = async function(studentNo) {
+window.deleteStudentMap = async function(studentNo, slotId) {
     if (!confirm(`Delete all data for student ${studentNo}?\n\nThis will remove fingerprint, RFID, face, and web face records.\nThis action cannot be undone.`)) return;
+    
+    // Also delete from FM10A if slot ID is provided
+    if (slotId && slotId > 0 && slotId <= 127) {
+        try { sendOtaCommand('DELETE_FP_SLOT ' + slotId); } catch(e) {}
+    }
     
     try {
         const formData = new FormData();
@@ -3121,23 +3126,8 @@ window.bulkDeleteTemplates = async function() {
 };
 
 window.pushTemplateToDevice = async function(studentNo, slotId) {
-    logToTerminal(`\n> Fetching DB template for ${studentNo}...`);
-    try {
-        const res = await fetch(`download_template.php?student_no=${encodeURIComponent(studentNo)}`);
-        if (!res.ok) {
-            logToTerminal("[ERR] HTTP Exception downloading template bytes.");
-            return;
-        }
-        const hexTpl = await res.text();
-        if (!hexTpl || hexTpl.length < 10) {
-            logToTerminal("[ERR] Template data invalid or missing from DB!");
-            return;
-        }
-        logToTerminal(`> TX: Pushing Template HEX to ESP (Slot ${slotId})...`);
-        sendOtaCommand(`LOAD_TEMPLATE ${slotId} ${hexTpl}`);
-    } catch (e) {
-        logToTerminal("[ERR] Network fetch failed.");
-    }
+    logToTerminal(`\n> Triggering server-side download for ${studentNo} (Slot ${slotId})...`);
+    sendOtaCommand(`LOAD_TEMPLATE ${slotId}`);
 };
 
 window.filterTemplates = function() {
@@ -3806,7 +3796,7 @@ window.refreshRpiStatus = async function() {
     if (!ip) return;
 
     try {
-        const res = await fetch(`http://${ip}:5000/api/status`, { signal: AbortSignal.timeout(3000) });
+        const res = await fetch(`/pi-api/api/status`, { signal: AbortSignal.timeout(3000) });
         if (res.ok) {
             const data = await res.json();
             dot.className = 'badge bg-success';
@@ -3837,7 +3827,7 @@ window.triggerRpiOta = async function() {
         const res = await fetch('/csc2052/api/ota.php?action=poll&device=rpi');
         const data = await res.json();
         if (data.status === 'success' && data.commands) {
-            const postRes = await fetch(`http://${ip}:5000/api/ota`, {
+            const postRes = await fetch(`/pi-api/api/ota`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data.commands)
@@ -3861,13 +3851,13 @@ window.startRpiAttendance = async function() {
     document.getElementById('rpi-attendance-status').innerHTML = '<span class="text-primary">Connecting to Pi Camera...</span>';
 
     const img = document.getElementById('rpi-cam-stream');
-    img.src = `http://${ip}:5000/stream`;
+    img.src = `/pi-api/stream`;
     img.style.display = 'block';
     document.getElementById('rpi-cam-placeholder').style.display = 'none';
 
     rpiPollInterval = setInterval(async () => {
         try {
-            const res = await fetch(`http://${ip}:5000/api/face-status`, { signal: AbortSignal.timeout(3000) });
+            const res = await fetch(`/pi-api/api/face-status`, { signal: AbortSignal.timeout(3000) });
             if (!res.ok) return;
             const data = await res.json();
 
@@ -3930,7 +3920,7 @@ window.sendRpiCommand = async function(cmd) {
     const ip = getRpiIp();
     if (!ip) { alert('Set Pi IP address first.'); return; }
     try {
-        const res = await fetch(`http://${ip}:5000/api/command`, {
+        const res = await fetch(`/pi-api/api/command`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ command: cmd }),
@@ -3954,7 +3944,7 @@ window.fetchRpiSysInfo = async function() {
     const ip = getRpiIp();
     if (!ip) { alert('Set Pi IP address first.'); return; }
     try {
-        const res = await fetch(`http://${ip}:5000/api/sysinfo`, { signal: AbortSignal.timeout(5000) });
+        const res = await fetch(`/pi-api/api/sysinfo`, { signal: AbortSignal.timeout(5000) });
         if (!res.ok) throw new Error('HTTP ' + res.status);
         const d = await res.json();
         document.getElementById('rpi-cpu-temp').textContent = d.cpu_temp ?? '—';

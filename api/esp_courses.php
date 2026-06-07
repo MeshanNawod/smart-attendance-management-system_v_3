@@ -17,11 +17,9 @@ require_once __DIR__ . '/../includes/db.php';
 
 // ── Auth ───────────────────────────────────────────────────────────────────
 $hw_key = $_SERVER['HTTP_X_HARDWARE_KEY'] ?? ($_GET['hardware_key'] ?? ($_POST['hardware_key'] ?? ''));
-$valid  = !empty($hw_key) && hash_equals('ss_hw_api_key_2052', $hw_key);
-// Also allow user-agent fallback for legacy firmware
-$ua_ok  = strpos($_SERVER['HTTP_USER_AGENT'] ?? '', 'ESP32HTTPClient') !== false;
+$valid  = !empty($hw_key) && hash_equals(HARDWARE_API_KEY, $hw_key);
 
-if (!$valid && !$ua_ok) {
+if (!$valid) {
     header('HTTP/1.1 401 Unauthorized');
     echo 'ERR:UNAUTHORIZED';
     exit;
@@ -96,10 +94,12 @@ if ($action === 'save_fp_template') {
                 $stmt->execute([$hex, $slot, $student_no]);
                 echo 'OK:SAVED:' . $student_no . ':SLOT' . $slot;
             } catch (PDOException $e2) {
-                echo 'ERR:DB:' . $e2->getMessage();
+                error_log('[esp_courses] save_fp_template alter error: ' . $e2->getMessage());
+                echo 'ERR:DB';
             }
         } else {
-            echo 'ERR:DB:' . $e->getMessage();
+            error_log('[esp_courses] save_fp_template error: ' . $e->getMessage());
+            echo 'ERR:DB';
         }
     }
     exit;
@@ -224,7 +224,8 @@ if ($action === 'delete_fp_template') {
         }
         echo 'OK:DELETED:' . $stmt->rowCount();
     } catch (PDOException $e) {
-        echo 'ERR:DB:' . $e->getMessage();
+        error_log('[esp_courses] delete_fp_template: ' . $e->getMessage());
+        echo 'ERR:DB';
     }
     exit;
 }
@@ -271,7 +272,8 @@ if ($action === 'upload_fp_template') {
             echo json_encode(['status'=>'error','message'=>'Student not found: '.$student_no]);
         }
     } catch (PDOException $e) {
-        echo json_encode(['status'=>'error','message'=>'DB: '.$e->getMessage()]);
+        error_log('[esp_courses] upload_fp_template: ' . $e->getMessage());
+        echo json_encode(['status'=>'error','message'=>'Database error.']);
     }
     exit;
 }
@@ -289,7 +291,8 @@ if ($action === 'backup_all') {
         )->fetchAll(PDO::FETCH_ASSOC);
         echo json_encode(['status'=>'ok','exported_at'=>date('Y-m-d H:i:s'),'count'=>count($rows),'templates'=>$rows], JSON_PRETTY_PRINT);
     } catch (PDOException $e) {
-        echo json_encode(['status'=>'error','message'=>'DB: '.$e->getMessage()]);
+        error_log('[esp_courses] backup_all: ' . $e->getMessage());
+        echo json_encode(['status'=>'error','message'=>'Database error.']);
     }
     exit;
 }
@@ -321,7 +324,59 @@ if ($action === 'restore_all') {
         }
         echo json_encode(['status'=>'ok','imported'=>$imported,'errors'=>$errors]);
     } catch (PDOException $e) {
-        echo json_encode(['status'=>'error','message'=>'DB: '.$e->getMessage()]);
+        error_log('[esp_courses] restore_all: ' . $e->getMessage());
+        echo json_encode(['status'=>'error','message'=>'Database error.']);
+    }
+    exit;
+}
+
+// ── 13. LIST ADMINS (for ESP32 local unlock) ──────────────────────────
+if ($action === 'list_admins') {
+    header('Content-Type: text/plain');
+    try {
+        $rows = $pdo->query(
+            "SELECT username, rfid_uid, fingerprint_id FROM admins
+             WHERE (rfid_uid IS NOT NULL AND rfid_uid != '')
+                OR (fingerprint_id IS NOT NULL AND fingerprint_id != '')
+             ORDER BY username ASC"
+        )->fetchAll(PDO::FETCH_ASSOC);
+        $parts = [];
+        foreach ($rows as $r) {
+            $rfid = strtoupper(trim($r['rfid_uid'] ?? ''));
+            $fp = trim($r['fingerprint_id'] ?? '');
+            $parts[] = $r['username'] . '|' . $rfid . '|' . $fp;
+        }
+        echo implode("\n", $parts);
+    } catch (PDOException $e) {
+        echo 'ERR:DB';
+    }
+    exit;
+}
+
+// ── 14. LIST COURSE TEMPLATES (fingerprint slots enrolled in a course) ──
+if ($action === 'list_course_templates') {
+    header('Content-Type: text/plain');
+    $code = strtoupper(trim($_GET['code'] ?? ($_POST['code'] ?? '')));
+    if (!$code) { echo 'ERR:NO_CODE'; exit; }
+    try {
+        $stmt = $pdo->prepare(
+            "SELECT s.student_no, s.fingerprint_id, s.fp_template_hex
+             FROM students s
+             INNER JOIN student_courses sc ON s.student_no = sc.student_no
+             WHERE sc.course_code = ?
+               AND s.fingerprint_id IS NOT NULL
+               AND s.fingerprint_id != ''
+             ORDER BY CAST(s.fingerprint_id AS UNSIGNED) ASC"
+        );
+        $stmt->execute([$code]);
+        $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+        $parts = [];
+        foreach ($rows as $r) {
+            $parts[] = $r['fingerprint_id'] . ':' . $r['student_no'];
+        }
+        echo implode(',', $parts);
+    } catch (PDOException $e) {
+        echo 'ERR:DB';
     }
     exit;
 }

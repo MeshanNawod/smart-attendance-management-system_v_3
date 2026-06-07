@@ -40,5 +40,19 @@
         "last_seen": 1779814996,
         "method": "plaintext",
         "blocked": false
+    },
+    "10.193.54.161": {
+        "type": "rpi",
+        "name": "rpi-face",
+        "last_seen": 1780041114,
+        "method": "plaintext",
+        "blocked": false
+    },
+    "10.32.245.36": {
+        "type": "esp32",
+        "name": "ESP32-Lab1",
+        "last_seen": 1780823964,
+        "method": "plaintext",
+        "blocked": false
     }
 }

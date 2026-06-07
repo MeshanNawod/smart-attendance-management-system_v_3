@@ -2,230 +2,247 @@
   <img src="assets/sentinel_swarm_logo.svg" alt="Sentinel Swarm" width="200">
 </p>
 
-# Sentinel Swarm AMS
+# Sentinel Swarm — Smart Attendance Management System
 
-A full-stack, multi-modal **Attendance Management System** that fuses IoT hardware (ESP32 + Raspberry Pi) with a PHP/React web dashboard.
-
-## About
-
-Sentinel Swarm is an academic project developed at **University of Peradeniya** that solves a real classroom problem: **taking attendance manually is slow, error-prone, and eats into lecture time.**
-
-The system replaces manual roll-call with **autonomous hardware nodes** that detect students and record attendance in real time — using **face recognition** (Raspberry Pi with camera), **RFID cards** (ESP32 + RC522), **QR codes**, and **voice verification**. All devices report back to a central PHP server that manages courses, schedules, and generates reports. Administrators and teachers monitor everything through a web dashboard with live device status, attendance stats, and analytics charts.
-
-### How It Works
-
-1. A **lecture session** is started from the web dashboard — this activates attendance recording for a specific course.
-2. **Hardware nodes** (RPi cameras, ESP32 RFID/QR scanners) deployed at classroom entrances detect students as they enter.
-3. Each detection is posted to the PHP server's API, which validates the student's enrollment in the active session and records the timestamp.
-4. Devices send a **heartbeat every 30 seconds** — the admin dashboard shows live online/offline status for every node.
-5. **ESP32 nodes** can also receive **OTA firmware updates** pushed from the server, so firmware can be updated remotely without physical access.
-
-### Why Three Detection Methods?
-
-| Method          | Best for                                         |
-|-----------------|--------------------------------------------------|
-| Face Recognition | Hands-free, fastest throughput, no physical token needed |
-| RFID            | Students already carry ID cards; simple tap      |
-| QR Code         | Backup method — works with any smartphone screen |
-| Voice           | Alternative for students without cards or visibility to camera |
-
-All methods converge into the same attendance records, so a student can be marked present via any modality.
-
-### Who It's For
-
-- **Students** — View their own attendance record and punctuality
-- **Teachers** — Start/stop lecture sessions, see who's present, rate courses
-- **Administrators** — Manage users, courses, devices; monitor system health; push firmware updates; view analytics
-
----
-
-## Architecture Overview
-
-```
-┌──────────────────────────────────────────────────────┐
-│                    Web Browser                       │
-│  (Admin / Teacher / Student dashboards)              │
-└──────────┬──────────────────────────┬────────────────┘
-           │ HTTP/JSON                │ HTTP/JSON
-┌──────────▼───────────┐   ┌──────────▼─────────────────┐
-│   PHP Server (API)   │   │   React SPA (frontend/)    │
-│  ├─ student.php      │   │  (Login, Teacher Dashboard)│
-│  ├─ attendance.php   │   └────────────────────────────┘
-│  ├─ heartbeat.php    │
-│  └─ 30+ more APIs    │
-└──────────┬───────────┘
-           │
-    ┌──────┴──────┐
-    │  MySQL DB   │
-    └─────────────┘
-           ▲ (heartbeat / attendance)
-           │
-┌──────────┴───────────────────┐     ┌─────────────────────┐
-│   Raspberry Pi (Flask)       │     │   ESP32 Nodes       │
-│  ├─ Face recognition         │     │  ├─ RFID scan       │
-│  ├─ MJPEG stream             │     │  ├─ QR scan         │
-│  ├─ Heartbeat → heartbeat.php│     │  ├─ Voice capture   │
-│  └─ Attendance POST          │     │  └─ Heartbeat       │
-└──────────────────────────────┘     └─────────────────────┘
-```
+A full-stack, multi-modal **Attendance Management System** combining IoT hardware (ESP32 + Raspberry Pi) with a PHP/JS web dashboard. Designed for **University of Peradeniya** to replace manual roll-call with autonomous attendance collection.
 
 ---
 
 ## Features
 
-### Attendance Capture
-- **Face Recognition** – Raspberry Pi + `face_recognition` library detects known students and posts attendance automatically
-- **RFID** – ESP32 nodes with RC522 readers scan RFID cards
-- **QR Code** – Generate and scan QR codes via ESP32 or browser
-- **Voice** – Voice module integration on ESP32
-- **Manual** – Web dashboard with student/course selector
-- **Cooldown** – Per-student, per-cooldown deduplication (configurable)
+### Multi-Modal Attendance
+| Method | Device | Description |
+|--------|--------|-------------|
+| Fingerprint | ESP32 + FM10A | Enroll once, share across all sensors campus-wide |
+| RFID | ESP32 + MFRC522 | Tap student ID cards |
+| Face Recognition | Web Browser | face-api.js in-browser with liveness detection |
+| Face Recognition | Raspberry Pi | Pi Camera + OpenCV for entrance/exit tracking |
+| Voice | Web Browser | Speaker verification via audio fingerprinting |
+| QR Code | Web Browser | Dynamic QR refreshes every 5s (anti-spoof) |
+| Manual | Dashboard | Lecturers can mark manually from any device |
 
-### Dashboards
-- **Admin** – Device monitoring (SSE live updates), attendance stats, charts, student/teacher management, database viewer, logs, OTA firmware uploads
-- **Teacher** – Course attendance, ratings/comments, per-session reports
-- **Student** – Personal attendance record
+### Hardware Nodes
+- **ESP32-based** attendance terminals with 4x4 keypad, I2C LCD (16x4), FM10A fingerprint sensor, MFRC522 RFID reader, SD card for offline queue, and buzzer
+- **Raspberry Pi 3B+** with Pi Camera for face recognition at entrances
+- **Custom expansion board** with 18650 battery, TP4056 charger, XL6009 boost converter, MOSFET power gating
+- OTA firmware updates pushed from the dashboard
+- ESP-NOW mesh networking for offline device-to-device communication
 
-### Device Management
-- ESP32 nodes auto-register on first heartbeat
-- Real-time online/offline status via `/api/heartbeat.php`
-- OTA firmware updates proxied through the PHP server
-- Device-to-course bindings (each device can be assigned to a course)
+### Dashboard (Admin)
+- Real-time attendance logs with student name, No, timestamp, device, and modality
+- Student database with bulk enrollment (CSV, photo upload)
+- Teacher management, course scheduling, and timetable
+- Device control center: serial monitor, LCD mirror, virtual keypad, Wi-Fi scanner, Bluetooth scanner
+- Fingerprint template download/upload across FM10A sensors
+- Live LCD mirror showing exactly what's on the physical display
+- SD card configuration download for first-time device setup
+- System logs, analytics charts, attendance summaries
+- Offline queue management — data syncs when connection is restored
+- Email notifications for absent students (<80% attendance)
+- Multi-language support
 
-### Security
-- Session-based auth with CSRF tokens
-- Account lockout after failed attempts
-- Password hashing (PHP `password_hash`)
-- API key validation (`hardware_key`) for hardware endpoints
+### Dashboard (Teacher)
+- My Courses with enrolled student lists
+- Start/stop lecture sessions (triggers hardware nodes)
+- Manual attendance marking (face, voice, QR)
+- View attendance records, ratings, session history
+- Forum discussion for each course
+
+### Student Self-Service
+- View personal attendance record and punctuality
+- Link face/voice biometrics
+- Update profile and photo
+
+### Face Recognition Pipeline
+- **Browser**: face-api.js (TensorFlow.js) — 128-d descriptors, liveness detection (blink, head turn)
+- **Raspberry Pi**: OpenCV Haar Cascade + 4096-d vector encoding + cosine similarity
+- Face data is shared across web and RPi pipelines for consistency
+- Bulk enrollment from university ID photo database
+
+### Power Management
+- 18650 Li-ion battery + TP4056 charger
+- XL6009 step-up (3.7V → 5V)
+- LM2596 step-down (5V → 3.3V)
+- 2SK2161 MOSFETs for component power gating
+- Automatic sleep after inactivity
 
 ---
 
-## Tech Stack
+## Quick Install (Raspberry Pi)
 
-| Layer    | Technology                                      |
-|----------|-------------------------------------------------|
-| Backend  | PHP 8.x, PDO, MySQL/MariaDB                     |
-| Frontend | React 19, Vite 8, React Router                  |
-| IoT      | Flask (Python 3), OpenCV, face_recognition, picamera2 |
-| Hardware | Raspberry Pi 3B+, ESP32, RC522, QR scanners, voice modules |
+### Prerequisites
+- Raspberry Pi 3B+ or newer
+- Pi Camera or USB webcam
+- Raspberry Pi OS Bookworm (64-bit)
+
+### One-Line Setup
+```bash
+# 1. Install Apache + PHP + MariaDB
+sudo apt update && sudo apt install -y apache2 php libapache2-mod-php php-mysql php-curl php-mbstring php-xml mariadb-server
+
+# 2. Clone the project
+sudo mkdir -p /var/www/html/csc2052
+# Copy project files to /var/www/html/csc2052
+
+# 3. Import database
+sudo mariadb -e "CREATE DATABASE IF NOT EXISTS csc2052 CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
+sudo mariadb csc2052 < /var/www/html/csc2052/csc2052.sql
+
+# 4. Set permissions
+sudo chown -R www-data:www-data /var/www/html/csc2052
+sudo chmod -R 755 /var/www/html/csc2052
+
+# 5. Enable HTTPS for camera access
+sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/ssl/private/selfsigned.key \
+  -out /etc/ssl/certs/selfsigned.crt \
+  -subj "/CN=$(hostname -I | awk '{print $1}')"
+sudo a2enmod ssl
+# Configure virtual host with SSLEngine on (see docs)
+
+# 6. (Optional) Face Recognition Service
+cd ~/rpi_flask
+python3 -m venv venv --system-site-packages
+source venv/bin/activate
+pip install opencv-python flask flask-cors psutil
+# Enable camera: sudo raspi-config nonint do_camera 0
+# Start: sudo systemctl enable --now rpi-face.service
+```
+
+### Hardware Setup
+1. Connect Pi Camera to CSI port (blue, between HDMI and audio)
+2. Enable camera interface: `sudo raspi-config` → Interface Options → Camera
+3. Set camera overlay: `echo "dtoverlay=ov5647" | sudo tee -a /boot/firmware/config.txt` (v1 camera) or `imx219` (v2)
+4. Reboot: `sudo reboot`
 
 ---
 
-## Quick Start
+## ESP32 Firmware
 
-### Requirements
-- PHP 8.1+
-- MySQL / MariaDB
-- Node.js 20+ (for frontend)
-- Composer (for PHP deps)
-- A web server (Apache / Nginx)
+The ESP32 firmware (`esp32_firmware/esp32_firmware.ino`) supports:
+- FM10A fingerprint sensor enrollment and matching
+- MFRC522 RFID card reading
+- 4x4 matrix keypad with multi-tap text input
+- I2C LCD (16x4) display
+- Web server for OTA commands and dashboard integration
+- SD card for offline queue and template storage
+- WiFi connectivity with hardware key authentication
+- ESP-NOW mesh for offline communication
+- Heartbeat sync every 30 seconds
 
-### Setup
-
-```bash
-# 1. Clone the repository
-git clone https://github.com/MeshanNawod/csc2052.git
-cd csc2052
-
-# 2. Import the database schema
-mysql -u root -p csc2052 < sql/schema.sql
-# Run any pending migrations from sql/migrations/
-
-# 3. Configure the database connection
-cp includes/config.example.php includes/config.php
-# Edit includes/config.php with your DB credentials
-
-# 4. (Optional) Build the React frontend
-cd frontend
-npm install
-npm run build
-cd ..
-
-# 5. Serve the PHP app
-# Point your web server document root to this directory
-```
-
-### Raspberry Pi Setup
-
-```bash
-# On your Raspberry Pi
-pip install -r rpi_flask/requirements.txt
-
-# Edit config
-nano rpi_flask/config.json
-# Set ota_server_url to your PHP server's base URL
-# Adjust camera_type ("picamera" or "usb")
-
-# Run the face-recognition service
-python rpi_flask/app.py
-```
-
-### Configuration
-
-Key settings in `rpi_flask/config.json`:
-
-| Key                  | Default   | Description                              |
-|----------------------|-----------|------------------------------------------|
-| `ota_server_url`     | `null`    | PHP server base URL                      |
-| `heartbeat_interval` | `30`      | Seconds between heartbeats               |
-| `server_post_attendance` | `true` | Auto-post recognized faces to PHP server |
-| `recognition_cache_ms` | `500`   | Cache recognition results (ms)           |
-| `attendance_cooldown` | `5`      | Seconds before same student can re-scan  |
-| `face_model`         | `hog`     | Recognition model: `hog` or `cnn`        |
-| `threshold`          | `0.55`    | Face match confidence threshold          |
+### OTA Commands
+| Command | Description |
+|---------|-------------|
+| GETSTATUS | Device status (WiFi, heap, uptime, queue) |
+| GETCONFIG | Show current config |
+| SETCONFIG ... | Set config values |
+| ENROLL_FP | Enroll fingerprint |
+| DELETE_FP_SLOT N | Delete slot N |
+| DOWNLOAD_FP_TEMPLATES | Sync missing templates from server |
+| LOAD_TEMPLATE N | Download & import template for slot N |
+| SCANWIFI | List available WiFi networks |
+| SCANBT | List Bluetooth devices |
+| CONNECTWIFI SSID PASS | Connect to WiFi |
 
 ---
 
 ## API Endpoints
 
-| Endpoint                      | Method | Description                              |
-|-------------------------------|--------|------------------------------------------|
-| `/api/heartbeat.php`          | GET    | Device heartbeat + registration          |
-| `/api/student.php`            | POST   | Manual attendance, student search        |
-| `/api/attendance.php`         | GET/POST | Manage lecture sessions, attendance records |
-| `/api/face_scanned.php`       | POST   | Attendance via face recognition          |
-| `/api/rfid_scanned.php`       | POST   | Attendance via RFID scan                 |
-| `/api/qr_attendance.php`      | POST   | Attendance via QR code                   |
-| `/api/voice.php`              | POST   | Attendance via voice capture             |
-| `/api/device_password.php`    | POST   | Verify device passwords                  |
-| `/api/esp_ota_proxy.php`      | GET    | Proxy OTA firmware to ESP32              |
-| `/api/system_logs.php`        | POST   | Receive logs from ESP32 nodes            |
-| `/api/voice_settings.php`     | POST   | Save voice settings                      |
-| `/api/teacher.php`            | POST   | Teacher CRUD operations                  |
-| `/api/charts.php`             | GET    | Attendance chart data                    |
-| `/api/ratings.php`            | POST   | Course ratings & comments                |
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/student.php` | Student CRUD, attendance marking, face linking |
+| `POST /api/teacher.php` | Teacher CRUD, course management |
+| `GET /api/esp_courses.php` | Course/slot/template data for ESP32 |
+| `GET /api/esp_ota_proxy.php` | Proxy OTA commands to ESP32 |
+| `GET /api/heartbeat.php` | Device heartbeat + registration |
+| `GET /api/sse_monitor.php` | Server-Sent Events for serial monitor |
+| `POST /api/attendance/fingerprint/record.php` | Fingerprint attendance |
+| `POST /api/attendance/rfid/record.php` | RFID attendance |
+| `POST /api/attendance/voice/record.php` | Voice attendance |
+| `POST /api/attendance/face/record.php` | Face attendance (RPi) |
+| `POST /api/system_logs.php` | ESP32 log submission |
+| `GET /api/ota.php` | OTA command queue polling |
+
+All hardware endpoints require `hardware_key` or valid session token.
 
 ---
 
-## Directory Structure
+## Project Structure
 
 ```
-├── api/                    # PHP REST API endpoints
-├── css/                    # Stylesheets
-├── includes/               # PHP helpers, configs, dashboard cards
-│   ├── attendance_helper.php
-│   ├── config/
-│   ├── dashboard/
-│   ├── database/
-│   └── helpers/
-├── js/                     # Frontend JavaScript
-│   ├── main.js
-│   ├── face_recognition.js
-│   ├── attendance/
-│   └── admin/
-├── frontend/               # React SPA
-├── rpi_flask/              # Flask face-recognition microservice
-│   ├── app.py              # Main service (~1110 lines)
-│   └── config.json         # RPi configuration
-├── esp32_firmware/         # Arduino sketches for ESP32 nodes
-├── sql/
-│   ├── schema.sql
-│   └── migrations/         # Incremental schema changes
-└── uploads/students/       # Student face images
+csc2052/
+├── api/                        # PHP backend API endpoints
+│   ├── attendance/             # Modality-specific recorders
+│   ├── student.php             # Student management & attendance
+│   ├── teacher.php             # Teacher & course management
+│   ├── esp_courses.php         # ESP32 course/template data
+│   ├── esp_ota_proxy.php       # OTA command proxy
+│   ├── heartbeat.php           # Device heartbeat
+│   ├── sse_monitor.php         # Server-Sent Events
+│   ├── system_logs.php         # Device log collection
+│   ├── device_password.php     # Device PIN management
+│   ├── voice_settings.php      # TTS configuration
+│   ├── ratings.php             # Ratings & forum
+│   └── ota.php                 # OTA command queue
+├── assets/                     # Images, logos, favicon
+├── css/                        # Stylesheets
+├── includes/                   # PHP helpers, auth, database, cards
+│   ├── auth/                   # Session & authentication
+│   ├── cards/                  # Dashboard card components
+│   ├── config/                 # App configuration
+│   ├── dashboard/              # Dashboard-specific includes
+│   ├── database/               # DB connection
+│   └── helpers/                # Shared utility functions
+├── js/                         # JavaScript
+│   ├── vendor/                 # Third-party libs
+│   ├── face_recognition.js     # Browser-based face API
+│   └── main.js                 # Core dashboard logic
+├── weights/                    # face-api.js model weights
+├── models/                     # face-api.js model weights (mirror)
+├── rpi_flask/                  # Raspberry Pi Flask service
+│   ├── app.py                  # Face recognition service
+│   ├── config.json             # Flask service config
+│   ├── requirements.txt        # Python dependencies
+│   └── setup.sh                # Automated Pi setup
+├── esp32_firmware/             # ESP32 Arduino firmware
+│   └── esp32_firmware.ino      # Main firmware (4461 lines)
+├── sql/                        # Database migrations
+├── csc2052.sql                 # Full database dump
+├── index.php                   # Main entry point
+├── device.php                  # Device control center
+└── README.md                   # This file
 ```
+
+---
+
+## Security
+
+- All API endpoints require authentication (session token or hardware key)
+- CSRF protection on mutating operations
+- Hardware API key validated on every device request
+- No database error messages leaked to clients (all logged server-side)
+- SSRF protection on OTA proxy and SSE monitor (IP validation + private range rejection)
+- XSS prevention via `json_encode()` for dynamic script content
+- Device registry names sanitized to `[a-zA-Z0-9_\- ]`
+- Session fingerprint includes IP + User-Agent
+- Permissions-Policy: microphone restricted to self-origin
+
+---
+
+## Technologies
+
+| Component | Technology |
+|-----------|------------|
+| Backend | PHP 8.2, Apache 2.4, MariaDB 10.4 |
+| Frontend | Vanilla JS, Bootstrap 5, face-api.js |
+| Firmware | Arduino/C++ (ESP32 Arduino Core) |
+| Face (RPi) | Python 3, OpenCV, Flask, picamera2 |
+| Face (Browser) | TensorFlow.js (face-api.js) |
+| Icons | Bootstrap Icons |
+| Charts | (custom JS) |
 
 ---
 
 ## License
 
-This project is developed for academic purposes at University of Peradeniya.
+Academic project — University of Peradeniya

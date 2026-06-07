@@ -99,7 +99,7 @@ if (!headers_sent()) {
     header('Referrer-Policy: strict-origin-when-cross-origin');
     header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
     header('X-Permitted-Cross-Domain-Policies: none');
-    header('Permissions-Policy: geolocation=(), microphone=(), camera=(self)');
+    header('Permissions-Policy: geolocation=(), microphone=(self), camera=(self)');
     header("Content-Security-Policy: default-src 'self' https://fonts.googleapis.com https://fonts.gstatic.com; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self' blob:; connect-src 'self' http: https: https://*.firebaseio.com https://*.googleapis.com;");
 }
 

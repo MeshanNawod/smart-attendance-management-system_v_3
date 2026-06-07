@@ -357,6 +357,22 @@ function deleteCourse(code) {
     });
 }
 
+function lookupEnrollStudent() {
+    const stuNo = document.getElementById('enroll-stu-course-no').value.trim();
+    const info = document.getElementById('enroll-stu-info');
+    if (!stuNo) { info.innerHTML = ''; return; }
+    fetch('/csc2052/api/student.php?action=search_student&query=' + encodeURIComponent(stuNo))
+        .then(r => r.json())
+        .then(data => {
+            if (data.student_name) {
+                info.innerHTML = '<span class="text-success fw-bold">' + escapeHtml(data.student_name) + '</span>';
+            } else {
+                info.innerHTML = '<span class="text-warning">Student not found</span>';
+            }
+        })
+        .catch(() => { info.innerHTML = ''; });
+}
+
 function enrollStudentCourse() {
     const stuNo = document.getElementById('enroll-stu-course-no').value.trim();
     const course = document.getElementById('enroll-stu-course-select').value;

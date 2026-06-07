@@ -53,7 +53,8 @@
                         <h6 class="text-muted fw-bold mb-2"><i class="bi bi-person-plus me-1"></i>Enroll Student in Course</h6>
                         <div class="row g-2 mb-2">
                             <div class="col-5">
-                                <input type="text" id="enroll-stu-course-no" class="form-control form-control-sm" placeholder="Student No (e.g. S/22/314)">
+                                <input type="text" id="enroll-stu-course-no" class="form-control form-control-sm" placeholder="Student No (e.g. S/22/314)" oninput="lookupEnrollStudent()">
+                                <div id="enroll-stu-info" class="small mt-1 text-muted" style="min-height:1.2em;"></div>
                             </div>
                             <div class="col-5">
                                 <select id="enroll-stu-course-select" class="form-select form-select-sm">

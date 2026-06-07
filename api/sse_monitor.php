@@ -22,6 +22,14 @@ if (!$ip) {
     flush();
     exit;
 }
+// SSRF guard: only allow private or link-local IPs (ESP32s are on local network)
+$isPrivate = !filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE);
+$isReserved = !filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_RES_RANGE);
+if (!$isPrivate && !$isReserved) {
+    echo "data: {\"error\":\"Only local network IPs allowed\"}\n\n";
+    flush();
+    exit;
+}
 
 $timeout = 300;
 $start = time();

@@ -9,8 +9,17 @@ uploads/temp/*
 
 # ─── Device / Hardware Status Files ──────────────────────
 devices_registry.json
+sys_status_*.txt
 *.bin
 *.hex
+
+# ─── Runtime / Scrap Files ──────────────────────────────
+cookie.txt
+test_cookies.txt
+login_result.html
+device_output.html
+device_test.html
+VIDEO_SCRIPT.md
 
 # ─── IDE / Editor Metadata ──────────────────────────────
 .idea/

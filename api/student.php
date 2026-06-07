@@ -484,42 +484,47 @@ if ($action === 'update_student') {
         // Check if student exists
         $checkStmt = $pdo->prepare("SELECT student_no FROM students WHERE student_no = ?");
         $checkStmt->execute([$stu_no]);
-        if ($checkStmt->rowCount() === 0) {
-            respond('error', "Student {$stu_no} not found.", 404);
-        }
+        $exists = $checkStmt->rowCount() > 0;
 
         // Validate fingerprint_id range if provided
         if ($f_id !== null && ($f_id < 1 || $f_id > 127)) {
             respond('error', 'Fingerprint ID must be between 1 and 127.', 422);
         }
 
-        // Build dynamic update query
-        $updates = [];
-        $params  = [];
+        if ($exists) {
+            // Build dynamic update query
+            $updates = [];
+            $params  = [];
 
-        if ($name !== '')       { $updates[] = "student_name = ?"; $params[] = $name; }
-        if ($f_id !== null)     { $updates[] = "fingerprint_id = ?"; $params[] = $f_id; }
-        if ($rfid !== null)     { $updates[] = "rfid_uid = ?"; $params[] = $rfid; }
-        if ($face_id !== null)  { $updates[] = "face_id = ?"; $params[] = $face_id; }
+            if ($name !== '')       { $updates[] = "student_name = ?"; $params[] = $name; }
+            if ($f_id !== null)     { $updates[] = "fingerprint_id = ?"; $params[] = $f_id; }
+            if ($rfid !== null)     { $updates[] = "rfid_uid = ?"; $params[] = $rfid; }
+            if ($face_id !== null)  { $updates[] = "face_id = ?"; $params[] = $face_id; }
 
-        if (empty($updates)) {
-            respond('error', 'No fields to update.', 400);
-        }
+            if (empty($updates)) {
+                respond('error', 'No fields to update.', 400);
+            }
 
-        $query = "UPDATE students SET " . implode(', ', $updates) . " WHERE student_no = ?";
-        $params[] = $stu_no;
+            $query = "UPDATE students SET " . implode(', ', $updates) . " WHERE student_no = ?";
+            $params[] = $stu_no;
 
-        $stmt = $pdo->prepare($query);
-        $stmt->execute($params);
+            $stmt = $pdo->prepare($query);
+            $stmt->execute($params);
 
-        if ($stmt->rowCount() > 0) {
-            respond('success', "Student {$stu_no} updated successfully.");
+            if ($stmt->rowCount() > 0) {
+                respond('success', "Student {$stu_no} updated successfully.");
+            } else {
+                respond('success', "No changes needed for {$stu_no}.");
+            }
         } else {
-            respond('success', "No changes needed for {$stu_no}.");
+            // Insert new student
+            $stmt = $pdo->prepare("INSERT INTO students (student_no, student_name, fingerprint_id, rfid_uid, face_id) VALUES (?, ?, ?, ?, ?)");
+            $stmt->execute([$stu_no, $name ?: 'Unknown', $f_id, $rfid, $face_id]);
+            respond('success', "Student {$stu_no} created successfully.");
         }
     } catch (PDOException $e) {
         error_log('[Student API] update_student: ' . $e->getMessage());
-        respond('error', 'Database error while updating student: ' . $e->getMessage(), 500);
+        respond('error', 'A database error occurred.', 500);
     }
 }
 
@@ -618,7 +623,7 @@ if ($action === 'delete_student') {
     } catch (PDOException $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         error_log('[Student API] delete_student: ' . $e->getMessage());
-        respond('error', 'Database error: ' . $e->getMessage(), 500);
+        respond('error', 'A database error occurred.', 500);
     }
 }
 
@@ -643,7 +648,7 @@ if ($action === 'bulk_delete_students') {
     } catch (PDOException $e) {
         if ($pdo->inTransaction()) $pdo->rollBack();
         error_log('[Student API] bulk_delete: ' . $e->getMessage());
-        respond('error', 'Database error during bulk delete: ' . $e->getMessage(), 500);
+        respond('error', 'A database error occurred during bulk delete.', 500);
     }
 }
 
@@ -787,8 +792,8 @@ if ($action === 'manual_attendance') {
 // ─── search_student ───────────────────────────────────────────────
 if ($action === 'search_student') {
     header('Content-Type: application/json; charset=utf-8');
-    $qr     = sanitizeStudentNo($_POST['query'] ?? '');
-    $course = substr(preg_replace('/[^a-zA-Z0-9_\- ]/', '', trim($_POST['course_code'] ?? '')), 0, 30);
+    $qr     = sanitizeStudentNo($_POST['query'] ?? $_GET['query'] ?? '');
+    $course = substr(preg_replace('/[^a-zA-Z0-9_\- ]/', '', trim($_POST['course_code'] ?? $_GET['course_code'] ?? '')), 0, 30);
 
     if (empty($qr)) {
         echo json_encode(['student_name' => null]);
@@ -903,7 +908,8 @@ if ($action === 'enroll_student_course') {
         $stmtCheck = $pdo->prepare("SELECT student_no FROM students WHERE student_no = ?");
         $stmtCheck->execute([$stuNo]);
         if (!$stmtCheck->fetch()) {
-            respond('error', "Student {$stuNo} not found.", 404);
+            $stmtInsert = $pdo->prepare("INSERT INTO students (student_no, student_name) VALUES (?, 'Unknown')");
+            $stmtInsert->execute([$stuNo]);
         }
 
         $stmtCheck2 = $pdo->prepare("SELECT course_code FROM courses WHERE course_code = ?");
@@ -1545,13 +1551,14 @@ if ($action === 'update_my_profile') {
         }
 
         if (!empty($newPassword)) {
-            // Check if user has password hash
-            $stmt = $pdo->prepare("SELECT password_hash FROM users WHERE id = ?");
+            // Check if user must change password (first-time setup) or has existing hash
+            $stmt = $pdo->prepare("SELECT password_hash, must_change_password FROM users WHERE id = ?");
             $stmt->execute([$userId]);
             $u = $stmt->fetch(PDO::FETCH_ASSOC);
-            
-            // If user has a password hash, verify current password
-            if (!empty($u['password_hash'])) {
+
+            $isFirstTime = ($u && !empty($u['must_change_password']));
+
+            if (!empty($u['password_hash']) && !$isFirstTime) {
                 if (empty($currentPassword)) {
                     echo json_encode(['status' => 'error', 'message' => 'Current password required to change.']); exit;
                 }
@@ -1559,10 +1566,10 @@ if ($action === 'update_my_profile') {
                     echo json_encode(['status' => 'error', 'message' => 'Current password is incorrect.']); exit;
                 }
             }
-            // If no password hash (first-time setup), allow setting password directly
-            
+
             $hash = password_hash($newPassword, PASSWORD_BCRYPT);
-            $pdo->prepare("UPDATE users SET password_hash = ? WHERE id = ?")->execute([$hash, $userId]);
+            $pdo->prepare("UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?")->execute([$hash, $userId]);
+            $_SESSION['must_change_password'] = false;
         }
 
         $stmt = $pdo->prepare("UPDATE students SET student_name = ? WHERE student_no = ?");
@@ -1571,7 +1578,8 @@ if ($action === 'update_my_profile') {
 
         echo json_encode(['status' => 'success', 'message' => 'Profile updated.']);
     } catch (PDOException $e) {
-        echo json_encode(['status' => 'error', 'message' => 'Database error: ' . $e->getMessage()]);
+        error_log('[Student API] update_profile: ' . $e->getMessage());
+        echo json_encode(['status' => 'error', 'message' => 'A database error occurred.']);
     }
     exit;
 }
@@ -1761,7 +1769,8 @@ if ($action === 'get_my_courses') {
 
         echo json_encode(['status' => 'success', 'courses' => $courses, 'tier' => $tier, 'overall' => $overallPct]);
     } catch (PDOException $e) {
-        echo json_encode(['status' => 'error', 'message' => 'Database error: ' . $e->getMessage()]);
+        error_log('[Student API] my_attendance_stats: ' . $e->getMessage());
+        echo json_encode(['status' => 'error', 'message' => 'A database error occurred.']);
     }
     exit;
 }

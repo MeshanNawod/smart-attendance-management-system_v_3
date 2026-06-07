@@ -11,22 +11,17 @@ $token  = $_POST['token']  ?? $_GET['token']  ?? '';
 
 $hw_key = $_SERVER['HTTP_X_HARDWARE_KEY'] ?? ($_POST['hardware_key'] ?? '');
 
-if ($method !== 'plaintext') {
-    if ($token === '' && $hw_key === '') {
-        http_response_code(401);
-        echo json_encode(['status' => 'error', 'message' => 'Unauthorized: token required for ' . $method . ' mode.']);
-        exit;
-    }
-    if ($token !== '' && !hash_equals(HEARTBEAT_SECRET, $token)) {
-        http_response_code(401);
-        echo json_encode(['status' => 'error', 'message' => 'Unauthorized: invalid token.']);
-        exit;
-    }
-    if ($hw_key !== '' && !hash_equals(HARDWARE_API_KEY, $hw_key)) {
-        http_response_code(401);
-        echo json_encode(['status' => 'error', 'message' => 'Unauthorized: invalid hardware key.']);
-        exit;
-    }
+$auth_ok = false;
+if ($token !== '' && hash_equals(HEARTBEAT_SECRET, $token)) {
+    $auth_ok = true;
+}
+if ($hw_key !== '' && hash_equals(HARDWARE_API_KEY, $hw_key)) {
+    $auth_ok = true;
+}
+if (!$auth_ok) {
+    http_response_code(401);
+    echo json_encode(['status' => 'error', 'message' => 'Unauthorized: valid token or hardware key required.']);
+    exit;
 }
 
 $finger_id   = trim($_POST['finger_id'] ?? '');
@@ -65,9 +60,10 @@ if (is_numeric($finger_id)) {
 $ip = $_SERVER['REMOTE_ADDR'];
 $registry_file = __DIR__ . '/../../../devices_registry.json';
 $registry = file_exists($registry_file) ? json_decode(file_get_contents($registry_file), true) ?: [] : [];
+$safe_name = preg_replace('/[^a-zA-Z0-9_\- ]/', '', substr($device_name, 0, 64));
 $registry[$ip] = [
     'type'      => 'esp32',
-    'name'      => $device_name,
+    'name'      => $safe_name,
     'last_seen' => time(),
     'method'    => $method,
     'blocked'   => $registry[$ip]['blocked'] ?? false,
@@ -128,6 +124,7 @@ try {
         'session_id' => $result['session_id'],
     ]);
 } catch (PDOException $e) {
+    error_log('[Fingerprint Record] DB error: ' . $e->getMessage());
     http_response_code(500);
-    echo json_encode(['status' => 'error', 'message' => 'Database error: ' . $e->getMessage()]);
+    echo json_encode(['status' => 'error', 'message' => 'Database error.']);
 }

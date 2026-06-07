@@ -20,8 +20,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         }
         echo json_encode(['status' => 'success', 'settings' => $row]);
     } catch (PDOException $e) {
+        error_log('[VoiceSettings] GET: ' . $e->getMessage());
         http_response_code(500);
-        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+        echo json_encode(['status' => 'error', 'message' => 'A database error occurred.']);
     }
     exit;
 }
@@ -52,8 +53,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $logs_columns]);
         echo json_encode(['status' => 'success', 'message' => 'Voice settings saved.']);
     } catch (PDOException $e) {
+        error_log('[VoiceSettings] POST: ' . $e->getMessage());
         http_response_code(500);
-        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+        echo json_encode(['status' => 'error', 'message' => 'A database error occurred.']);
     }
     exit;
 }

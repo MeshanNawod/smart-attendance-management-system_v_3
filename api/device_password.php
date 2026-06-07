@@ -21,8 +21,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         }
         echo json_encode(['status' => 'success', 'system_pin' => $row['system_pin']]);
     } catch (PDOException $e) {
+        error_log('[DevicePassword] GET: ' . $e->getMessage());
         http_response_code(500);
-        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+        echo json_encode(['status' => 'error', 'message' => 'A database error occurred.']);
     }
     exit;
 }
@@ -39,8 +40,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([$device_id, $pin, $pin]);
         echo json_encode(['status' => 'success', 'message' => 'Device password updated.']);
     } catch (PDOException $e) {
+        error_log('[DevicePassword] POST: ' . $e->getMessage());
         http_response_code(500);
-        echo json_encode(['status' => 'error', 'message' => $e->getMessage()]);
+        echo json_encode(['status' => 'error', 'message' => 'A database error occurred.']);
     }
     exit;
 }

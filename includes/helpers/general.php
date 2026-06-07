@@ -100,3 +100,12 @@ if (!function_exists('apiError')) {
         exit;
     }
 }
+
+if (!function_exists('respond')) {
+    function respond(string $status, string $message, int $httpCode = 200, mixed $data = null): never {
+        if ($status === 'error') {
+            apiError($message, $httpCode);
+        }
+        apiResponse($status, $message, $data, $httpCode);
+    }
+}

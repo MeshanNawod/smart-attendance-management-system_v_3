@@ -77,7 +77,8 @@ case 'get_summary': {
             'comment_count' => $commentCount,
         ]);
     } catch (PDOException $e) {
-        echo json_encode(['status'=>'error','message'=>$e->getMessage()]);
+        error_log('[Ratings] get_summary: ' . $e->getMessage());
+        echo json_encode(['status'=>'error','message'=>'A database error occurred.']);
     }
     break;
 }
@@ -113,7 +114,8 @@ case 'get_board': {
 
         echo json_encode(['status'=>'success','teachers'=>$teachers,'courses'=>$courses]);
     } catch (PDOException $e) {
-        echo json_encode(['status'=>'error','message'=>$e->getMessage()]);
+        error_log('[Ratings] get_board: ' . $e->getMessage());
+        echo json_encode(['status'=>'error','message'=>'A database error occurred.']);
     }
     break;
 }
@@ -183,7 +185,8 @@ case 'get_comments': {
 
         echo json_encode(['status'=>'success','comments'=>$topLevel,'total'=>$total,'limit'=>$limit,'offset'=>$offset]);
     } catch (PDOException $e) {
-        echo json_encode(['status'=>'error','message'=>$e->getMessage()]);
+        error_log('[Ratings] get_comments: ' . $e->getMessage());
+        echo json_encode(['status'=>'error','message'=>'A database error occurred.']);
     }
     break;
 }
@@ -212,7 +215,8 @@ case 'submit_rating': {
         $s = $stmt2->fetch();
         echo json_encode(['status'=>'success','my_stars'=>$stars,'avg_stars'=>(float)$s['avg'],'total'=>(int)$s['n']]);
     } catch (PDOException $e) {
-        echo json_encode(['status'=>'error','message'=>$e->getMessage()]);
+        error_log('[Ratings] submit_rating: ' . $e->getMessage());
+        echo json_encode(['status'=>'error','message'=>'A database error occurred.']);
     }
     break;
 }
@@ -262,7 +266,8 @@ case 'submit_comment': {
 
         echo json_encode(['status'=>'success','comment'=>$comment]);
     } catch (PDOException $e) {
-        echo json_encode(['status'=>'error','message'=>$e->getMessage()]);
+        error_log('[Ratings] submit_comment: ' . $e->getMessage());
+        echo json_encode(['status'=>'error','message'=>'A database error occurred.']);
     }
     break;
 }
@@ -284,7 +289,8 @@ case 'edit_comment': {
         $affected = $stmt->rowCount();
         echo json_encode(['status'=> $affected ? 'success' : 'error', 'message'=> $affected ? 'Updated' : 'Not found or forbidden']);
     } catch (PDOException $e) {
-        echo json_encode(['status'=>'error','message'=>$e->getMessage()]);
+        error_log('[Ratings] edit_comment: ' . $e->getMessage());
+        echo json_encode(['status'=>'error','message'=>'A database error occurred.']);
     }
     break;
 }
@@ -309,7 +315,8 @@ case 'delete_comment': {
         $affected = $stmt->rowCount();
         echo json_encode(['status'=> $affected ? 'success' : 'error']);
     } catch (PDOException $e) {
-        echo json_encode(['status'=>'error','message'=>$e->getMessage()]);
+        error_log('[Ratings] delete_comment: ' . $e->getMessage());
+        echo json_encode(['status'=>'error','message'=>'A database error occurred.']);
     }
     break;
 }
@@ -338,7 +345,8 @@ case 'toggle_like': {
         $count = (int)$stmt2->fetch()['n'];
         echo json_encode(['status'=>'success','liked'=>$liked,'like_count'=>$count]);
     } catch (PDOException $e) {
-        echo json_encode(['status'=>'error','message'=>$e->getMessage()]);
+        error_log('[Ratings] toggle_like: ' . $e->getMessage());
+        echo json_encode(['status'=>'error','message'=>'A database error occurred.']);
     }
     break;
 }
@@ -358,7 +366,8 @@ case 'pin_comment': {
         $pinned = (bool)$pinStmt->fetchColumn();
         echo json_encode(['status'=>'success','pinned'=>$pinned]);
     } catch (PDOException $e) {
-        echo json_encode(['status'=>'error','message'=>$e->getMessage()]);
+        error_log('[Ratings] pin_comment: ' . $e->getMessage());
+        echo json_encode(['status'=>'error','message'=>'A database error occurred.']);
     }
     break;
 }

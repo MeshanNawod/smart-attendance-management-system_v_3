@@ -245,8 +245,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
         $teacherId = $_SESSION['teacher_id'] ?? null;
         if (!$teacherId) { 
             error_log("[Teacher API] teacher_logs: No teacher_id in session");
-            apiResponse('error', 'Not authenticated as teacher.', ['logs' => []]); 
-            exit; 
+            apiError('Not authenticated as teacher.', 401); 
         }
         try {
             $stmt = $pdo->prepare("SELECT course_code FROM teacher_courses WHERE teacher_id = ?");
@@ -380,7 +379,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             // Per-student attendance counts
             $s = $pdo->prepare("
                 SELECT sc.course_code, s.student_no, s.student_name,
-                    COUNT(DISTINCT DATE(al.id)) as attended
+                    COUNT(DISTINCT DATE(al.timestamp)) as attended
                 FROM student_courses sc
                 JOIN students s ON sc.student_no = s.student_no
                 LEFT JOIN attendance_logs al ON al.student_no = sc.student_no AND al.course_code = sc.course_code
@@ -637,8 +636,9 @@ if ($action === 'add_teacher') {
         $userId = $pdo->lastInsertId();
         $stmt = $pdo->prepare("INSERT INTO teachers (user_id, teacher_name, department) VALUES (?, ?, ?)");
         $stmt->execute([$userId, $name, $department]);
+        $teacherId = $pdo->lastInsertId();
         $pdo->commit();
-        echo json_encode(['status' => 'success', 'message' => "Teacher '{$name}' added.", 'teacher_id' => $pdo->lastInsertId()]);
+        echo json_encode(['status' => 'success', 'message' => "Teacher '{$name}' added.", 'teacher_id' => $teacherId]);
     } catch (PDOException $e) {
         $pdo->rollBack();
         $msg = $e->getCode() == 23000 ? 'Email already exists.' : 'Database error.';
@@ -820,7 +820,8 @@ if ($action === 'start_course_session') {
 
         echo json_encode(['status' => 'success', 'message' => "Course $courseCode started on $device.", 'session_id' => $sessionId]);
     } catch (PDOException $e) {
-        echo json_encode(['status' => 'error', 'message' => 'Failed to start course.', 'debug' => $e->getMessage()]);
+        error_log('[Teacher API] start_course: ' . $e->getMessage());
+        echo json_encode(['status' => 'error', 'message' => 'Failed to start course.']);
     }
     exit;
 }

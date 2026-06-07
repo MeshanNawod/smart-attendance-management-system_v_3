@@ -11,13 +11,13 @@ WIFI_SSID=Card ekak daganin bn
 WIFI_PASS=meshan1234
 
 # ── Server (use either SERVER_URL or SERVER_IP) ──────
-SERVER_URL=http://10.0.0.5/csc2052
-# SERVER_IP=10.0.0.5
+SERVER_URL=http://10.32.245.212/csc2052
+# SERVER_IP=10.32.245.212
 
 # ── Static IP (optional — leave empty for DHCP) ─────
-STATIC_IP=10.193.54.212
-STATIC_GATEWAY=10.193.54.1
-STATIC_SUBNET=255.255.255.0
+# STATIC_IP=
+# STATIC_GATEWAY=
+# STATIC_SUBNET=
 STATIC_DNS=8.8.8.8
 
 # ── Security Keys ────────────────────────────────────

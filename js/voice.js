@@ -348,9 +348,7 @@ function adminStartVoiceRecording(mode) {
     var labelEl = mode === 'enroll'
         ? document.getElementById('voice-admin-record-label')
         : document.getElementById('voice-admin-attend-label');
-    var btnEl = mode === 'enroll'
-        ? document.getElementById('voice-admin-record-label').parentElement
-        : document.getElementById('voice-admin-attend-label').parentElement;
+    var btnEl = labelEl ? labelEl.parentElement : null;
     var visEl = mode === 'enroll'
         ? document.getElementById('voice-admin-enroll-visualizer')
         : document.getElementById('voice-admin-attend-visualizer');
@@ -509,10 +507,12 @@ function adminSubmitVoiceAttendance(blob, studentNo, courseCode) {
     var statusEl = document.getElementById('voice-admin-attend-status');
     var labelEl = document.getElementById('voice-admin-attend-label');
 
+    var ts = new Date().toISOString().slice(0, 19).replace('T', ' ');
     var fd = new FormData();
     fd.append('action', 'voice_attendance');
     fd.append('student_no', studentNo);
     fd.append('course_code', courseCode);
+    fd.append('timestamp', ts);
     fd.append('audio', blob, studentNo + '_voice.webm');
 
     fetch('/csc2052/api/voice.php', {
@@ -659,7 +659,7 @@ window.goToVoiceEnroll = function (studentNoId, fallbackStudentNoId) {
         }
     } else {
         // Redirect to index.php
-        var activeCourse = localStorage.getItem('active_lecture_course') || '';
+        activeCourse = localStorage.getItem('active_lecture_course') || '';
         window.location.href = '/csc2052/index.php?tab=voice&student_no=' + encodeURIComponent(studentNo) + '&course_code=' + encodeURIComponent(activeCourse);
     }
 };

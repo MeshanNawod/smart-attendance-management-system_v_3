@@ -18,13 +18,41 @@
     </div>
     <div class="card-body bg-light">
             <div class="mb-4">
-                <h6 class="text-muted fw-bold mb-2">Hardware Enrollment Link</h6>
+                <h6 class="text-muted fw-bold mb-2"><i class="bi bi-person-badge text-primary"></i>Student Info</h6>
                 <div class="input-group mb-2 shadow-sm rounded">
                     <span class="input-group-text bg-white"><i class="bi bi-person-badge text-primary"></i></span>
                     <input type="text" id="enroll-student-no" class="form-control border-end-0" placeholder="Student No">
                     <input type="text" id="enroll-student-name" class="form-control w-50" placeholder="Student Name (Optional)">
                     <button class="btn btn-outline-primary fw-semibold" onclick="updateStudentProfile()"><i class="bi bi-save me-1"></i>Update</button>
                 </div>
+
+                <h6 class="text-muted fw-bold mb-2 mt-3 border-top pt-3"><i class="bi bi-camera-video me-1"></i>Web Face Enrollment</h6>
+                <div class="mb-2">
+                    <div class="d-flex align-items-center gap-2 mb-2 p-2 bg-white border rounded shadow-sm">
+                        <i class="bi bi-images text-primary"></i>
+                        <label class="form-label small fw-bold mb-0 text-muted flex-shrink-0">Capture Count</label>
+                        <input type="range" class="form-range flex-grow-1" min="3" max="15" value="7" id="enroll-capture-count" oninput="document.getElementById('enroll-count-val').textContent=this.value">
+                        <span class="badge bg-primary enroll-count-badge" id="enroll-count-val">7</span>
+                    </div>
+                    <button id="btn-start-enroll" class="btn btn-outline-primary fw-semibold w-100" onclick="startWebFaceEnrollment(document.getElementById('enroll-student-no').value, document.getElementById('enroll-student-name').value, parseInt(document.getElementById('enroll-capture-count').value))">
+                        <i class="bi bi-person-bounding-box me-1"></i>Start Webcam Enrollment
+                    </button>
+                    <div class="mt-2 mb-2 text-center">
+                        <span class="badge bg-secondary mb-1">OR UPLOAD PHOTO</span>
+                        <input type="file" id="web-enroll-image" accept="image/*" class="form-control form-control-sm" onchange="enrollUploadedImage(this)">
+                    </div>
+                    <div id="web-enroll-container" class="d-none border rounded p-2 mt-2 bg-white text-center shadow-sm">
+                        <select id="enroll-camera-select" class="form-select form-select-sm mb-2 d-none" onchange="switchEnrollCamera()"></select>
+                        <video id="web-enroll-video" autoplay muted playsinline class="w-100 rounded bg-dark mb-2" style="height: auto; display: block;"></video>
+                        <div id="web-enroll-status" class="small fw-bold mb-2"></div>
+                        <div class="d-flex gap-2">
+                            <button id="btn-capture-enroll" class="btn btn-success flex-grow-1 fw-bold d-none"><i class="bi bi-camera me-1"></i>Capture Face</button>
+                            <button id="btn-cancel-enroll" class="btn btn-secondary flex-grow-1 fw-bold d-none">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+
+                <h6 class="text-muted fw-bold mb-2 border-top pt-3"><i class="bi bi-cpu me-1"></i>Hardware Enrollment (ESP32)</h6>
                 <div class="input-group mb-2">
                     <span class="input-group-text bg-white"><i class="bi bi-fingerprint text-primary"></i></span>
                     <input type="number" id="enroll-id" class="form-control bg-light text-muted" value="<?php echo $next_id; ?>" readonly title="Auto-assigned ID">
@@ -44,7 +72,7 @@
                 </div>
                 <div class="input-group mb-2">
                     <span class="input-group-text bg-white"><i class="bi bi-person-bounding-box text-warning"></i></span>
-                    <input type="text" id="enroll-face" class="form-control" placeholder="Face Profile ID">
+                    <input type="text" id="enroll-face" class="form-control" placeholder="RPi Face Profile ID (optional)">
                     <button class="btn btn-outline-warning fw-semibold px-2" onclick="autoFindFace('enroll-face')" title="Auto Find Latest Scan"><i class="bi bi-search"></i></button>
                     <button class="btn btn-warning text-white fw-semibold" onclick="triggerEnrollFace()">
                         <i class="bi bi-link me-1"></i>Link Face
@@ -72,32 +100,6 @@
                     <div id="bulk-upload-bar" class="progress-bar bg-danger" style="width:0%"></div>
                 </div>
                 <div id="bulk-upload-log" class="d-none rounded mb-3 bulk-log" style="display:none!important"></div>
-
-                <h6 class="text-muted fw-bold mb-2 border-top pt-3"><i class="bi bi-camera-video me-1"></i>Web Face Enrollment</h6>
-                <div class="mb-4">
-                    <div class="d-flex align-items-center gap-2 mb-2 p-2 bg-white border rounded shadow-sm">
-                        <i class="bi bi-images text-primary"></i>
-                        <label class="form-label small fw-bold mb-0 text-muted flex-shrink-0">Capture Count</label>
-                        <input type="range" class="form-range flex-grow-1" min="3" max="15" value="7" id="enroll-capture-count" oninput="document.getElementById('enroll-count-val').textContent=this.value">
-                        <span class="badge bg-primary enroll-count-badge" id="enroll-count-val">7</span>
-                    </div>
-                    <button id="btn-start-enroll" class="btn btn-outline-primary fw-semibold w-100" onclick="startWebFaceEnrollment(document.getElementById('enroll-student-no').value, document.getElementById('enroll-student-name').value, parseInt(document.getElementById('enroll-capture-count').value))">
-                        <i class="bi bi-person-bounding-box me-1"></i>Start Webcam Enrollment
-                    </button>
-                    <div class="mt-2 mb-2 text-center">
-                        <span class="badge bg-secondary mb-1">OR UPLOAD PHOTO</span>
-                        <input type="file" id="web-enroll-image" accept="image/*" class="form-control form-control-sm" onchange="enrollUploadedImage(this)">
-                    </div>
-                    <div id="web-enroll-container" class="d-none border rounded p-2 mt-2 bg-white text-center shadow-sm">
-                        <select id="enroll-camera-select" class="form-select form-select-sm mb-2 d-none" onchange="switchEnrollCamera()"></select>
-                        <video id="web-enroll-video" autoplay muted playsinline class="w-100 rounded bg-dark mb-2" style="height: auto; display: block;"></video>
-                        <div id="web-enroll-status" class="small fw-bold mb-2"></div>
-                        <div class="d-flex gap-2">
-                            <button id="btn-capture-enroll" class="btn btn-success flex-grow-1 fw-bold d-none"><i class="bi bi-camera me-1"></i>Capture Face</button>
-                            <button id="btn-cancel-enroll" class="btn btn-secondary flex-grow-1 fw-bold d-none">Cancel</button>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             <hr class="my-4">
@@ -255,10 +257,11 @@
                                     </td>
                                     <td class="text-end pe-3">
                                         <div class="btn-group shadow-sm">
+                                            <button onclick="startWebFaceEnrollment('<?php echo htmlspecialchars($st['student_no'], ENT_QUOTES); ?>','<?php echo htmlspecialchars($st['student_name'], ENT_QUOTES); ?>',7)" class="btn btn-sm btn-light border text-success" title="Web Face Enroll"><i class="bi bi-camera-video"></i></button>
                                             <button onclick="editStudentMap('<?php echo htmlspecialchars($st['student_no'], ENT_QUOTES); ?>','<?php echo htmlspecialchars($st['student_name'], ENT_QUOTES); ?>','<?php echo htmlspecialchars($st['fingerprint_id'], ENT_QUOTES); ?>','<?php echo htmlspecialchars($st['rfid_uid'], ENT_QUOTES); ?>','<?php echo htmlspecialchars($st['face_id'], ENT_QUOTES); ?>')" class="btn btn-sm btn-light border text-info" title="Edit Student Details"><i class="bi bi-pencil-square"></i></button>
                                             <button onclick="if(requireDeviceForOTA()) pushTemplateToDevice('<?php echo htmlspecialchars($st['student_no'], ENT_QUOTES); ?>',<?php echo ($st['fingerprint_id'] ? (int)$st['fingerprint_id'] : 0); ?>)" class="btn btn-sm btn-light border text-primary" title="Push Finger to ESP (requires device selection)" <?php echo empty($st['fingerprint_id']) ? 'disabled' : ''; ?>><i class="bi bi-cloud-arrow-up"></i></button>
                                             <a href="download_template.php?student_no=<?php echo urlencode($st['student_no']); ?>" class="btn btn-sm btn-light border text-success" title="Download Fingerprint" <?php echo empty($st['fingerprint_id']) ? 'style="pointer-events: none; opacity: 0.5;"' : ''; ?>><i class="bi bi-download"></i></a>
-                                            <button onclick="deleteStudentMap('<?php echo htmlspecialchars($st['student_no'], ENT_QUOTES); ?>')" class="btn btn-sm btn-light border text-danger" title="Delete Match"><i class="bi bi-trash"></i></button>
+                                            <button onclick="deleteStudentMap('<?php echo htmlspecialchars($st['student_no'], ENT_QUOTES); ?>',<?php echo (int)($st['fingerprint_id'] ?? 0); ?>)" class="btn btn-sm btn-light border text-danger" title="Delete Match"><i class="bi bi-trash"></i></button>
                                         </div>
                                     </td>
                                 </tr>
