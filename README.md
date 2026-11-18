@@ -12,9 +12,36 @@ A full-stack, multi-modal **attendance management system** combining IoT hardwar
 
 **Fingerprint · RFID · Face · Voice · QR · Manual**
 
+[![Project website](https://img.shields.io/badge/Project_website-Open-9b1c1c?style=for-the-badge&logo=githubpages&logoColor=white)](https://meshannawod.github.io/smart-attendance-management-system_v_3/)
+
+<img src="docs/images/admin-dashboard.png" alt="Admin dashboard with live attendance logs" width="900">
+
 </div>
 
-> **Versions:** this is **v3**, the complete system. Earlier stages: [v2](https://github.com/MeshanNawod/smart-attendance-management-system_v_2) (first PHP dashboard with face recognition) and [v1](https://github.com/MeshanNawod/smart-attendance-management-system_v_1) (deployment pipeline). Photos from the exhibition are on [my portfolio](https://meshannawod.github.io/).
+> **Versions:** this is **v3**, the complete system. Earlier stages: [v2](https://github.com/MeshanNawod/smart-attendance-management-system_v_2) (first PHP dashboard with face recognition) and [v1](https://github.com/MeshanNawod/smart-attendance-management-system_v_1) (deployment pipeline). Project website: **[meshannawod.github.io/smart-attendance-management-system_v_3](https://meshannawod.github.io/smart-attendance-management-system_v_3/)**.
+
+---
+
+
+## Screenshots
+
+Take the full guided tour on the **[project website](https://meshannawod.github.io/smart-attendance-management-system_v_3/#tour)**.
+
+| Analytics | Lecturer dashboard |
+|---|---|
+| <img src="docs/images/analytics.png" alt="Attendance analytics charts" width="430"> | <img src="docs/images/teacher.png" alt="Lecturer dashboard" width="430"> |
+| **Student dashboard** | **Hardware nodes** |
+| <img src="docs/images/student.png" alt="Student dashboard" width="430"> | <img src="docs/images/device.png" alt="Hardware nodes and ESP32 control center" width="430"> |
+| **Students and courses** | **Reports and email alerts** |
+| <img src="docs/images/students.png" alt="Course and student management" width="430"> | <img src="docs/images/lecture.png" alt="Absent students report and analytics" width="430"> |
+
+<sub>Screenshots use demo data; student and lecturer names are made up.</sub>
+
+### At Pera Nexus 2026
+
+| | |
+|---|---|
+| <img src="docs/images/expo-demo-keypad.jpg" alt="Fingerprint enrolment demo" width="430"> | <img src="docs/images/expo-booth.jpg" alt="Our booth at Pera Nexus 2026" width="430"> |
 
 ---
 

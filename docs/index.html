@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sentinel Swarm · Smart Attendance Management System</title>
+<meta name="description" content="Sentinel Swarm: a multi-modal attendance system for the University of Peradeniya. Fingerprint, RFID, face, voice, QR and manual attendance with ESP32 and Raspberry Pi nodes and a PHP/MySQL dashboard.">
+<meta property="og:title" content="Sentinel Swarm · Smart Attendance Management System">
+<meta property="og:description" content="Seven ways to mark attendance, one live dashboard. ESP32 + Raspberry Pi + PHP/MySQL. Exhibited at Pera Nexus 2026.">
+<meta property="og:image" content="https://meshannawod.github.io/smart-attendance-management-system_v_3/images/admin-dashboard.png">
+<link rel="icon" href="images/favicon.svg">
+<style>
+  :root {
+    --maroon: #9b1c1c; --maroon-d: #6e1212; --gold: #f2b705; --blue: #1d6fe0; --green: #138a52; --purple: #6d3fd6;
+    --ink: #161a22; --muted: #5d6573; --line: #e6e8ee; --bg: #f7f7f9; --card: #fff; --radius: 14px;
+    font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin: 0; color: var(--ink); background: var(--bg); line-height: 1.55; }
+  a { color: var(--maroon); }
+  img { max-width: 100%; display: block; }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 0 24px; }
+  section { padding: 72px 0; }
+  h2 { font-size: clamp(26px, 3.2vw, 36px); margin: 0 0 10px; letter-spacing: -.01em; }
+  .lead { color: var(--muted); font-size: 18px; max-width: 760px; margin: 0 0 36px; }
+  .eyebrow { text-transform: uppercase; letter-spacing: .12em; font-size: 12px; font-weight: 700; color: var(--maroon); margin-bottom: 8px; }
+
+  /* nav */
+  nav { position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+  nav .wrap { display: flex; align-items: center; gap: 22px; height: 62px; }
+  nav .brand { display: flex; align-items: center; gap: 10px; font-weight: 700; color: var(--ink); text-decoration: none; }
+  nav .brand img { width: 30px; height: 30px; }
+  nav .links { margin-left: auto; display: flex; gap: 20px; font-size: 14px; }
+  nav .links a { color: var(--muted); text-decoration: none; }
+  nav .links a:hover { color: var(--maroon); }
+  @media (max-width: 820px) { nav .links { display: none; } }
+
+  /* hero */
+  .hero { padding-bottom: 0; background: radial-gradient(1100px 500px at 85% -10%, #ffe6a3 0, transparent 60%), linear-gradient(160deg, #2a0b0b 0%, #6e1212 55%, #9b1c1c 100%); color: #fff; padding: 84px 0 0; overflow: hidden; }
+  .hero .grid { display: grid; grid-template-columns: 1.05fr 1fr; gap: 40px; align-items: center; }
+  @media (max-width: 900px) { .hero .grid { grid-template-columns: 1fr; } }
+  .hero h1 { font-size: clamp(36px, 5vw, 58px); line-height: 1.05; margin: 14px 0 18px; letter-spacing: -.02em; }
+  .hero h1 span { color: var(--gold); }
+  .hero p { font-size: 18px; color: #f3dede; max-width: 560px; }
+  .pill { display: inline-flex; gap: 8px; align-items: center; background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.25); padding: 6px 12px; border-radius: 999px; font-size: 13px; }
+  .btns { display: flex; gap: 12px; flex-wrap: wrap; margin: 28px 0 40px; }
+  .btn { display: inline-flex; align-items: center; gap: 8px; padding: 12px 20px; border-radius: 10px; font-weight: 600; text-decoration: none; font-size: 15px; }
+  .btn.primary { background: var(--gold); color: #2a1a00; }
+  .btn.ghost { border: 1px solid rgba(255,255,255,.45); color: #fff; }
+  .btn:hover { filter: brightness(1.06); }
+  .hero .shot { border-radius: 14px 14px 0 0; box-shadow: 0 30px 80px rgba(0,0,0,.45); border: 1px solid rgba(255,255,255,.18); border-bottom: 0; align-self: end; }
+
+  /* stats */
+  .stats { display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; margin-top: -36px; position: relative; }
+  @media (max-width: 900px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; box-shadow: 0 8px 24px rgba(20,20,40,.06); }
+  .stat b { display: block; font-size: 30px; color: var(--maroon); line-height: 1.1; }
+  .stat span { color: var(--muted); font-size: 14px; }
+
+  /* methods */
+  .methods { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+  .method { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; border-top: 4px solid var(--c, var(--maroon)); }
+  .method .ic { font-size: 28px; }
+  .method h3 { margin: 10px 0 6px; font-size: 18px; }
+  .method p { margin: 0; color: var(--muted); font-size: 14.5px; }
+  .method small { display: inline-block; margin-top: 12px; font-size: 12px; font-weight: 600; color: var(--c, var(--maroon)); background: color-mix(in srgb, var(--c, var(--maroon)) 10%, white); padding: 3px 9px; border-radius: 999px; }
+
+  /* tour */
+  .tour { background: #fff; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .tabs { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 22px; }
+  .tab { font: inherit; font-size: 14px; font-weight: 600; padding: 9px 16px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--muted); cursor: pointer; }
+  .tab[aria-selected="true"] { background: var(--maroon); color: #fff; border-color: var(--maroon); }
+  .panel { display: grid; grid-template-columns: 1.8fr 1fr; gap: 28px; align-items: start; }
+  @media (max-width: 900px) { .panel { grid-template-columns: 1fr; } }
+  .frame { border-radius: 12px; overflow: hidden; border: 1px solid var(--line); box-shadow: 0 18px 50px rgba(20,20,40,.12); background: #fff; cursor: zoom-in; }
+  .frame .bar { display: flex; gap: 6px; align-items: center; padding: 9px 12px; background: #f1f2f5; border-bottom: 1px solid var(--line); font: 12px Consolas, monospace; color: var(--muted); }
+  .frame .bar i { width: 10px; height: 10px; border-radius: 50%; background: #d9dbe1; display: inline-block; }
+  .frame .bar span { margin-left: 10px; }
+  .frame img.tall { max-height: 640px; object-fit: cover; object-position: top; width: 100%; }
+  .panel h3 { margin: 0 0 8px; font-size: 22px; }
+  .panel p { color: var(--muted); margin: 0 0 14px; }
+  .panel ul { margin: 0; padding-left: 20px; }
+  .panel li { margin: 7px 0; }
+  .note { font-size: 13px; color: var(--muted); margin-top: 18px; }
+
+  /* architecture */
+  .arch { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; overflow-x: auto; }
+  .arch svg { min-width: 760px; width: 100%; height: auto; }
+  .flow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-top: 22px; counter-reset: step; }
+  @media (max-width: 900px) { .flow { grid-template-columns: 1fr; } }
+  .flow div { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px; font-size: 14px; color: var(--muted); }
+  .flow div b { display: block; color: var(--ink); margin-bottom: 4px; }
+  .flow div::before { counter-increment: step; content: counter(step); display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--maroon); color: #fff; font-weight: 700; font-size: 13px; margin-bottom: 8px; }
+
+  /* hardware */
+  .hw { display: grid; grid-template-columns: 1fr 1fr; gap: 28px; align-items: start; }
+  @media (max-width: 900px) { .hw { grid-template-columns: 1fr; } }
+  .parts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .part { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; font-size: 14px; }
+  .part b { display: block; }
+  .part span { color: var(--muted); font-size: 13px; }
+  .gallery { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .gallery figure { margin: 0; border-radius: 10px; overflow: hidden; position: relative; cursor: zoom-in; }
+  .gallery img { aspect-ratio: 16/10; object-fit: cover; width: 100%; }
+  .gallery figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 18px 10px 8px; font-size: 12.5px; color: #fff; background: linear-gradient(transparent, rgba(0,0,0,.7)); }
+
+  /* stack + versions */
+  .stack { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 14px; }
+  .stack div { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 18px; }
+  .stack h4 { margin: 0 0 6px; font-size: 15px; color: var(--maroon); }
+  .stack p { margin: 0; font-size: 14px; color: var(--muted); }
+  .versions { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+  @media (max-width: 900px) { .versions { grid-template-columns: 1fr; } }
+  .ver { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 20px; text-decoration: none; color: inherit; display: block; }
+  .ver:hover { border-color: var(--maroon); }
+  .ver em { font-style: normal; font-size: 12px; font-weight: 700; color: #fff; background: var(--muted); padding: 2px 8px; border-radius: 999px; }
+  .ver.now em { background: var(--maroon); }
+  .ver h4 { margin: 10px 0 6px; font-size: 17px; }
+  .ver p { margin: 0; font-size: 14px; color: var(--muted); }
+
+  footer { background: #1b0707; color: #d8c9c9; padding: 40px 0; font-size: 14px; }
+  footer a { color: #fff; }
+  footer .wrap { display: flex; gap: 20px; justify-content: space-between; flex-wrap: wrap; align-items: center; }
+
+  dialog { border: 0; padding: 0; background: transparent; max-width: 96vw; max-height: 94vh; }
+  dialog::backdrop { background: rgba(10,10,15,.85); }
+  dialog img { max-width: 96vw; max-height: 94vh; border-radius: 8px; }
+</style>
+</head>
+<body>
+
+<nav>
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="images/logo.svg" alt="">Sentinel Swarm</a>
+    <div class="links">
+      <a href="#methods">Attendance methods</a>
+      <a href="#tour">Dashboard tour</a>
+      <a href="#how">How it works</a>
+      <a href="#hardware">Hardware</a>
+      <a href="#stack">Tech</a>
+      <a href="https://github.com/MeshanNawod/smart-attendance-management-system_v_3">GitHub ↗</a>
+    </div>
+  </div>
+</nav>
+
+<header class="hero" id="top">
+  <div class="wrap grid">
+    <div>
+      <span class="pill">🏆 Exhibited at Pera Nexus 2026 · University of Peradeniya</span>
+      <h1>Attendance that <span>marks itself.</span></h1>
+      <p>Sentinel Swarm replaces manual roll-call with smart nodes at the classroom door. Students check in with a fingerprint, RFID card, face, voice or QR code, and every check-in appears on a live dashboard for admins, lecturers and students.</p>
+      <div class="btns">
+        <a class="btn primary" href="#tour">▶ Take the dashboard tour</a>
+        <a class="btn ghost" href="https://github.com/MeshanNawod/smart-attendance-management-system_v_3">View source on GitHub</a>
+      </div>
+    </div>
+    <img class="shot" src="images/admin-dashboard.png" alt="Sentinel Swarm admin dashboard with live attendance logs">
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="stats">
+    <div class="stat"><b>7</b><span>ways to mark attendance</span></div>
+    <div class="stat"><b>3</b><span>dashboards: admin, lecturer, student</span></div>
+    <div class="stat"><b>31</b><span>PHP API endpoints</span></div>
+    <div class="stat"><b>21</b><span>MySQL tables</span></div>
+    <div class="stat"><b>4.5k</b><span>lines of ESP32 firmware</span></div>
+  </div>
+</div>
+
+<section id="methods">
+  <div class="wrap">
+    <div class="eyebrow">Multi-modal</div>
+    <h2>Seven ways to say “present”</h2>
+    <p class="lead">Every method feeds the same attendance log, checked against the lecture that is running and the courses the student is enrolled in.</p>
+    <div class="methods">
+      <div class="method" style="--c:#1d6fe0"><div class="ic">🖐️</div><h3>Fingerprint</h3><p>FM10A sensor on the ESP32 node. Enrol once and the template is shared with every sensor on campus.</p><small>ESP32 node</small></div>
+      <div class="method" style="--c:#6d3fd6"><div class="ic">💳</div><h3>RFID card</h3><p>Tap a student ID card on the MFRC522 reader for a check-in in under a second.</p><small>ESP32 node</small></div>
+      <div class="method" style="--c:#138a52"><div class="ic">📷</div><h3>Face at the entrance</h3><p>A Raspberry Pi camera recognises students as they walk in and posts attendance automatically.</p><small>Raspberry Pi</small></div>
+      <div class="method" style="--c:#c2410c"><div class="ic">🙂</div><h3>Face in the browser</h3><p>face-api.js runs in the lecturer's browser with a liveness check, using any webcam.</p><small>Web dashboard</small></div>
+      <div class="method" style="--c:#0f766e"><div class="ic">🎙️</div><h3>Voice</h3><p>Speaker verification by audio fingerprint: students say a phrase and are matched to their enrolled voice.</p><small>Web dashboard</small></div>
+      <div class="method" style="--c:#b45309"><div class="ic">🔳</div><h3>Dynamic QR</h3><p>A QR code that refreshes every 5 seconds, so a photo of it sent to a friend is already useless.</p><small>Web dashboard</small></div>
+      <div class="method" style="--c:#9b1c1c"><div class="ic">✍️</div><h3>Manual</h3><p>Lecturers can mark a student present from any device when everything else fails.</p><small>Web dashboard</small></div>
+    </div>
+  </div>
+</section>
+
+<section class="tour" id="tour">
+  <div class="wrap">
+    <div class="eyebrow">Live system</div>
+    <h2>Dashboard tour</h2>
+    <p class="lead">Real screenshots of the running system. Pick a view.</p>
+    <div class="tabs" role="tablist" id="tabs"></div>
+    <div class="panel" id="panel">
+      <div class="frame" id="frame"><div class="bar"><i></i><i></i><i></i><span id="url"></span></div><img id="shot" alt=""></div>
+      <div><h3 id="t"></h3><p id="d"></p><ul id="l"></ul></div>
+    </div>
+    <p class="note">Screenshots use demo data: student and lecturer names are made up. Click a screenshot to enlarge it.</p>
+  </div>
+</section>
+
+<section id="how">
+  <div class="wrap">
+    <div class="eyebrow">Architecture</div>
+    <h2>How it works</h2>
+    <p class="lead">Hardware nodes and browsers all talk to one PHP API. The API checks who the student is, whether a lecture is running and whether they are enrolled, then writes one row to MySQL.</p>
+    <div class="arch">
+      <svg viewBox="0 0 1000 420" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Architecture diagram: ESP32 nodes, Raspberry Pi and web browsers send attendance to the PHP API, which stores it in MySQL">
+        <defs>
+          <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#9b1c1c"/></marker>
+          <style>.bx{fill:#fff;stroke:#e1e3ea;stroke-width:1.5}.h{font:700 17px Segoe UI,system-ui,sans-serif;fill:#161a22}.s{font:13.5px Segoe UI,system-ui,sans-serif;fill:#5d6573}.ln{stroke:#9b1c1c;stroke-width:2;fill:none;marker-end:url(#ar)}.lb{font:600 12px Segoe UI,system-ui,sans-serif;fill:#9b1c1c}</style>
+        </defs>
+        <!-- left: sources -->
+        <rect class="bx" x="20" y="20" width="305" height="118" rx="12"/><rect x="20" y="20" width="6" height="118" rx="3" fill="#1d6fe0"/>
+        <text class="h" x="42" y="50">ESP32 nodes</text>
+        <text class="s" x="42" y="74">Fingerprint (FM10A) · RFID (MFRC522)</text>
+        <text class="s" x="42" y="94">Keypad · 16×4 LCD · SD offline queue</text>
+        <text class="s" x="42" y="114">Heartbeat every 10 s · OTA updates</text>
+
+        <rect class="bx" x="20" y="152" width="305" height="118" rx="12"/><rect x="20" y="152" width="6" height="118" rx="3" fill="#138a52"/>
+        <text class="h" x="42" y="182">Raspberry Pi</text>
+        <text class="s" x="42" y="206">Pi Camera + OpenCV face recognition</text>
+        <text class="s" x="42" y="226">Flask service · MJPEG stream</text>
+        <text class="s" x="42" y="246">Heartbeat every 30 s</text>
+
+        <rect class="bx" x="20" y="284" width="305" height="118" rx="12"/><rect x="20" y="284" width="6" height="118" rx="3" fill="#b45309"/>
+        <text class="h" x="42" y="314">Web dashboards</text>
+        <text class="s" x="42" y="338">Admin · Lecturer · Student</text>
+        <text class="s" x="42" y="358">Webcam face, voice, QR, manual</text>
+        <text class="s" x="42" y="378">React + Tauri desktop app</text>
+
+        <!-- middle: API -->
+        <rect class="bx" x="390" y="110" width="250" height="200" rx="14" style="stroke:#9b1c1c;stroke-width:2"/>
+        <text class="h" x="415" y="145">PHP API</text>
+        <text class="s" x="415" y="170">31 endpoints in api/</text>
+        <text class="s" x="415" y="194">✓ hardware key / login session</text>
+        <text class="s" x="415" y="216">✓ active lecture session?</text>
+        <text class="s" x="415" y="238">✓ student enrolled in course?</text>
+        <text class="s" x="415" y="260">✓ duplicate scan?</text>
+        <text class="s" x="415" y="290">OTA command queue · heartbeats</text>
+
+        <!-- right: DB -->
+        <path d="M740 140 a90 22 0 0 0 180 0 a90 22 0 0 0 -180 0 v140 a90 22 0 0 0 180 0 v-140" fill="#fff" stroke="#e1e3ea" stroke-width="1.5"/>
+        <text class="h" x="790" y="200">MySQL</text>
+        <text class="s" x="770" y="224">attendance_logs</text>
+        <text class="s" x="770" y="244">lecture_sessions</text>
+        <text class="s" x="770" y="264">students · courses</text>
+
+        <path class="ln" d="M325 79 C360 79 355 170 388 170"/>
+        <path class="ln" d="M325 211 L388 211"/>
+        <path class="ln" d="M325 343 C360 343 355 252 388 252"/>
+        <path class="ln" d="M640 210 L738 210"/>
+        <text class="lb" x="333" y="71">POST</text>
+        <text class="lb" x="333" y="203">POST</text>
+        <text class="lb" x="333" y="335">POST</text>
+        <text class="lb" x="660" y="200">INSERT</text>
+      </svg>
+    </div>
+    <div class="flow">
+      <div><b>Lecturer starts a lecture</b>Picks the course and a timer on the dashboard. A live session opens.</div>
+      <div><b>Student checks in</b>Fingerprint, card, face, voice or QR at the door or in class.</div>
+      <div><b>Node posts to the API</b>With the student, course, method, device and a hardware key.</div>
+      <div><b>API validates</b>Active session, enrolment and duplicates. Offline nodes sync later from SD.</div>
+      <div><b>Dashboard updates</b>Live log, charts, absentee report and low-attendance email alerts.</div>
+    </div>
+  </div>
+</section>
+
+<section id="hardware" style="background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <div class="wrap">
+    <div class="eyebrow">Hardware</div>
+    <h2>Built by hand, tested at Pera Nexus</h2>
+    <p class="lead">A custom ESP32 terminal with its own battery and power gating, plus a Raspberry Pi camera node for the entrance.</p>
+    <div class="hw">
+      <div class="parts">
+        <div class="part"><b>ESP32-WROOM-32</b><span>Wi-Fi, built-in web server, OTA updates</span></div>
+        <div class="part"><b>FM10A fingerprint</b><span>UART, wake-on-touch, MOSFET power gate</span></div>
+        <div class="part"><b>MFRC522 RFID</b><span>SPI, student ID cards</span></div>
+        <div class="part"><b>4×4 keypad + 16×4 LCD</b><span>Menus, enrolment, status</span></div>
+        <div class="part"><b>SD card</b><span>Offline queue and config file</span></div>
+        <div class="part"><b>18650 + TP4056 + XL6009</b><span>Battery, charger and boost converter</span></div>
+        <div class="part"><b>DS3231 RTC</b><span>Accurate time without Wi-Fi</span></div>
+        <div class="part"><b>Raspberry Pi 3B+ camera</b><span>Face recognition at the door</span></div>
+      </div>
+      <div class="gallery">
+        <figure data-full="images/expo-demo-keypad.jpg"><img src="images/expo-demo-keypad.jpg" alt="Fingerprint enrolment demo on the ESP32 terminal" loading="lazy"><figcaption>Fingerprint enrolment on the terminal</figcaption></figure>
+        <figure data-full="images/expo-demo-laptop.jpg"><img src="images/expo-demo-laptop.jpg" alt="Live dashboard demo on a laptop" loading="lazy"><figcaption>Live dashboard demo</figcaption></figure>
+        <figure data-full="images/expo-explaining.jpg"><img src="images/expo-explaining.jpg" alt="Explaining the system architecture" loading="lazy"><figcaption>Explaining the architecture</figcaption></figure>
+        <figure data-full="images/expo-booth.jpg"><img src="images/expo-booth.jpg" alt="The Sentinel Swarm booth at Pera Nexus 2026" loading="lazy"><figcaption>Our booth at Pera Nexus 2026</figcaption></figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="stack">
+  <div class="wrap">
+    <div class="eyebrow">Technology</div>
+    <h2>What it's built with</h2>
+    <p class="lead">About 21,000 lines of PHP, 12,600 lines of JavaScript, 4,500 lines of ESP32 firmware and a Python service for the Pi.</p>
+    <div class="stack">
+      <div><h4>Server</h4><p>PHP 8 with PDO, MySQL / MariaDB, server-sent events for live monitoring, CSRF-protected sessions, role-based access.</p></div>
+      <div><h4>Dashboards</h4><p>Bootstrap 5, vanilla JavaScript, Chart.js analytics, face-api.js in the browser, with Sinhala and Tamil language options.</p></div>
+      <div><h4>Edge devices</h4><p>ESP32 Arduino C++ firmware with OTA updates and an offline SD queue, Raspberry Pi with Python, Flask, OpenCV and face_recognition.</p></div>
+      <div><h4>Apps</h4><p>React + Vite single-page app, installable as a PWA, and a Tauri desktop app for lecturers.</p></div>
+    </div>
+    <h2 style="margin-top:56px;font-size:26px">Three versions</h2>
+    <p class="lead" style="margin-bottom:22px">The system grew in three stages.</p>
+    <div class="versions">
+      <a class="ver" href="https://github.com/MeshanNawod/smart-attendance-management-system_v_1"><em>v1</em><h4>Deployment pipeline</h4><p>GitHub Actions workflow that syncs the site to hosting over FTP.</p></a>
+      <a class="ver" href="https://github.com/MeshanNawod/smart-attendance-management-system_v_2"><em>v2</em><h4>First dashboard</h4><p>PHP dashboard with fingerprint, RFID and browser face recognition.</p></a>
+      <a class="ver now" href="https://github.com/MeshanNawod/smart-attendance-management-system_v_3"><em>v3 · current</em><h4>Complete system</h4><p>Seven methods, lecture sessions, analytics, OTA, Raspberry Pi node and desktop app.</p></a>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    <div><b>Sentinel Swarm</b> · CSC2052 project, Faculty of Science, University of Peradeniya</div>
+    <div>Built by <a href="https://meshannawod.github.io/">Meshan Nawod</a> and team · <a href="https://github.com/MeshanNawod/smart-attendance-management-system_v_3">Source on GitHub</a></div>
+  </div>
+</footer>
+
+<dialog id="lb"><img id="lbimg" alt=""></dialog>
+
+<script>
+const VIEWS = [
+  { id: "admin", tab: "Admin dashboard", img: "images/admin-dashboard.png", url: "/index.php",
+    t: "Everything at a glance", d: "The admin home shows who is enrolled, the time, and today's check-ins, with a live log that updates as students scan.",
+    l: ["Live attendance log with student, time, method and device", "Filter by student, course, device and date, then export to CSV", "Device status for ESP32 and Raspberry Pi in the header", "Quick actions: start a lecture, mark manually, open QR, RFID, webcam or voice attendance"] },
+  { id: "methods", tab: "Attendance controls", img: "images/attendance-methods.png", url: "/index.php · side panel", tall: true,
+    t: "One panel for every method", d: "The right-hand column of the admin dashboard controls each way to take attendance.",
+    l: ["Start an active lecture on a chosen device, with an optional timer", "Switch hardware between attendance and enrolment mode", "Webcam face recognition and voice recording in the browser", "QR session stats, RFID scan session and the Raspberry Pi camera feed"] },
+  { id: "analytics", tab: "Analytics", img: "images/analytics.png", url: "/index.php · Attendance Charts", tall: true,
+    t: "Charts that answer real questions", d: "Built-in analytics show how attendance changes over time and where it happens.",
+    l: ["Daily trend, method split and attendance per place", "Per-course attendance and the hourly pattern", "Lecture hall occupancy and peak times", "Per-student, per-course and per-teacher analysis, plus a peer comparison tool"] },
+  { id: "teacher", tab: "Lecturer view", img: "images/teacher.png", url: "/teacher_dashboard.php",
+    t: "Lecturers run their own sessions", d: "Lecturers see only their courses and start a lecture session in two clicks.",
+    l: ["Pick a course, a device and a timer, then Start", "Auto-start from the weekly schedule", "Attendance logs, absent students, manual marking, camera, voice and QR", "Ratings, forum and section history"] },
+  { id: "student", tab: "Student view", img: "images/student.png", url: "/student_dashboard.php",
+    t: "Students track their own attendance", d: "Each student sees their courses, sessions attended and attendance rate.",
+    l: ["Attendance rate per course with a progress bar", "Full attendance history", "Rate lectures and join the course forum", "Scan the lecture QR code to check in"] },
+  { id: "device", tab: "Hardware nodes", img: "images/device.png", url: "/device.php",
+    t: "Control the hardware remotely", d: "Every ESP32 and Raspberry Pi node registers itself with a heartbeat and can be managed from the browser.",
+    l: ["List of nodes with IP, online status and actions", "Wi-Fi setup, including WPA2-Enterprise for campus Wi-Fi", "SD card files, offline queue sync and live telemetry", "Turn sensors on or off and push fingerprint templates"] },
+  { id: "students", tab: "Students & courses", img: "images/students.png", url: "/students.php",
+    t: "Manage courses and enrolments", d: "Add courses, enrol students one by one or in bulk from a CSV file, and manage the weekly schedule.",
+    l: ["Course manager and weekly schedule", "Bulk enrolment from CSV", "Student database with fingerprint, RFID and face templates", "Course enrolment lookup"] },
+  { id: "reports", tab: "Reports", img: "images/lecture.png", url: "/lecture.php",
+    t: "Reports and alerts", d: "Find who missed a lecture and email students whose attendance is getting low.",
+    l: ["Absent students report for any course and date", "Course attendance analytics for every enrolled student", "Email sender setup and a log of sent emails", "Email alerts when attendance drops below a set level (80% by default)"] },
+  { id: "login", tab: "Sign in", img: "images/login.png", url: "/login.php",
+    t: "One sign-in for every role", d: "Admins, lecturers and students use the same page and land on their own dashboard.",
+    l: ["Role-based access: admin, teacher, student", "CSRF protection and secure sessions", "Students sign in with their student number and must set a new password first"] },
+];
+const tabs = document.getElementById("tabs");
+function show(v) {
+  tabs.querySelectorAll(".tab").forEach(b => b.setAttribute("aria-selected", b.dataset.id === v.id));
+  const img = document.getElementById("shot");
+  img.src = v.img; img.alt = v.tab + " screenshot"; img.className = v.tall ? "tall" : "";
+  document.getElementById("url").textContent = "sentinel-swarm" + v.url;
+  document.getElementById("t").textContent = v.t;
+  document.getElementById("d").textContent = v.d;
+  document.getElementById("l").innerHTML = v.l.map(x => `<li>${x}</li>`).join("");
+}
+VIEWS.forEach(v => {
+  const b = document.createElement("button");
+  b.className = "tab"; b.role = "tab"; b.textContent = v.tab; b.dataset.id = v.id;
+  b.onclick = () => show(v); tabs.append(b);
+});
+show(VIEWS[0]);
+
+// lightbox
+const lb = document.getElementById("lb"), lbimg = document.getElementById("lbimg");
+function open(src) { lbimg.src = src; lb.showModal(); }
+document.getElementById("frame").onclick = () => open(document.getElementById("shot").src);
+document.querySelectorAll(".gallery figure").forEach(f => f.onclick = () => open(f.dataset.full));
+lb.onclick = () => lb.close();
+</script>
+</body>
+</html>
