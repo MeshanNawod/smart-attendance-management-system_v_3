@@ -69,6 +69,7 @@
   <a class="brand" href="index.html"><img src="images/logo.svg" alt="">Sentinel Swarm</a>
   <div class="links">
     <a href="index.html">Project</a>
+    <a href="wiring.html">Interactive wiring</a>
     <a href="#parts">Parts</a>
     <a href="#wiring">Wiring</a>
     <a href="#assemble">Assemble</a>
@@ -123,6 +124,7 @@
 
   <section id="wiring">
     <h2><small>Step 2</small>Wiring diagram</h2>
+    <div class="callout info"><b>Prefer to explore?</b> Open the <a href="wiring.html"><b>interactive wiring</b></a>: hover any wire and the whole connection lights up, with the firmware line that sets it up. It also covers the Raspberry Pi node and the whole system.</div>
     <p class="lead">Click to enlarge. Coloured tags such as <span class="dot" style="background:#dc2626"></span>3V3, <span class="dot" style="background:#ea580c"></span>5V and <span class="dot" style="background:#111827"></span>GND mean "connect to that power rail" (see the power diagram).</p>
     <figure class="figure" data-full="images/esp32-wiring.svg"><img src="images/esp32-wiring.svg" alt="Wiring diagram: ESP32 connected to keypad, LCD, RTC, RFID reader, SD card, LED and fingerprint sensor through a MOSFET"><figcaption>Download: <a href="images/esp32-wiring.svg" download>esp32-wiring.svg</a></figcaption></figure>
     <div class="callout info"><b>Two buses are shared.</b> The <b>SPI</b> lines D18 (SCK), D19 (MISO) and D23 (MOSI) go to both the RFID reader and the SD card; each has its own chip-select (D15 and D4). The <b>I2C</b> lines D21 (SDA) and D22 (SCL) go to both the LCD and the RTC.</div>

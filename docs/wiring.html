@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Interactive wiring · Sentinel Swarm</title>
+<meta name="description" content="Interactive wiring diagrams for the Sentinel Swarm ESP32 node, Raspberry Pi camera node and the whole system. Hover any wire to see where it goes.">
+<link rel="icon" href="images/favicon.svg">
+<style>
+  :root { --maroon:#9b1c1c; --ink:#161a22; --muted:#5d6573; --line:#e6e8ee; --bg:#f4f5f8; font-family:"Segoe UI",system-ui,-apple-system,sans-serif; }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); }
+  a { color:var(--maroon); }
+  nav { position:sticky; top:0; z-index:10; background:rgba(255,255,255,.94); backdrop-filter:blur(8px); border-bottom:1px solid var(--line); }
+  nav .in { max-width:1500px; margin:0 auto; padding:0 24px; height:58px; display:flex; align-items:center; gap:18px; }
+  nav .brand { display:flex; gap:10px; align-items:center; font-weight:700; color:var(--ink); text-decoration:none; }
+  nav .brand img { width:28px; }
+  nav .links { margin-left:auto; display:flex; gap:18px; font-size:14px; }
+  nav .links a { color:var(--muted); text-decoration:none; }
+  header { background:radial-gradient(900px 400px at 90% -20%, #ffd76a55, transparent 60%), linear-gradient(160deg,#1f0808,#6e1212 60%,#9b1c1c); color:#fff; padding:42px 0 30px; overflow:hidden; position:relative; }
+  header .in { max-width:1500px; margin:0 auto; padding:0 24px; position:relative; z-index:1; }
+  header h1 { margin:0 0 8px; font-size:clamp(28px,4vw,44px); }
+  header p { margin:0; color:#f3dede; font-size:17px; max-width:780px; }
+  .traces { position:absolute; inset:0; opacity:.22; }
+  .traces path { fill:none; stroke:#ffd76a; stroke-width:2; stroke-dasharray:6 10; animation:flow 1.6s linear infinite; }
+  .tabs { display:flex; gap:8px; margin-top:22px; flex-wrap:wrap; }
+  .tab { font:inherit; font-size:14px; font-weight:600; padding:10px 18px; border-radius:999px; border:1px solid rgba(255,255,255,.35); background:rgba(255,255,255,.08); color:#fff; cursor:pointer; transition:.2s; }
+  .tab:hover { background:rgba(255,255,255,.18); }
+  .tab[aria-selected="true"] { background:#ffd76a; color:#2a1a00; border-color:#ffd76a; }
+  main { max-width:1500px; margin:0 auto; padding:20px 24px 50px; display:grid; grid-template-columns:1fr 340px; gap:20px; align-items:start; }
+  @media (max-width:1100px) { main { grid-template-columns:1fr; } .side { position:static !important; } }
+  .stage { background:#fff; border:1px solid var(--line); border-radius:16px; padding:10px; box-shadow:0 12px 40px rgba(20,20,40,.07); position:relative; }
+  .toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; padding:6px 6px 10px; border-bottom:1px solid var(--line); margin-bottom:8px; font-size:13px; color:var(--muted); }
+  .toolbar button { font:inherit; font-size:13px; padding:6px 12px; border-radius:8px; border:1px solid var(--line); background:#fff; cursor:pointer; }
+  .toolbar button:hover { border-color:var(--maroon); color:var(--maroon); }
+  .toolbar button.on { background:var(--maroon); color:#fff; border-color:var(--maroon); }
+  .toolbar .hint { margin-left:auto; }
+  .panel { display:none; } .panel.show { display:block; animation:fadeup .45s ease; }
+  .zoomwrap { overflow:auto; border-radius:10px; }
+  svg.dia { width:100%; max-width:none; height:auto; display:block; user-select:none; transition:width .25s; }
+
+  /* wires: draw-in on load, flow on hover */
+  .wire .hit { fill:none; stroke:transparent; stroke-width:16; cursor:pointer; pointer-events:stroke; }
+  .wire .w { fill:none; stroke-linejoin:round; stroke-linecap:round; stroke-dasharray:1; stroke-dashoffset:1; transition:stroke-width .2s, opacity .25s, filter .25s; }
+  .panel.show .wire .w { animation:draw 1.5s ease forwards; }
+  .wire .flow { fill:none; stroke:#fff; stroke-width:2; stroke-dasharray:4 14; opacity:0; pointer-events:none; animation:flow .7s linear infinite; }
+  .wire .ribbon { stroke-linecap:butt; }
+  .pin, .rail, .tag, .jn, .comp, .key { transition:opacity .25s, transform .25s, filter .25s; }
+  .pin, .rail, .tag, .jn { cursor:pointer; }
+  .comp { cursor:pointer; }
+  .comp .body { transition:filter .25s, stroke-width .25s; }
+  .comp:hover .body { filter:drop-shadow(0 6px 14px rgba(0,0,0,.18)); }
+
+  svg.focus .wire:not(.on), svg.focus .pin:not(.on), svg.focus .rail:not(.on), svg.focus .tag:not(.on), svg.focus .jn:not(.on), svg.focus .pkt:not(.on) { opacity:.12; }
+  svg.focus .comp:not(.on) { opacity:.35; }
+  .wire.on .w { stroke-width:5 !important; filter:drop-shadow(0 0 6px currentColor); }
+  .wire.on .flow { opacity:.95; }
+  .pin.on { filter:drop-shadow(0 0 6px #f59e0b); }
+  circle.pin.on { r:7; }
+  .tag.on { font-size:12px; }
+  .key:hover rect { fill:#c4b5fd; }
+
+  /* idle life */
+  .blue-led { animation:blink 2.4s ease-in-out infinite; }
+  .pwr-led { filter:drop-shadow(0 0 4px #ef4444); }
+  .lens { animation:blink 3s ease-in-out infinite; }
+  .wave { animation:wave 2s ease-in-out infinite; } .wave.w1 { animation-delay:.25s } .wave.w2 { animation-delay:.5s }
+  .wifi { animation:blink 1.2s steps(2) infinite; }
+  .pkt { filter:drop-shadow(0 0 4px currentColor); }
+  @keyframes draw { to { stroke-dashoffset:0; } }
+  @keyframes flow { to { stroke-dashoffset:-18; } }
+  @keyframes blink { 50% { opacity:.25; } }
+  @keyframes wave { 0%,100% { opacity:.2 } 50% { opacity:1 } }
+  @keyframes fadeup { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  @keyframes pop { from { transform:scale(.97); opacity:.4 } to { transform:none; opacity:1 } }
+
+  .side { position:sticky; top:76px; display:grid; gap:14px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:14px; padding:18px; box-shadow:0 8px 24px rgba(20,20,40,.05); }
+  .card h3 { margin:0 0 4px; font-size:18px; display:flex; gap:10px; align-items:center; }
+  .card .kind { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.08em; color:var(--muted); }
+  .card p { margin:10px 0; color:#333a45; font-size:14.5px; line-height:1.55; }
+  .swatch { width:14px; height:14px; border-radius:4px; flex:none; }
+  .chain { list-style:none; padding:0; margin:10px 0 0; }
+  .chain li { position:relative; padding:6px 0 6px 22px; font-size:14px; }
+  .chain li::before { content:""; position:absolute; left:4px; top:12px; width:9px; height:9px; border-radius:50%; background:var(--c,#999); }
+  .chain li:not(:last-child)::after { content:""; position:absolute; left:8px; top:22px; height:calc(100% - 12px); border-left:2px dashed var(--c,#999); }
+  pre { background:#111827; color:#e5e7eb; padding:12px 14px; border-radius:10px; font-size:12.5px; overflow:auto; margin:10px 0 0; }
+  .chips { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+  .chips button { font:inherit; font-size:12.5px; padding:4px 10px; border-radius:999px; border:1px solid var(--line); background:#f8fafc; cursor:pointer; }
+  .chips button:hover { border-color:var(--maroon); }
+  .card.anim { animation:pop .3s ease; }
+  .list { max-height:320px; overflow:auto; }
+  .list button { display:flex; width:100%; gap:10px; align-items:center; text-align:left; font:inherit; font-size:13.5px; padding:7px 8px; border:0; background:none; border-radius:8px; cursor:pointer; }
+  .list button:hover, .list button.on { background:#f4f5f8; }
+  .muted { color:var(--muted); font-size:13px; }
+  footer { text-align:center; color:var(--muted); font-size:14px; padding:10px 24px 40px; }
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation:none !important; } .wire .w { stroke-dashoffset:0; } }
+</style>
+</head>
+<body>
+<nav><div class="in">
+  <a class="brand" href="index.html"><img src="images/logo.svg" alt="">Sentinel Swarm</a>
+  <div class="links"><a href="index.html">Project</a><a href="build.html">Build guide</a><a href="https://github.com/MeshanNawod/smart-attendance-management-system_v_3">GitHub ↗</a></div>
+</div></nav>
+
+<header>
+  <svg class="traces" viewBox="0 0 1200 220" preserveAspectRatio="none" aria-hidden="true"><path d="M0 40 H300 V120 H620 V60 H1200"/><path d="M0 170 H180 V90 H460 V190 H900 V130 H1200"/><path d="M820 0 V80 H1020 V220"/></svg>
+  <div class="in">
+    <h1>Interactive wiring</h1>
+    <p>Hover over any wire, pin or part. The whole connection lights up, a signal runs along it, and the panel shows where it goes and the line of firmware that sets it up.</p>
+    <div class="tabs" role="tablist">
+      <button class="tab" data-p="esp" aria-selected="true">🖐️ ESP32 node</button>
+      <button class="tab" data-p="rpi" aria-selected="false">📷 Raspberry Pi node</button>
+      <button class="tab" data-p="sys" aria-selected="false">🌐 Whole system</button>
+    </div>
+  </div>
+</header>
+
+<main>
+  <section class="stage">
+    <div class="toolbar">
+      <span>Show:</span>
+      <span id="filters"></span>
+      <button id="replay" title="Replay the drawing animation">↻ Replay</button>
+      <button id="zout" title="Zoom out">−</button><button id="zin" title="Zoom in">+</button>
+      <span class="hint">Tip: click to pin a connection, click empty space to clear</span>
+    </div>
+    <div class="panel show" id="p-esp"><div class="zoomwrap"><svg id="d-esp" class="dia" viewBox="0 0 1520 1240" role="img" aria-label="ESP32 node wiring diagram" font-family="Segoe UI, system-ui, sans-serif"><g class="comp" data-comp="esp32">
+<rect x="610" y="120" width="190" height="530" rx="12" fill="#1f2937" class="body"/>
+<rect x="655" y="138" width="100" height="70" rx="4" fill="#9ca3af"/>
+<g class="ant"><path d="M670 150 h20 v-8 h12 v8 h12 v-8 h12 v8 h12 v-8 h12 v8 h8" fill="none" stroke="#4b5563" stroke-width="2"/></g>
+<text x="705.0" y="190" font-size="11" font-weight="700" text-anchor="middle" fill="#1f2937">ESP-WROOM-32</text>
+<text x="705.0" y="382" font-size="22" font-weight="700" text-anchor="middle" fill="#e5e7eb">ESP32</text>
+<text x="705.0" y="406" font-size="13" font-weight="400" text-anchor="middle" fill="#9ca3af">DevKit V1</text>
+<circle class="pwr-led" cx="650" cy="610" r="5" fill="#ef4444"/>
+<circle class="blue-led" cx="760" cy="610" r="5" fill="#3b82f6"/>
+<text x="760" y="626" font-size="10" font-weight="400" text-anchor="middle" fill="#9ca3af">D2</text>
+<rect x="681.0" y="636" width="48" height="22" rx="3" fill="#9ca3af"/>
+</g>
+<text x="705.0" y="678" font-size="12" font-weight="400" text-anchor="middle" fill="#5d6573">USB (power + programming)</text>
+<rect class="pin" x="603" y="153" width="14" height="14" rx="2" fill="#6b7280"/>
+<text x="626" y="165" font-size="13" font-weight="400" text-anchor="start" fill="#e5e7eb">EN</text>
+<rect class="pin" x="603" y="187" width="14" height="14" rx="2" fill="#6b7280"/>
+<text x="626" y="199" font-size="13" font-weight="400" text-anchor="start" fill="#e5e7eb">VP</text>
+<rect class="pin" x="603" y="221" width="14" height="14" rx="2" fill="#6b7280"/>
+<text x="626" y="233" font-size="13" font-weight="400" text-anchor="start" fill="#e5e7eb">VN</text>
+<rect class="pin" x="603" y="255" width="14" height="14" rx="2" fill="#6b7280"/>
+<text x="626" y="267" font-size="13" font-weight="400" text-anchor="start" fill="#e5e7eb">D34</text>
+<rect class="pin" data-net="D35" x="603" y="289" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="626" y="301" font-size="13" font-weight="400" text-anchor="start" fill="#e5e7eb">D35</text>
+<rect class="pin" data-net="D32" x="603" y="323" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="626" y="335" font-size="13" font-weight="400" text-anchor="start" fill="#e5e7eb">D32</text>
+<rect class="pin" data-net="D33" x="603" y="357" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="626" y="369" font-size="13" font-weight="400" text-anchor="start" fill="#e5e7eb">D33</text>
+<rect class="pin" data-net="D25" x="603" y="391" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="626" y="403" font-size="13" font-weight="400" text-anchor="start" fill="#e5e7eb">D25</text>
+<rect class="pin" data-net="D26" x="603" y="425" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="626" y="437" font-size="13" font-weight="400" text-anchor="start" fill="#e5e7eb">D26</text>
+<rect class="pin" data-net="D27" x="603" y="459" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="626" y="471" font-size="13" font-weight="400" text-anchor="start" fill="#e5e7eb">D27</text>
+<rect class="pin" data-net="D14" x="603" y="493" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="626" y="505" font-size="13" font-weight="400" text-anchor="start" fill="#e5e7eb">D14</text>
+<rect class="pin" data-net="D12" x="603" y="527" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="626" y="539" font-size="13" font-weight="400" text-anchor="start" fill="#e5e7eb">D12</text>
+<rect class="pin" data-net="D13" x="603" y="561" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="626" y="573" font-size="13" font-weight="400" text-anchor="start" fill="#e5e7eb">D13</text>
+<rect class="pin" data-net="GND" x="603" y="595" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="626" y="607" font-size="13" font-weight="400" text-anchor="start" fill="#e5e7eb">GND</text>
+<rect class="pin" data-net="5V" x="603" y="629" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="626" y="641" font-size="13" font-weight="400" text-anchor="start" fill="#e5e7eb">VIN</text>
+<rect class="pin" data-net="D23" x="793" y="153" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="784" y="165" font-size="13" font-weight="400" text-anchor="end" fill="#e5e7eb">D23</text>
+<rect class="pin" data-net="D22" x="793" y="187" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="784" y="199" font-size="13" font-weight="400" text-anchor="end" fill="#e5e7eb">D22</text>
+<rect class="pin" x="793" y="221" width="14" height="14" rx="2" fill="#6b7280"/>
+<text x="784" y="233" font-size="13" font-weight="400" text-anchor="end" fill="#e5e7eb">TX0</text>
+<rect class="pin" x="793" y="255" width="14" height="14" rx="2" fill="#6b7280"/>
+<text x="784" y="267" font-size="13" font-weight="400" text-anchor="end" fill="#e5e7eb">RX0</text>
+<rect class="pin" data-net="D21" x="793" y="289" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="784" y="301" font-size="13" font-weight="400" text-anchor="end" fill="#e5e7eb">D21</text>
+<rect class="pin" data-net="D19" x="793" y="323" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="784" y="335" font-size="13" font-weight="400" text-anchor="end" fill="#e5e7eb">D19</text>
+<rect class="pin" data-net="D18" x="793" y="357" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="784" y="369" font-size="13" font-weight="400" text-anchor="end" fill="#e5e7eb">D18</text>
+<rect class="pin" data-net="D5" x="793" y="391" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="784" y="403" font-size="13" font-weight="400" text-anchor="end" fill="#e5e7eb">D5</text>
+<rect class="pin" data-net="TX2" x="793" y="425" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="784" y="437" font-size="13" font-weight="400" text-anchor="end" fill="#e5e7eb">TX2</text>
+<rect class="pin" data-net="RX2" x="793" y="459" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="784" y="471" font-size="13" font-weight="400" text-anchor="end" fill="#e5e7eb">RX2</text>
+<rect class="pin" data-net="D4" x="793" y="493" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="784" y="505" font-size="13" font-weight="400" text-anchor="end" fill="#e5e7eb">D4</text>
+<rect class="pin" data-net="D2" x="793" y="527" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="784" y="539" font-size="13" font-weight="400" text-anchor="end" fill="#e5e7eb">D2</text>
+<rect class="pin" data-net="D15" x="793" y="561" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="784" y="573" font-size="13" font-weight="400" text-anchor="end" fill="#e5e7eb">D15</text>
+<rect class="pin" data-net="GND" x="793" y="595" width="14" height="14" rx="2" fill="#fbbf24"/>
+<text x="784" y="607" font-size="13" font-weight="400" text-anchor="end" fill="#e5e7eb">GND</text>
+<rect class="pin" x="793" y="629" width="14" height="14" rx="2" fill="#6b7280"/>
+<text x="784" y="641" font-size="13" font-weight="400" text-anchor="end" fill="#e5e7eb">3V3</text>
+<g class="wire" data-net="GND"><path class="hit" d="M603,602 L570,602"/><path class="w" d="M603,602 L570,602" stroke="#111827" stroke-width="2.6" pathLength="1"/><path class="flow" d="M603,602 L570,602"/></g>
+<g class="rail" data-net="GND"><rect x="528" y="593" width="40" height="18" rx="9" fill="#111827"/><text x="548.0" y="606" font-size="11" font-weight="700" text-anchor="middle" fill="#fff">GND</text></g>
+<g class="wire" data-net="5V"><path class="hit" d="M603,636 L570,636"/><path class="w" d="M603,636 L570,636" stroke="#ea580c" stroke-width="2.6" pathLength="1"/><path class="flow" d="M603,636 L570,636"/></g>
+<g class="rail" data-net="5V"><rect x="528" y="627" width="40" height="18" rx="9" fill="#ea580c"/><text x="548.0" y="640" font-size="11" font-weight="700" text-anchor="middle" fill="#fff">5V</text></g>
+<g class="rail" data-net="GND"><rect x="814" y="593" width="40" height="18" rx="9" fill="#111827"/><text x="834.0" y="606" font-size="11" font-weight="700" text-anchor="middle" fill="#fff">GND</text></g>
+<text x="816" y="640" font-size="11" font-weight="400" text-anchor="start" fill="#5d6573">not connected</text>
+<g class="comp" data-comp="lcd">
+<rect class="body" x="1180" y="62" width="300" height="142" rx="10" fill="#f8fafc" stroke="#138a52" stroke-width="2"/>
+<path d="M1180 96 V72 a10 10 0 0 1 10 -10 H1470 a10 10 0 0 1 10 10 V96 Z" fill="#138a52"/>
+<text x="1192" y="84" font-size="14" font-weight="700" text-anchor="start" fill="#fff">I2C LCD 16×4</text>
+<text x="1470" y="84" font-size="11" font-weight="400" text-anchor="end" fill="#e2e8f0">0x27 / 0x3F</text>
+<circle class="pin" data-net="D21" cx="1180" cy="114" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="118" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">SDA</text>
+<circle class="pin" data-net="D22" cx="1180" cy="138" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="142" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">SCL</text>
+<circle class="pin" data-net="5V" cx="1180" cy="162" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="166" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">VCC</text>
+<g class="rail" data-net="5V"><rect x="1430" y="153" width="40" height="18" rx="9" fill="#ea580c"/><text x="1450.0" y="166" font-size="11" font-weight="700" text-anchor="middle" fill="#fff">5V</text></g>
+<circle class="pin" data-net="GND" cx="1180" cy="186" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="190" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">GND</text>
+<g class="rail" data-net="GND"><rect x="1430" y="177" width="40" height="18" rx="9" fill="#111827"/><text x="1450.0" y="190" font-size="11" font-weight="700" text-anchor="middle" fill="#fff">GND</text></g>
+</g>
+<g class="comp" data-comp="rtc">
+<rect class="body" x="1180" y="218" width="300" height="142" rx="10" fill="#f8fafc" stroke="#138a52" stroke-width="2"/>
+<path d="M1180 252 V228 a10 10 0 0 1 10 -10 H1470 a10 10 0 0 1 10 10 V252 Z" fill="#138a52"/>
+<text x="1192" y="240" font-size="14" font-weight="700" text-anchor="start" fill="#fff">HW-084 RTC (DS3231)</text>
+<text x="1470" y="240" font-size="11" font-weight="400" text-anchor="end" fill="#e2e8f0">optional</text>
+<circle class="pin" data-net="D21" cx="1180" cy="270" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="274" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">SDA</text>
+<circle class="pin" data-net="D22" cx="1180" cy="294" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="298" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">SCL</text>
+<circle class="pin" data-net="3V3" cx="1180" cy="318" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="322" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">VCC</text>
+<g class="rail" data-net="3V3"><rect x="1430" y="309" width="40" height="18" rx="9" fill="#dc2626"/><text x="1450.0" y="322" font-size="11" font-weight="700" text-anchor="middle" fill="#fff">3V3</text></g>
+<circle class="pin" data-net="GND" cx="1180" cy="342" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="346" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">GND</text>
+<g class="rail" data-net="GND"><rect x="1430" y="333" width="40" height="18" rx="9" fill="#111827"/><text x="1450.0" y="346" font-size="11" font-weight="700" text-anchor="middle" fill="#fff">GND</text></g>
+</g>
+<g class="comp" data-comp="rfid">
+<rect class="body" x="1180" y="374" width="300" height="214" rx="10" fill="#f8fafc" stroke="#1d6fe0" stroke-width="2"/>
+<path d="M1180 408 V384 a10 10 0 0 1 10 -10 H1470 a10 10 0 0 1 10 10 V408 Z" fill="#1d6fe0"/>
+<text x="1192" y="396" font-size="14" font-weight="700" text-anchor="start" fill="#fff">MFRC522 RFID reader</text>
+<text x="1470" y="396" font-size="11" font-weight="400" text-anchor="end" fill="#e2e8f0">SPI</text>
+<circle class="pin" data-net="D15" cx="1180" cy="426" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="430" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">SDA (SS)</text>
+<circle class="pin" data-net="D18" cx="1180" cy="450" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="454" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">SCK</text>
+<circle class="pin" data-net="D23" cx="1180" cy="474" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="478" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">MOSI</text>
+<circle class="pin" data-net="D19" cx="1180" cy="498" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="502" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">MISO</text>
+<circle class="pin" data-net="D22" cx="1180" cy="522" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="526" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">RST</text>
+<circle class="pin" data-net="3V3" cx="1180" cy="546" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="550" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">3.3V</text>
+<g class="rail" data-net="3V3"><rect x="1430" y="537" width="40" height="18" rx="9" fill="#dc2626"/><text x="1450.0" y="550" font-size="11" font-weight="700" text-anchor="middle" fill="#fff">3V3</text></g>
+<circle class="pin" data-net="GND" cx="1180" cy="570" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="574" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">GND</text>
+<g class="rail" data-net="GND"><rect x="1430" y="561" width="40" height="18" rx="9" fill="#111827"/><text x="1450.0" y="574" font-size="11" font-weight="700" text-anchor="middle" fill="#fff">GND</text></g>
+</g>
+<g class="comp" data-comp="sd">
+<rect class="body" x="1180" y="602" width="300" height="190" rx="10" fill="#f8fafc" stroke="#1d6fe0" stroke-width="2"/>
+<path d="M1180 636 V612 a10 10 0 0 1 10 -10 H1470 a10 10 0 0 1 10 10 V636 Z" fill="#1d6fe0"/>
+<text x="1192" y="624" font-size="14" font-weight="700" text-anchor="start" fill="#fff">MicroSD card module</text>
+<text x="1470" y="624" font-size="11" font-weight="400" text-anchor="end" fill="#e2e8f0">SPI</text>
+<circle class="pin" data-net="D4" cx="1180" cy="654" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="658" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">CS</text>
+<circle class="pin" data-net="D18" cx="1180" cy="678" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="682" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">SCK</text>
+<circle class="pin" data-net="D23" cx="1180" cy="702" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="706" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">MOSI</text>
+<circle class="pin" data-net="D19" cx="1180" cy="726" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="730" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">MISO</text>
+<circle class="pin" data-net="3V3" cx="1180" cy="750" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="754" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">VCC</text>
+<g class="rail" data-net="3V3"><rect x="1430" y="741" width="40" height="18" rx="9" fill="#dc2626"/><text x="1450.0" y="754" font-size="11" font-weight="700" text-anchor="middle" fill="#fff">3V3</text></g>
+<circle class="pin" data-net="GND" cx="1180" cy="774" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="778" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">GND</text>
+<g class="rail" data-net="GND"><rect x="1430" y="765" width="40" height="18" rx="9" fill="#111827"/><text x="1450.0" y="778" font-size="11" font-weight="700" text-anchor="middle" fill="#fff">GND</text></g>
+</g>
+<g class="comp" data-comp="led">
+<rect class="body" x="1180" y="806" width="300" height="94" rx="10" fill="#f8fafc" stroke="#a16207" stroke-width="2"/>
+<path d="M1180 840 V816 a10 10 0 0 1 10 -10 H1470 a10 10 0 0 1 10 10 V840 Z" fill="#a16207"/>
+<text x="1192" y="828" font-size="14" font-weight="700" text-anchor="start" fill="#fff">Status LED / buzzer</text>
+<circle class="pin" data-net="D2" cx="1180" cy="858" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="862" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">Signal (+)</text>
+<circle class="pin" data-net="GND" cx="1180" cy="882" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="886" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">GND</text>
+<g class="rail" data-net="GND"><rect x="1430" y="873" width="40" height="18" rx="9" fill="#111827"/><text x="1450.0" y="886" font-size="11" font-weight="700" text-anchor="middle" fill="#fff">GND</text></g>
+</g>
+<g class="comp" data-comp="fp">
+<rect class="body" x="1180" y="914" width="300" height="166" rx="10" fill="#f8fafc" stroke="#c2410c" stroke-width="2"/>
+<path d="M1180 948 V924 a10 10 0 0 1 10 -10 H1470 a10 10 0 0 1 10 10 V948 Z" fill="#c2410c"/>
+<text x="1192" y="936" font-size="14" font-weight="700" text-anchor="start" fill="#fff">FM10A fingerprint</text>
+<text x="1470" y="936" font-size="11" font-weight="400" text-anchor="end" fill="#e2e8f0">UART2</text>
+<circle class="pin" data-net="RX2" cx="1180" cy="966" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="970" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">TX</text>
+<circle class="pin" data-net="TX2" cx="1180" cy="990" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="994" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">RX</text>
+<circle class="pin" data-net="D35" cx="1180" cy="1014" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="1018" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">T-out (touch)</text>
+<circle class="pin" data-net="3V3" cx="1180" cy="1038" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="1042" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">VCC</text>
+<g class="rail" data-net="3V3"><rect x="1430" y="1029" width="40" height="18" rx="9" fill="#dc2626"/><text x="1450.0" y="1042" font-size="11" font-weight="700" text-anchor="middle" fill="#fff">3V3</text></g>
+<circle class="pin" data-net="FPGND" cx="1180" cy="1062" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="1192" y="1066" font-size="12.5" font-weight="400" text-anchor="start" fill="#161a22">GND (switched)</text>
+</g>
+<g class="wire" data-net="D21"><path class="hit" d="M807,296 L855,296"/><path class="w" d="M807,296 L855,296" stroke="#138a52" stroke-width="2.6" pathLength="1"/><path class="flow" d="M807,296 L855,296"/></g>
+<g class="wire" data-net="D21"><path class="hit" d="M855,114 L855,296"/><path class="w" d="M855,114 L855,296" stroke="#138a52" stroke-width="2.6" pathLength="1"/><path class="flow" d="M855,114 L855,296"/></g>
+<g class="wire" data-net="D21"><path class="hit" d="M855,114 L1180,114"/><path class="w" d="M855,114 L1180,114" stroke="#138a52" stroke-width="2.6" pathLength="1"/><path class="flow" d="M855,114 L1180,114"/></g>
+<circle class="jn" data-net="D21" cx="855" cy="114" r="4.5" fill="#138a52"/>
+<text class="tag" data-net="D21" x="1171" y="109" font-size="10.5" font-weight="700" text-anchor="end" fill="#138a52">D21 · SDA</text>
+<g class="wire" data-net="D21"><path class="hit" d="M855,270 L1180,270"/><path class="w" d="M855,270 L1180,270" stroke="#138a52" stroke-width="2.6" pathLength="1"/><path class="flow" d="M855,270 L1180,270"/></g>
+<circle class="jn" data-net="D21" cx="855" cy="270" r="4.5" fill="#138a52"/>
+<text class="tag" data-net="D21" x="1171" y="265" font-size="10.5" font-weight="700" text-anchor="end" fill="#138a52">D21 · SDA</text>
+<g class="wire" data-net="D22"><path class="hit" d="M807,194 L836,194"/><path class="w" d="M807,194 L836,194" stroke="#138a52" stroke-width="2.6" pathLength="1"/><path class="flow" d="M807,194 L836,194"/></g>
+<g class="wire" data-net="D22"><path class="hit" d="M836,138 L836,522"/><path class="w" d="M836,138 L836,522" stroke="#138a52" stroke-width="2.6" pathLength="1"/><path class="flow" d="M836,138 L836,522"/></g>
+<g class="wire" data-net="D22"><path class="hit" d="M836,138 L1180,138"/><path class="w" d="M836,138 L1180,138" stroke="#138a52" stroke-width="2.6" pathLength="1"/><path class="flow" d="M836,138 L1180,138"/></g>
+<circle class="jn" data-net="D22" cx="836" cy="138" r="4.5" fill="#138a52"/>
+<text class="tag" data-net="D22" x="1171" y="133" font-size="10.5" font-weight="700" text-anchor="end" fill="#138a52">D22</text>
+<g class="wire" data-net="D22"><path class="hit" d="M836,294 L1180,294"/><path class="w" d="M836,294 L1180,294" stroke="#138a52" stroke-width="2.6" pathLength="1"/><path class="flow" d="M836,294 L1180,294"/></g>
+<circle class="jn" data-net="D22" cx="836" cy="294" r="4.5" fill="#138a52"/>
+<text class="tag" data-net="D22" x="1171" y="289" font-size="10.5" font-weight="700" text-anchor="end" fill="#138a52">D22</text>
+<g class="wire" data-net="D22"><path class="hit" d="M836,522 L1180,522"/><path class="w" d="M836,522 L1180,522" stroke="#138a52" stroke-width="2.6" pathLength="1"/><path class="flow" d="M836,522 L1180,522"/></g>
+<circle class="jn" data-net="D22" cx="836" cy="522" r="4.5" fill="#138a52"/>
+<text class="tag" data-net="D22" x="1171" y="517" font-size="10.5" font-weight="700" text-anchor="end" fill="#138a52">D22</text>
+<g class="wire" data-net="D23"><path class="hit" d="M807,160 L874,160"/><path class="w" d="M807,160 L874,160" stroke="#1d6fe0" stroke-width="2.6" pathLength="1"/><path class="flow" d="M807,160 L874,160"/></g>
+<g class="wire" data-net="D23"><path class="hit" d="M874,160 L874,702"/><path class="w" d="M874,160 L874,702" stroke="#1d6fe0" stroke-width="2.6" pathLength="1"/><path class="flow" d="M874,160 L874,702"/></g>
+<g class="wire" data-net="D23"><path class="hit" d="M874,474 L1180,474"/><path class="w" d="M874,474 L1180,474" stroke="#1d6fe0" stroke-width="2.6" pathLength="1"/><path class="flow" d="M874,474 L1180,474"/></g>
+<circle class="jn" data-net="D23" cx="874" cy="474" r="4.5" fill="#1d6fe0"/>
+<text class="tag" data-net="D23" x="1171" y="469" font-size="10.5" font-weight="700" text-anchor="end" fill="#1d6fe0">D23 · MOSI</text>
+<g class="wire" data-net="D23"><path class="hit" d="M874,702 L1180,702"/><path class="w" d="M874,702 L1180,702" stroke="#1d6fe0" stroke-width="2.6" pathLength="1"/><path class="flow" d="M874,702 L1180,702"/></g>
+<circle class="jn" data-net="D23" cx="874" cy="702" r="4.5" fill="#1d6fe0"/>
+<text class="tag" data-net="D23" x="1171" y="697" font-size="10.5" font-weight="700" text-anchor="end" fill="#1d6fe0">D23 · MOSI</text>
+<g class="wire" data-net="D19"><path class="hit" d="M807,330 L893,330"/><path class="w" d="M807,330 L893,330" stroke="#1d6fe0" stroke-width="2.6" pathLength="1"/><path class="flow" d="M807,330 L893,330"/></g>
+<g class="wire" data-net="D19"><path class="hit" d="M893,330 L893,726"/><path class="w" d="M893,330 L893,726" stroke="#1d6fe0" stroke-width="2.6" pathLength="1"/><path class="flow" d="M893,330 L893,726"/></g>
+<g class="wire" data-net="D19"><path class="hit" d="M893,498 L1180,498"/><path class="w" d="M893,498 L1180,498" stroke="#1d6fe0" stroke-width="2.6" pathLength="1"/><path class="flow" d="M893,498 L1180,498"/></g>
+<circle class="jn" data-net="D19" cx="893" cy="498" r="4.5" fill="#1d6fe0"/>
+<text class="tag" data-net="D19" x="1171" y="493" font-size="10.5" font-weight="700" text-anchor="end" fill="#1d6fe0">D19 · MISO</text>
+<g class="wire" data-net="D19"><path class="hit" d="M893,726 L1180,726"/><path class="w" d="M893,726 L1180,726" stroke="#1d6fe0" stroke-width="2.6" pathLength="1"/><path class="flow" d="M893,726 L1180,726"/></g>
+<circle class="jn" data-net="D19" cx="893" cy="726" r="4.5" fill="#1d6fe0"/>
+<text class="tag" data-net="D19" x="1171" y="721" font-size="10.5" font-weight="700" text-anchor="end" fill="#1d6fe0">D19 · MISO</text>
+<g class="wire" data-net="D18"><path class="hit" d="M807,364 L912,364"/><path class="w" d="M807,364 L912,364" stroke="#1d6fe0" stroke-width="2.6" pathLength="1"/><path class="flow" d="M807,364 L912,364"/></g>
+<g class="wire" data-net="D18"><path class="hit" d="M912,364 L912,678"/><path class="w" d="M912,364 L912,678" stroke="#1d6fe0" stroke-width="2.6" pathLength="1"/><path class="flow" d="M912,364 L912,678"/></g>
+<g class="wire" data-net="D18"><path class="hit" d="M912,450 L1180,450"/><path class="w" d="M912,450 L1180,450" stroke="#1d6fe0" stroke-width="2.6" pathLength="1"/><path class="flow" d="M912,450 L1180,450"/></g>
+<circle class="jn" data-net="D18" cx="912" cy="450" r="4.5" fill="#1d6fe0"/>
+<text class="tag" data-net="D18" x="1171" y="445" font-size="10.5" font-weight="700" text-anchor="end" fill="#1d6fe0">D18 · SCK</text>
+<g class="wire" data-net="D18"><path class="hit" d="M912,678 L1180,678"/><path class="w" d="M912,678 L1180,678" stroke="#1d6fe0" stroke-width="2.6" pathLength="1"/><path class="flow" d="M912,678 L1180,678"/></g>
+<circle class="jn" data-net="D18" cx="912" cy="678" r="4.5" fill="#1d6fe0"/>
+<text class="tag" data-net="D18" x="1171" y="673" font-size="10.5" font-weight="700" text-anchor="end" fill="#1d6fe0">D18 · SCK</text>
+<g class="wire" data-net="D15"><path class="hit" d="M807,568 L931,568"/><path class="w" d="M807,568 L931,568" stroke="#1d6fe0" stroke-width="2.6" pathLength="1"/><path class="flow" d="M807,568 L931,568"/></g>
+<g class="wire" data-net="D15"><path class="hit" d="M931,426 L931,568"/><path class="w" d="M931,426 L931,568" stroke="#1d6fe0" stroke-width="2.6" pathLength="1"/><path class="flow" d="M931,426 L931,568"/></g>
+<g class="wire" data-net="D15"><path class="hit" d="M931,426 L1180,426"/><path class="w" d="M931,426 L1180,426" stroke="#1d6fe0" stroke-width="2.6" pathLength="1"/><path class="flow" d="M931,426 L1180,426"/></g>
+<circle class="jn" data-net="D15" cx="931" cy="426" r="4.5" fill="#1d6fe0"/>
+<text class="tag" data-net="D15" x="1171" y="421" font-size="10.5" font-weight="700" text-anchor="end" fill="#1d6fe0">D15 · SS</text>
+<g class="wire" data-net="D4"><path class="hit" d="M807,500 L950,500"/><path class="w" d="M807,500 L950,500" stroke="#1d6fe0" stroke-width="2.6" pathLength="1"/><path class="flow" d="M807,500 L950,500"/></g>
+<g class="wire" data-net="D4"><path class="hit" d="M950,500 L950,654"/><path class="w" d="M950,500 L950,654" stroke="#1d6fe0" stroke-width="2.6" pathLength="1"/><path class="flow" d="M950,500 L950,654"/></g>
+<g class="wire" data-net="D4"><path class="hit" d="M950,654 L1180,654"/><path class="w" d="M950,654 L1180,654" stroke="#1d6fe0" stroke-width="2.6" pathLength="1"/><path class="flow" d="M950,654 L1180,654"/></g>
+<circle class="jn" data-net="D4" cx="950" cy="654" r="4.5" fill="#1d6fe0"/>
+<text class="tag" data-net="D4" x="1171" y="649" font-size="10.5" font-weight="700" text-anchor="end" fill="#1d6fe0">D4 · CS</text>
+<g class="wire" data-net="D2"><path class="hit" d="M807,534 L969,534"/><path class="w" d="M807,534 L969,534" stroke="#a16207" stroke-width="2.6" pathLength="1"/><path class="flow" d="M807,534 L969,534"/></g>
+<g class="wire" data-net="D2"><path class="hit" d="M969,534 L969,858"/><path class="w" d="M969,534 L969,858" stroke="#a16207" stroke-width="2.6" pathLength="1"/><path class="flow" d="M969,534 L969,858"/></g>
+<g class="wire" data-net="D2"><path class="hit" d="M969,858 L1180,858"/><path class="w" d="M969,858 L1180,858" stroke="#a16207" stroke-width="2.6" pathLength="1"/><path class="flow" d="M969,858 L1180,858"/></g>
+<circle class="jn" data-net="D2" cx="969" cy="858" r="4.5" fill="#a16207"/>
+<text class="tag" data-net="D2" x="1171" y="853" font-size="10.5" font-weight="700" text-anchor="end" fill="#a16207">D2</text>
+<g class="wire" data-net="TX2"><path class="hit" d="M807,432 L1007,432"/><path class="w" d="M807,432 L1007,432" stroke="#c2410c" stroke-width="2.6" pathLength="1"/><path class="flow" d="M807,432 L1007,432"/></g>
+<g class="wire" data-net="TX2"><path class="hit" d="M1007,432 L1007,990"/><path class="w" d="M1007,432 L1007,990" stroke="#c2410c" stroke-width="2.6" pathLength="1"/><path class="flow" d="M1007,432 L1007,990"/></g>
+<g class="wire" data-net="TX2"><path class="hit" d="M1007,990 L1180,990"/><path class="w" d="M1007,990 L1180,990" stroke="#c2410c" stroke-width="2.6" pathLength="1"/><path class="flow" d="M1007,990 L1180,990"/></g>
+<circle class="jn" data-net="TX2" cx="1007" cy="990" r="4.5" fill="#c2410c"/>
+<text class="tag" data-net="TX2" x="1171" y="985" font-size="10.5" font-weight="700" text-anchor="end" fill="#c2410c">TX2 (D17) → RX</text>
+<g class="wire" data-net="RX2"><path class="hit" d="M807,466 L1026,466"/><path class="w" d="M807,466 L1026,466" stroke="#c2410c" stroke-width="2.6" pathLength="1"/><path class="flow" d="M807,466 L1026,466"/></g>
+<g class="wire" data-net="RX2"><path class="hit" d="M1026,466 L1026,966"/><path class="w" d="M1026,466 L1026,966" stroke="#c2410c" stroke-width="2.6" pathLength="1"/><path class="flow" d="M1026,466 L1026,966"/></g>
+<g class="wire" data-net="RX2"><path class="hit" d="M1026,966 L1180,966"/><path class="w" d="M1026,966 L1180,966" stroke="#c2410c" stroke-width="2.6" pathLength="1"/><path class="flow" d="M1026,966 L1180,966"/></g>
+<circle class="jn" data-net="RX2" cx="1026" cy="966" r="4.5" fill="#c2410c"/>
+<text class="tag" data-net="RX2" x="1171" y="961" font-size="10.5" font-weight="700" text-anchor="end" fill="#c2410c">RX2 (D16) ← TX</text>
+<g class="comp" data-comp="mosfet">
+<rect class="body" x="1230" y="1108" width="200" height="132" rx="10" fill="#fff7ed" stroke="#9b1c1c" stroke-width="1.5" stroke-dasharray="5 4"/>
+<line x1="1310" y1="1146" x2="1310" y2="1182" stroke="#111" stroke-width="3"/><line x1="1318" y1="1146" x2="1318" y2="1182" stroke="#111" stroke-width="2"/>
+<text x="1296" y="1158" font-size="11" font-weight="400" text-anchor="end" fill="#5d6573">Gate</text>
+<text x="1358" y="1146" font-size="11" font-weight="400" text-anchor="start" fill="#5d6573">Drain</text>
+<text x="1358" y="1184" font-size="11" font-weight="400" text-anchor="start" fill="#5d6573">Source</text>
+<text x="1242" y="1230" font-size="12" font-weight="700" text-anchor="start" fill="#9b1c1c">N-MOSFET (2SK2161)</text>
+</g>
+<g class="wire" data-net="FPGND"><path class="hit" d="M1318,1150 L1350,1150 L1350,1118 L1165,1118 L1165,1062 L1180,1062"/><path class="w" d="M1318,1150 L1350,1150 L1350,1118 L1165,1118 L1165,1062 L1180,1062" stroke="#111827" stroke-width="2.6" pathLength="1"/><path class="flow" d="M1318,1150 L1350,1150 L1350,1118 L1165,1118 L1165,1062 L1180,1062"/></g>
+<g class="wire" data-net="GND"><path class="hit" d="M1318,1178 L1350,1178 L1350,1198"/><path class="w" d="M1318,1178 L1350,1178 L1350,1198" stroke="#111827" stroke-width="2.6" pathLength="1"/><path class="flow" d="M1318,1178 L1350,1178 L1350,1198"/></g>
+<g class="rail" data-net="GND"><rect x="1370" y="1195" width="40" height="18" rx="9" fill="#111827"/><text x="1390.0" y="1208" font-size="11" font-weight="700" text-anchor="middle" fill="#fff">GND</text></g>
+<g class="wire" data-net="D5"><path class="hit" d="M807,398 L988,398 L988,1164 L1310,1164"/><path class="w" d="M807,398 L988,398 L988,1164 L1310,1164" stroke="#9b1c1c" stroke-width="2.6" pathLength="1"/><path class="flow" d="M807,398 L988,398 L988,1164 L1310,1164"/></g>
+<text class="tag" data-net="D5" x="998" y="1158" font-size="10.5" font-weight="700" fill="#9b1c1c">D5 · HIGH = sensor on</text>
+<g class="wire" data-net="D35"><path class="hit" d="M603,296 L592,296 L592,1210 L1150,1210 L1150,1014 L1180,1014"/><path class="w" d="M603,296 L592,296 L592,1210 L1150,1210 L1150,1014 L1180,1014" stroke="#0f766e" stroke-width="2.6" pathLength="1"/><path class="flow" d="M603,296 L592,296 L592,1210 L1150,1210 L1150,1014 L1180,1014"/></g>
+<text class="tag" data-net="D35" x="1171" y="1009" font-size="10.5" font-weight="700" text-anchor="end" fill="#0f766e">D35 · touch</text>
+<text class="tag" data-net="D35" x="604" y="1204" font-size="10.5" font-weight="700" fill="#0f766e">D35 (input only) → FM10A T-out</text>
+<g class="comp" data-comp="keypad">
+<rect class="body" x="250" y="278" width="190" height="318" rx="10" fill="#f8fafc" stroke="#6d3fd6" stroke-width="2"/>
+<path d="M250 312 V288 a10 10 0 0 1 10 -10 H430 a10 10 0 0 1 10 10 V312 Z" fill="#6d3fd6"/>
+<text x="262" y="300" font-size="14" font-weight="700" text-anchor="start" fill="#fff">4×4 keypad</text>
+<g class="key" data-key="1" data-row="D13" data-col="D26"><rect x="264" y="334" width="24" height="24" rx="4" fill="#ede9fe" stroke="#c4b5fd"/><text x="276" y="351" font-size="12" text-anchor="middle" fill="#4c1d95">1</text></g>
+<g class="key" data-key="2" data-row="D13" data-col="D25"><rect x="294" y="334" width="24" height="24" rx="4" fill="#ede9fe" stroke="#c4b5fd"/><text x="306" y="351" font-size="12" text-anchor="middle" fill="#4c1d95">2</text></g>
+<g class="key" data-key="3" data-row="D13" data-col="D33"><rect x="324" y="334" width="24" height="24" rx="4" fill="#ede9fe" stroke="#c4b5fd"/><text x="336" y="351" font-size="12" text-anchor="middle" fill="#4c1d95">3</text></g>
+<g class="key" data-key="A" data-row="D13" data-col="D32"><rect x="354" y="334" width="24" height="24" rx="4" fill="#ede9fe" stroke="#c4b5fd"/><text x="366" y="351" font-size="12" text-anchor="middle" fill="#4c1d95">A</text></g>
+<g class="key" data-key="4" data-row="D12" data-col="D26"><rect x="264" y="364" width="24" height="24" rx="4" fill="#ede9fe" stroke="#c4b5fd"/><text x="276" y="381" font-size="12" text-anchor="middle" fill="#4c1d95">4</text></g>
+<g class="key" data-key="5" data-row="D12" data-col="D25"><rect x="294" y="364" width="24" height="24" rx="4" fill="#ede9fe" stroke="#c4b5fd"/><text x="306" y="381" font-size="12" text-anchor="middle" fill="#4c1d95">5</text></g>
+<g class="key" data-key="6" data-row="D12" data-col="D33"><rect x="324" y="364" width="24" height="24" rx="4" fill="#ede9fe" stroke="#c4b5fd"/><text x="336" y="381" font-size="12" text-anchor="middle" fill="#4c1d95">6</text></g>
+<g class="key" data-key="B" data-row="D12" data-col="D32"><rect x="354" y="364" width="24" height="24" rx="4" fill="#ede9fe" stroke="#c4b5fd"/><text x="366" y="381" font-size="12" text-anchor="middle" fill="#4c1d95">B</text></g>
+<g class="key" data-key="7" data-row="D14" data-col="D26"><rect x="264" y="394" width="24" height="24" rx="4" fill="#ede9fe" stroke="#c4b5fd"/><text x="276" y="411" font-size="12" text-anchor="middle" fill="#4c1d95">7</text></g>
+<g class="key" data-key="8" data-row="D14" data-col="D25"><rect x="294" y="394" width="24" height="24" rx="4" fill="#ede9fe" stroke="#c4b5fd"/><text x="306" y="411" font-size="12" text-anchor="middle" fill="#4c1d95">8</text></g>
+<g class="key" data-key="9" data-row="D14" data-col="D33"><rect x="324" y="394" width="24" height="24" rx="4" fill="#ede9fe" stroke="#c4b5fd"/><text x="336" y="411" font-size="12" text-anchor="middle" fill="#4c1d95">9</text></g>
+<g class="key" data-key="C" data-row="D14" data-col="D32"><rect x="354" y="394" width="24" height="24" rx="4" fill="#ede9fe" stroke="#c4b5fd"/><text x="366" y="411" font-size="12" text-anchor="middle" fill="#4c1d95">C</text></g>
+<g class="key" data-key="*" data-row="D27" data-col="D26"><rect x="264" y="424" width="24" height="24" rx="4" fill="#ede9fe" stroke="#c4b5fd"/><text x="276" y="441" font-size="12" text-anchor="middle" fill="#4c1d95">*</text></g>
+<g class="key" data-key="0" data-row="D27" data-col="D25"><rect x="294" y="424" width="24" height="24" rx="4" fill="#ede9fe" stroke="#c4b5fd"/><text x="306" y="441" font-size="12" text-anchor="middle" fill="#4c1d95">0</text></g>
+<g class="key" data-key="#" data-row="D27" data-col="D33"><rect x="324" y="424" width="24" height="24" rx="4" fill="#ede9fe" stroke="#c4b5fd"/><text x="336" y="441" font-size="12" text-anchor="middle" fill="#4c1d95">#</text></g>
+<g class="key" data-key="D" data-row="D27" data-col="D32"><rect x="354" y="424" width="24" height="24" rx="4" fill="#ede9fe" stroke="#c4b5fd"/><text x="366" y="441" font-size="12" text-anchor="middle" fill="#4c1d95">D</text></g>
+<circle class="pin" data-net="D32" cx="440" cy="330" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="428" y="334" font-size="12.5" font-weight="400" text-anchor="end" fill="#161a22">Col 4</text>
+<circle class="pin" data-net="D33" cx="440" cy="364" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="428" y="368" font-size="12.5" font-weight="400" text-anchor="end" fill="#161a22">Col 3</text>
+<circle class="pin" data-net="D25" cx="440" cy="398" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="428" y="402" font-size="12.5" font-weight="400" text-anchor="end" fill="#161a22">Col 2</text>
+<circle class="pin" data-net="D26" cx="440" cy="432" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="428" y="436" font-size="12.5" font-weight="400" text-anchor="end" fill="#161a22">Col 1</text>
+<circle class="pin" data-net="D27" cx="440" cy="466" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="428" y="470" font-size="12.5" font-weight="400" text-anchor="end" fill="#161a22">Row 4</text>
+<circle class="pin" data-net="D14" cx="440" cy="500" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="428" y="504" font-size="12.5" font-weight="400" text-anchor="end" fill="#161a22">Row 3</text>
+<circle class="pin" data-net="D12" cx="440" cy="534" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="428" y="538" font-size="12.5" font-weight="400" text-anchor="end" fill="#161a22">Row 2</text>
+<circle class="pin" data-net="D13" cx="440" cy="568" r="5" fill="#fbbf24" stroke="#78350f"/>
+<text x="428" y="572" font-size="12.5" font-weight="400" text-anchor="end" fill="#161a22">Row 1</text>
+</g>
+<g class="wire" data-net="D32"><path class="hit" d="M440,330 L603,330"/><path class="w" d="M440,330 L603,330" stroke="#b45309" stroke-width="2.6" pathLength="1"/><path class="flow" d="M440,330 L603,330"/></g>
+<text class="tag" data-net="D32" x="452" y="325" font-size="10.5" font-weight="700" fill="#b45309">D32</text>
+<g class="wire" data-net="D33"><path class="hit" d="M440,364 L603,364"/><path class="w" d="M440,364 L603,364" stroke="#b45309" stroke-width="2.6" pathLength="1"/><path class="flow" d="M440,364 L603,364"/></g>
+<text class="tag" data-net="D33" x="452" y="359" font-size="10.5" font-weight="700" fill="#b45309">D33</text>
+<g class="wire" data-net="D25"><path class="hit" d="M440,398 L603,398"/><path class="w" d="M440,398 L603,398" stroke="#b45309" stroke-width="2.6" pathLength="1"/><path class="flow" d="M440,398 L603,398"/></g>
+<text class="tag" data-net="D25" x="452" y="393" font-size="10.5" font-weight="700" fill="#b45309">D25</text>
+<g class="wire" data-net="D26"><path class="hit" d="M440,432 L603,432"/><path class="w" d="M440,432 L603,432" stroke="#b45309" stroke-width="2.6" pathLength="1"/><path class="flow" d="M440,432 L603,432"/></g>
+<text class="tag" data-net="D26" x="452" y="427" font-size="10.5" font-weight="700" fill="#b45309">D26</text>
+<g class="wire" data-net="D27"><path class="hit" d="M440,466 L603,466"/><path class="w" d="M440,466 L603,466" stroke="#6d3fd6" stroke-width="2.6" pathLength="1"/><path class="flow" d="M440,466 L603,466"/></g>
+<text class="tag" data-net="D27" x="452" y="461" font-size="10.5" font-weight="700" fill="#6d3fd6">D27</text>
+<g class="wire" data-net="D14"><path class="hit" d="M440,500 L603,500"/><path class="w" d="M440,500 L603,500" stroke="#6d3fd6" stroke-width="2.6" pathLength="1"/><path class="flow" d="M440,500 L603,500"/></g>
+<text class="tag" data-net="D14" x="452" y="495" font-size="10.5" font-weight="700" fill="#6d3fd6">D14</text>
+<g class="wire" data-net="D12"><path class="hit" d="M440,534 L603,534"/><path class="w" d="M440,534 L603,534" stroke="#6d3fd6" stroke-width="2.6" pathLength="1"/><path class="flow" d="M440,534 L603,534"/></g>
+<text class="tag" data-net="D12" x="452" y="529" font-size="10.5" font-weight="700" fill="#6d3fd6">D12</text>
+<g class="wire" data-net="D13"><path class="hit" d="M440,568 L603,568"/><path class="w" d="M440,568 L603,568" stroke="#6d3fd6" stroke-width="2.6" pathLength="1"/><path class="flow" d="M440,568 L603,568"/></g>
+<text class="tag" data-net="D13" x="452" y="563" font-size="10.5" font-weight="700" fill="#6d3fd6">D13</text>
+<text x="250" y="616" font-size="12" font-weight="400" text-anchor="start" fill="#5d6573">Tip: hover a key to see its row and column</text>
+<rect x="30" y="90" width="190" height="212" rx="10" fill="#f8fafc" stroke="#e2e8f0"/>
+<text x="44" y="114" font-size="13" font-weight="700" text-anchor="start" fill="#161a22">Wire colours</text>
+<line x1="44" y1="136" x2="74" y2="136" stroke="#1d6fe0" stroke-width="3"/>
+<text x="82" y="140" font-size="12" font-weight="400" text-anchor="start" fill="#334155">SPI bus</text>
+<line x1="44" y1="157" x2="74" y2="157" stroke="#138a52" stroke-width="3"/>
+<text x="82" y="161" font-size="12" font-weight="400" text-anchor="start" fill="#334155">I2C bus</text>
+<line x1="44" y1="178" x2="74" y2="178" stroke="#c2410c" stroke-width="3"/>
+<text x="82" y="182" font-size="12" font-weight="400" text-anchor="start" fill="#334155">UART</text>
+<line x1="44" y1="199" x2="74" y2="199" stroke="#6d3fd6" stroke-width="3"/>
+<text x="82" y="203" font-size="12" font-weight="400" text-anchor="start" fill="#334155">Keypad rows</text>
+<line x1="44" y1="220" x2="74" y2="220" stroke="#b45309" stroke-width="3"/>
+<text x="82" y="224" font-size="12" font-weight="400" text-anchor="start" fill="#334155">Keypad columns</text>
+<line x1="44" y1="241" x2="74" y2="241" stroke="#9b1c1c" stroke-width="3"/>
+<text x="82" y="245" font-size="12" font-weight="400" text-anchor="start" fill="#334155">Control</text>
+<line x1="44" y1="262" x2="74" y2="262" stroke="#0f766e" stroke-width="3"/>
+<text x="82" y="266" font-size="12" font-weight="400" text-anchor="start" fill="#334155">Touch signal</text>
+<line x1="44" y1="283" x2="74" y2="283" stroke="#a16207" stroke-width="3"/>
+<text x="82" y="287" font-size="12" font-weight="400" text-anchor="start" fill="#334155">LED / buzzer</text></svg></div></div>
+    <div class="panel" id="p-rpi"><div class="zoomwrap"><svg id="d-rpi" class="dia" viewBox="0 0 1240 640" role="img" aria-label="Raspberry Pi camera node" font-family="Segoe UI, system-ui, sans-serif"><g class="comp" data-comp="pi">
+<rect class="body" x="420" y="150" width="400" height="270" rx="16" fill="#166534"/>
+<rect x="460" y="164" width="9" height="9" fill="#d4d4d8"/>
+<rect x="460" y="176" width="9" height="9" fill="#d4d4d8"/>
+<rect x="474" y="164" width="9" height="9" fill="#d4d4d8"/>
+<rect x="474" y="176" width="9" height="9" fill="#d4d4d8"/>
+<rect x="488" y="164" width="9" height="9" fill="#d4d4d8"/>
+<rect x="488" y="176" width="9" height="9" fill="#d4d4d8"/>
+<rect x="502" y="164" width="9" height="9" fill="#d4d4d8"/>
+<rect x="502" y="176" width="9" height="9" fill="#d4d4d8"/>
+<rect x="516" y="164" width="9" height="9" fill="#d4d4d8"/>
+<rect x="516" y="176" width="9" height="9" fill="#d4d4d8"/>
+<rect x="530" y="164" width="9" height="9" fill="#d4d4d8"/>
+<rect x="530" y="176" width="9" height="9" fill="#d4d4d8"/>
+<rect x="544" y="164" width="9" height="9" fill="#d4d4d8"/>
+<rect x="544" y="176" width="9" height="9" fill="#d4d4d8"/>
+<rect x="558" y="164" width="9" height="9" fill="#d4d4d8"/>
+<rect x="558" y="176" width="9" height="9" fill="#d4d4d8"/>
+<rect x="572" y="164" width="9" height="9" fill="#d4d4d8"/>
+<rect x="572" y="176" width="9" height="9" fill="#d4d4d8"/>
+<rect x="586" y="164" width="9" height="9" fill="#d4d4d8"/>
+<rect x="586" y="176" width="9" height="9" fill="#d4d4d8"/>
+<rect x="600" y="164" width="9" height="9" fill="#d4d4d8"/>
+<rect x="600" y="176" width="9" height="9" fill="#d4d4d8"/>
+<rect x="614" y="164" width="9" height="9" fill="#d4d4d8"/>
+<rect x="614" y="176" width="9" height="9" fill="#d4d4d8"/>
+<rect x="628" y="164" width="9" height="9" fill="#d4d4d8"/>
+<rect x="628" y="176" width="9" height="9" fill="#d4d4d8"/>
+<rect x="642" y="164" width="9" height="9" fill="#d4d4d8"/>
+<rect x="642" y="176" width="9" height="9" fill="#d4d4d8"/>
+<rect x="656" y="164" width="9" height="9" fill="#d4d4d8"/>
+<rect x="656" y="176" width="9" height="9" fill="#d4d4d8"/>
+<rect x="670" y="164" width="9" height="9" fill="#d4d4d8"/>
+<rect x="670" y="176" width="9" height="9" fill="#d4d4d8"/>
+<rect x="684" y="164" width="9" height="9" fill="#d4d4d8"/>
+<rect x="684" y="176" width="9" height="9" fill="#d4d4d8"/>
+<rect x="698" y="164" width="9" height="9" fill="#d4d4d8"/>
+<rect x="698" y="176" width="9" height="9" fill="#d4d4d8"/>
+<rect x="712" y="164" width="9" height="9" fill="#d4d4d8"/>
+<rect x="712" y="176" width="9" height="9" fill="#d4d4d8"/>
+<rect x="726" y="164" width="9" height="9" fill="#d4d4d8"/>
+<rect x="726" y="176" width="9" height="9" fill="#d4d4d8"/>
+<text x="460" y="206" font-size="11" font-weight="400" text-anchor="start" fill="#bbf7d0">40-pin GPIO (not used by this project)</text>
+<rect x="550" y="245" width="90" height="90" rx="6" fill="#111827"/>
+<text x="595" y="295" font-size="11" font-weight="700" text-anchor="middle" fill="#9ca3af">BCM2837</text>
+<text x="450" y="265" font-size="20" font-weight="700" text-anchor="start" fill="#fff">Raspberry Pi</text>
+<text x="450" y="288" font-size="13" font-weight="400" text-anchor="start" fill="#bbf7d0">3B / 3B+ / 4B</text>
+<rect x="802" y="180" width="34" height="56" rx="3" fill="#a1a1aa"/>
+<text x="872" y="212" font-size="11" font-weight="400" text-anchor="start" fill="#5d6573">USB</text>
+<rect x="802" y="246" width="34" height="56" rx="3" fill="#a1a1aa"/>
+<rect x="802" y="320" width="34" height="62" rx="3" fill="#d4d4d8"/>
+<text x="844" y="372" font-size="11" font-weight="400" text-anchor="start" fill="#5d6573">Ethernet</text>
+<rect class="pin" data-net="CSI" x="670" y="270" width="14" height="80" rx="2" fill="#111827"/>
+<text x="677" y="364" font-size="11" font-weight="700" text-anchor="middle" fill="#bbf7d0">CSI</text>
+<rect class="pin" data-net="PWR" x="460" y="406" width="40" height="22" rx="3" fill="#a1a1aa"/>
+<text x="480" y="446" font-size="11" font-weight="400" text-anchor="middle" fill="#5d6573">micro-USB power</text>
+<rect x="550" y="406" width="56" height="22" rx="3" fill="#a1a1aa"/>
+<text x="578" y="446" font-size="11" font-weight="400" text-anchor="middle" fill="#5d6573">HDMI</text>
+<circle class="wifi" cx="740" cy="370" r="4" fill="#bbf7d0"/>
+<text x="750" y="374" font-size="11" font-weight="400" text-anchor="start" fill="#bbf7d0">Wi-Fi</text>
+</g>
+<g class="comp" data-comp="picam">
+<rect class="body" x="80" y="150" width="180" height="150" rx="10" fill="#065f46"/>
+<circle cx="170" cy="215" r="30" fill="#111827"/><circle cx="170" cy="215" r="16" fill="#1e3a8a"/><circle class="lens" cx="164" cy="209" r="5" fill="#93c5fd"/>
+<text x="170" y="275" font-size="13" font-weight="700" text-anchor="middle" fill="#fff">Pi Camera Module</text>
+<text x="170" y="292" font-size="11" font-weight="400" text-anchor="middle" fill="#a7f3d0">v1 / v2 / v3</text>
+</g>
+<g class="wire" data-net="CSI"><path class="hit" d="M260 225 C 330 225, 330 310, 670 310"/><path class="w ribbon" d="M260 225 C 330 225, 330 310, 670 310" stroke="#d6d3d1" stroke-width="16" pathLength="1"/><path class="flow" d="M260 225 C 330 225, 330 310, 670 310"/></g>
+<text x="268" y="202" font-size="11" font-weight="400" text-anchor="start" fill="#5d6573">15-pin ribbon</text>
+<g class="comp" data-comp="usbcam">
+<rect class="body" x="80" y="350" width="180" height="96" rx="10" fill="#f8fafc" stroke="#64748b" stroke-dasharray="5 4" stroke-width="1.5"/>
+<circle cx="120" cy="398" r="18" fill="#111827"/><circle cx="120" cy="398" r="8" fill="#1e3a8a"/>
+<text x="150" y="388" font-size="13" font-weight="700" text-anchor="start" fill="#161a22">USB webcam</text>
+<text x="150" y="406" font-size="11" font-weight="400" text-anchor="start" fill="#5d6573">alternative</text>
+<text x="150" y="422" font-size="11" font-weight="400" text-anchor="start" fill="#5d6573">camera_type: &quot;usb&quot;</text>
+</g>
+<g class="wire" data-net="USBCAM"><path class="hit" d="M260,398 L350,398 L350,110 L864,110 L864,208 L836,208"/><path class="w" d="M260,398 L350,398 L350,110 L864,110 L864,208 L836,208" stroke="#64748b" stroke-width="2.6" pathLength="1"/><path class="flow" d="M260,398 L350,398 L350,110 L864,110 L864,208 L836,208"/></g>
+<g class="comp" data-comp="psu">
+<rect class="body" x="410" y="480" width="170" height="70" rx="10" fill="#f8fafc" stroke="#ea580c" stroke-width="2"/>
+<text x="426" y="508" font-size="13" font-weight="700" text-anchor="start" fill="#161a22">5 V 2.5 A supply</text>
+<text x="426" y="528" font-size="11" font-weight="400" text-anchor="start" fill="#5d6573">official Pi PSU</text>
+</g>
+<g class="wire" data-net="PWR"><path class="hit" d="M495,480 L495,452 L480,452 L480,428"/><path class="w" d="M495,480 L495,452 L480,452 L480,428" stroke="#ea580c" stroke-width="3" pathLength="1"/><path class="flow" d="M495,480 L495,452 L480,452 L480,428"/></g>
+<g class="comp" data-comp="router">
+<rect class="body" x="960" y="170" width="230" height="110" rx="12" fill="#f8fafc" stroke="#0f766e" stroke-width="2"/>
+<text x="976" y="200" font-size="14" font-weight="700" text-anchor="start" fill="#161a22">Wi-Fi router / switch</text>
+<text x="976" y="222" font-size="12" font-weight="400" text-anchor="start" fill="#5d6573">same network as the server</text>
+<path class="wave w0" d="M1140 250 a14 14 0 0 1 20 0" fill="none" stroke="#0f766e" stroke-width="2"/>
+<path class="wave w1" d="M1131 241 a23 23 0 0 1 38 0" fill="none" stroke="#0f766e" stroke-width="2"/>
+<path class="wave w2" d="M1122 232 a32 32 0 0 1 56 0" fill="none" stroke="#0f766e" stroke-width="2"/>
+</g>
+<g class="wire" data-net="LAN"><path class="hit" d="M836,350 L910,350 L910,240 L960,240"/><path class="w" d="M836,350 L910,350 L910,240 L960,240" stroke="#0f766e" stroke-width="3" pathLength="1"/><path class="flow" d="M836,350 L910,350 L910,240 L960,240"/></g>
+<rect x="960" y="320" width="230" height="180" rx="12" fill="#fff" stroke="#e2e8f0"/>
+<text x="976" y="346" font-size="13" font-weight="700" text-anchor="start" fill="#161a22">app.py (Flask) on the Pi</text>
+<text x="976" y="370" font-size="12" font-weight="400" text-anchor="start" fill="#334155">• face recognition with OpenCV</text>
+<text x="976" y="390" font-size="12" font-weight="400" text-anchor="start" fill="#334155">• MJPEG stream on :5000/stream</text>
+<text x="976" y="410" font-size="12" font-weight="400" text-anchor="start" fill="#334155">• POST attendance → student.php</text>
+<text x="976" y="430" font-size="12" font-weight="400" text-anchor="start" fill="#334155">   (modality rpi_face)</text>
+<text x="976" y="450" font-size="12" font-weight="400" text-anchor="start" fill="#334155">• heartbeat every 30 s</text>
+<text x="976" y="470" font-size="12" font-weight="400" text-anchor="start" fill="#334155">• polls ota.php every 10 s</text></svg></div></div>
+    <div class="panel" id="p-sys"><div class="zoomwrap"><svg id="d-sys" class="dia" viewBox="0 0 1240 600" role="img" aria-label="Whole system data flow" font-family="Segoe UI, system-ui, sans-serif"><g class="comp" data-comp="s-esp"><rect class="body" x="40" y="40" width="290" height="150" rx="14" fill="#fff" stroke="#1d6fe0" stroke-width="2"/><rect x="40" y="40" width="8" height="150" rx="4" fill="#1d6fe0"/>
+<text x="62" y="72" font-size="16" font-weight="700" text-anchor="start" fill="#161a22">🖐️  ESP32 nodes ×N</text>
+<text x="62" y="96" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">fingerprint · RFID · keypad · LCD</text>
+<text x="62" y="115" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">offline queue on SD / flash</text>
+<text x="62" y="134" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">web server on port 80 (/cmd)</text>
+</g>
+<g class="comp" data-comp="s-rpi"><rect class="body" x="40" y="240" width="290" height="150" rx="14" fill="#fff" stroke="#138a52" stroke-width="2"/><rect x="40" y="240" width="8" height="150" rx="4" fill="#138a52"/>
+<text x="62" y="272" font-size="16" font-weight="700" text-anchor="start" fill="#161a22">📷  Raspberry Pi node</text>
+<text x="62" y="296" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">camera face recognition</text>
+<text x="62" y="315" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">Flask app on port 5000</text>
+<text x="62" y="334" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">MJPEG stream</text>
+</g>
+<g class="comp" data-comp="s-web"><rect class="body" x="40" y="440" width="290" height="140" rx="14" fill="#fff" stroke="#b45309" stroke-width="2"/><rect x="40" y="440" width="8" height="140" rx="4" fill="#b45309"/>
+<text x="62" y="472" font-size="16" font-weight="700" text-anchor="start" fill="#161a22">💻  Browsers</text>
+<text x="62" y="496" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">admin · lecturer · student</text>
+<text x="62" y="515" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">webcam face, voice, QR, manual</text>
+<text x="62" y="534" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">React / Tauri desktop app</text>
+</g>
+<g class="comp" data-comp="s-net"><rect class="body" x="470" y="240" width="170" height="150" rx="14" fill="#fff" stroke="#0f766e" stroke-width="2"/><rect x="470" y="240" width="8" height="150" rx="4" fill="#0f766e"/>
+<text x="492" y="272" font-size="16" font-weight="700" text-anchor="start" fill="#161a22">📶  Wi-Fi / LAN</text>
+<text x="492" y="296" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">router or campus</text>
+<text x="492" y="315" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">network</text>
+</g>
+<g class="comp" data-comp="s-php"><rect class="body" x="790" y="150" width="220" height="200" rx="14" fill="#fff" stroke="#9b1c1c" stroke-width="2"/><rect x="790" y="150" width="8" height="200" rx="4" fill="#9b1c1c"/>
+<text x="812" y="182" font-size="16" font-weight="700" text-anchor="start" fill="#161a22">🖥️  PHP server</text>
+<text x="812" y="206" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">Apache + PHP 8</text>
+<text x="812" y="225" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">/csc2052/api/…</text>
+<text x="812" y="244" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">31 endpoints</text>
+<text x="812" y="263" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">checks key, session,</text>
+<text x="812" y="282" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">enrolment, duplicates</text>
+</g>
+<g class="comp" data-comp="s-db">
+<path class="body" d="M1060 420 a75 18 0 0 0 150 0 a75 18 0 0 0 -150 0 v110 a75 18 0 0 0 150 0 v-110" fill="#fff" stroke="#4479A1" stroke-width="2"/>
+<text x="1135" y="470" font-size="16" font-weight="700" text-anchor="middle" fill="#161a22">🗄️ MySQL</text>
+<text x="1135" y="494" font-size="12.5" font-weight="400" text-anchor="middle" fill="#5d6573">21 tables</text>
+<text x="1135" y="512" font-size="12.5" font-weight="400" text-anchor="middle" fill="#5d6573">attendance_logs …</text>
+</g>
+<g class="wire" data-net="L-esp-att"><path class="hit" d="M330,90 L420,90 L420,280 L470,280"/><path class="w" d="M330,90 L420,90 L420,280 L470,280" stroke="#1d6fe0" stroke-width="3" pathLength="1"/><path class="flow" d="M330,90 L420,90 L420,280 L470,280"/></g>
+<circle class="pkt" data-net="L-esp-att" r="5" fill="#1d6fe0"><animateMotion dur="2.2s" repeatCount="indefinite" path="M330,90 L420,90 L420,280 L470,280"/></circle>
+<g class="wire" data-net="L-esp-hb"><path class="hit" d="M330,130 L440,130 L440,300 L470,300"/><path class="w" d="M330,130 L440,130 L440,300 L470,300" stroke="#60a5fa" stroke-width="3" pathLength="1"/><path class="flow" d="M330,130 L440,130 L440,300 L470,300"/></g>
+<circle class="pkt" data-net="L-esp-hb" r="5" fill="#60a5fa"><animateMotion dur="3s" repeatCount="indefinite" path="M330,130 L440,130 L440,300 L470,300"/></circle>
+<g class="wire" data-net="L-rpi"><path class="hit" d="M330,315 L470,315"/><path class="w" d="M330,315 L470,315" stroke="#138a52" stroke-width="3" pathLength="1"/><path class="flow" d="M330,315 L470,315"/></g>
+<circle class="pkt" data-net="L-rpi" r="5" fill="#138a52"><animateMotion dur="2.2s" repeatCount="indefinite" path="M330,315 L470,315"/></circle>
+<g class="wire" data-net="L-web"><path class="hit" d="M330,510 L420,510 L420,360 L470,360"/><path class="w" d="M330,510 L420,510 L420,360 L470,360" stroke="#b45309" stroke-width="3" pathLength="1"/><path class="flow" d="M330,510 L420,510 L420,360 L470,360"/></g>
+<circle class="pkt" data-net="L-web" r="5" fill="#b45309"><animateMotion dur="2.2s" repeatCount="indefinite" path="M330,510 L420,510 L420,360 L470,360"/></circle>
+<g class="wire" data-net="L-net-php"><path class="hit" d="M640,300 L790,300"/><path class="w" d="M640,300 L790,300" stroke="#9b1c1c" stroke-width="3" pathLength="1"/><path class="flow" d="M640,300 L790,300"/></g>
+<circle class="pkt" data-net="L-net-php" r="5" fill="#9b1c1c"><animateMotion dur="2.2s" repeatCount="indefinite" path="M640,300 L790,300"/></circle>
+<g class="wire" data-net="L-php-db"><path class="hit" d="M1010,250 L1135,250 L1135,400"/><path class="w" d="M1010,250 L1135,250 L1135,400" stroke="#4479A1" stroke-width="3" pathLength="1"/><path class="flow" d="M1010,250 L1135,250 L1135,400"/></g>
+<circle class="pkt" data-net="L-php-db" r="5" fill="#4479A1"><animateMotion dur="1.6s" repeatCount="indefinite" path="M1010,250 L1135,250 L1135,400"/></circle>
+<g class="wire" data-net="L-web-esp"><path class="hit" d="M40,540 L14,540 L14,120 L40,120"/><path class="w" d="M40,540 L14,540 L14,120 L40,120" stroke="#a16207" stroke-width="3" pathLength="1"/><path class="flow" d="M40,540 L14,540 L14,120 L40,120"/></g>
+<circle class="pkt" data-net="L-web-esp" r="5" fill="#a16207"><animateMotion dur="2.2s" repeatCount="indefinite" path="M40,540 L14,540 L14,120 L40,120"/></circle>
+<g class="wire" data-net="L-web-rpi"><path class="hit" d="M40,500 L26,500 L26,330 L40,330"/><path class="w" d="M40,500 L26,500 L26,330 L40,330" stroke="#047857" stroke-width="3" pathLength="1"/><path class="flow" d="M40,500 L26,500 L26,330 L40,330"/></g>
+<circle class="pkt" data-net="L-web-rpi" r="5" fill="#047857"><animateMotion dur="2.2s" repeatCount="indefinite" path="M40,500 L26,500 L26,330 L40,330"/></circle>
+<text x="326" y="82" font-size="11" font-weight="700" text-anchor="start" fill="#1d6fe0">attendance</text>
+<text x="330" y="122" font-size="11" font-weight="700" text-anchor="start" fill="#60a5fa">heartbeat 10 s</text>
+<text x="330" y="308" font-size="11" font-weight="700" text-anchor="start" fill="#138a52">face → attendance</text>
+<text x="660" y="292" font-size="11" font-weight="700" text-anchor="start" fill="#9b1c1c">HTTP</text>
+<text x="1020" y="242" font-size="11" font-weight="700" text-anchor="start" fill="#4479A1">PDO / SQL</text></svg></div></div>
+  </section>
+
+  <aside class="side">
+    <div class="card" id="info">
+      <div class="kind">Start here</div>
+      <h3>Hover over a wire</h3>
+      <p>Each colour is one kind of signal. Pick a connection from the list below, or move over the diagram.</p>
+    </div>
+    <div class="card">
+      <div class="kind" id="listtitle">Connections</div>
+      <div class="list" id="list"></div>
+    </div>
+  </aside>
+</main>
+<footer>Pins from <a href="https://github.com/MeshanNawod/smart-attendance-management-system_v_3/blob/master/esp32_firmware/esp32_firmware.ino">esp32_firmware.ino</a> and <a href="https://github.com/MeshanNawod/smart-attendance-management-system_v_3/blob/master/rpi_flask/app.py">rpi_flask/app.py</a> · Step-by-step: <a href="build.html">build guide</a></footer>
+
+<script>
+const DATA = {"NETS": {"D21": {"title": "I2C data (SDA) \u00b7 D21", "kind": "I2C bus", "color": "#138a52", "connects": ["ESP32 D21", "LCD SDA", "RTC SDA"], "about": "Data line of the I2C bus. The LCD and the optional RTC share it; each has its own address.", "code": "Wire.begin(21, 22);"}, "D22": {"title": "I2C clock (SCL) + RFID reset \u00b7 D22", "kind": "I2C bus / control", "color": "#138a52", "connects": ["ESP32 D22", "LCD SCL", "RTC SCL", "RFID RST"], "about": "Shared on purpose: it is the I2C clock and the RFID reader's reset pin. The firmware sets the RST pin to an input before using I2C again (restoreI2cForLcd).", "code": "#define RST_PIN 22\nWire.begin(21, 22);"}, "D23": {"title": "SPI MOSI \u00b7 D23", "kind": "SPI bus", "color": "#1d6fe0", "connects": ["ESP32 D23", "RFID MOSI", "SD MOSI"], "about": "Data from the ESP32 to the RFID reader and SD card.", "code": "SPI.begin(18, 19, 23, -1);"}, "D19": {"title": "SPI MISO \u00b7 D19", "kind": "SPI bus", "color": "#1d6fe0", "connects": ["ESP32 D19", "RFID MISO", "SD MISO"], "about": "Data from the RFID reader or SD card back to the ESP32.", "code": "SPI.begin(18, 19, 23, -1);"}, "D18": {"title": "SPI clock (SCK) \u00b7 D18", "kind": "SPI bus", "color": "#1d6fe0", "connects": ["ESP32 D18", "RFID SCK", "SD SCK"], "about": "Clock for the shared SPI bus.", "code": "SPI.begin(18, 19, 23, -1);"}, "D15": {"title": "RFID chip-select \u00b7 D15", "kind": "SPI select", "color": "#1d6fe0", "connects": ["ESP32 D15", "RFID SDA (SS)"], "about": "Pulled low when the ESP32 talks to the RFID reader.", "code": "#define SS_PIN 15"}, "D4": {"title": "SD card chip-select \u00b7 D4", "kind": "SPI select", "color": "#1d6fe0", "connects": ["ESP32 D4", "SD CS"], "about": "Pulled low when the ESP32 talks to the SD card.", "code": "const int SD_CS_PIN = 4;"}, "D2": {"title": "Status LED / buzzer \u00b7 D2", "kind": "Output", "color": "#a16207", "connects": ["ESP32 D2", "LED or active buzzer (+)", "on-board blue LED"], "about": "Blinks (or beeps) on every scan. Same pin as the board's blue LED.", "code": "const int BLUE_LED = 2;\nflashLED(times, ms);"}, "D5": {"title": "Fingerprint power switch \u00b7 D5", "kind": "Control", "color": "#9b1c1c", "connects": ["ESP32 D5", "MOSFET gate"], "about": "HIGH turns the FM10A on. The firmware power-cycles the sensor through this pin to recover it if it hangs.", "code": "const int FP_MOSFET = 5; // HIGH = on"}, "FPGND": {"title": "Switched ground \u00b7 FM10A", "kind": "Power", "color": "#111827", "connects": ["FM10A GND", "MOSFET drain"], "about": "The sensor's ground goes through the MOSFET, so D5 can cut its power.", "code": null}, "TX2": {"title": "UART TX2 (GPIO17) \u2192 sensor RX", "kind": "UART", "color": "#c2410c", "connects": ["ESP32 TX2 (D17)", "FM10A RX"], "about": "Commands from the ESP32 to the fingerprint sensor. TX goes to RX.", "code": "const int FINGER_TX2 = 17;"}, "RX2": {"title": "UART RX2 (GPIO16) \u2190 sensor TX", "kind": "UART", "color": "#c2410c", "connects": ["ESP32 RX2 (D16)", "FM10A TX"], "about": "Replies from the fingerprint sensor. Baud rate is auto-detected (57600 first).", "code": "const int FINGER_RX2 = 16;"}, "D35": {"title": "Finger touch \u00b7 D35", "kind": "Input", "color": "#0f766e", "connects": ["ESP32 D35", "FM10A T-out"], "about": "Goes HIGH the moment a finger touches the sensor, so scanning starts at once. D35 is input-only.", "code": "const int FINGER_VOUT = 35;"}, "D32": {"title": "Keypad col 4 \u00b7 D32", "kind": "Keypad", "color": "#b45309", "connects": ["ESP32 D32", "Keypad col 4"], "about": "Column: input with pull-up; reads LOW when a key in this column is pressed in the active row.", "code": "KP_COL = {26, 25, 33, 32};"}, "D33": {"title": "Keypad col 3 \u00b7 D33", "kind": "Keypad", "color": "#b45309", "connects": ["ESP32 D33", "Keypad col 3"], "about": "Column: input with pull-up; reads LOW when a key in this column is pressed in the active row.", "code": "KP_COL = {26, 25, 33, 32};"}, "D25": {"title": "Keypad col 2 \u00b7 D25", "kind": "Keypad", "color": "#b45309", "connects": ["ESP32 D25", "Keypad col 2"], "about": "Column: input with pull-up; reads LOW when a key in this column is pressed in the active row.", "code": "KP_COL = {26, 25, 33, 32};"}, "D26": {"title": "Keypad col 1 \u00b7 D26", "kind": "Keypad", "color": "#b45309", "connects": ["ESP32 D26", "Keypad col 1"], "about": "Column: input with pull-up; reads LOW when a key in this column is pressed in the active row.", "code": "KP_COL = {26, 25, 33, 32};"}, "D27": {"title": "Keypad row 4 \u00b7 D27", "kind": "Keypad", "color": "#6d3fd6", "connects": ["ESP32 D27", "Keypad row 4"], "about": "Row: the firmware drives it LOW one row at a time.", "code": "KP_ROW = {13, 12, 14, 27};"}, "D14": {"title": "Keypad row 3 \u00b7 D14", "kind": "Keypad", "color": "#6d3fd6", "connects": ["ESP32 D14", "Keypad row 3"], "about": "Row: the firmware drives it LOW one row at a time.", "code": "KP_ROW = {13, 12, 14, 27};"}, "D12": {"title": "Keypad row 2 \u00b7 D12", "kind": "Keypad", "color": "#6d3fd6", "connects": ["ESP32 D12", "Keypad row 2"], "about": "Row: the firmware drives it LOW one row at a time.", "code": "KP_ROW = {13, 12, 14, 27};"}, "D13": {"title": "Keypad row 1 \u00b7 D13", "kind": "Keypad", "color": "#6d3fd6", "connects": ["ESP32 D13", "Keypad row 1"], "about": "Row: the firmware drives it LOW one row at a time.", "code": "KP_ROW = {13, 12, 14, 27};"}, "5V": {"title": "5 V rail", "kind": "Power", "color": "#ea580c", "connects": ["XL6009 output", "ESP32 VIN", "LCD VCC", "LM2596 input"], "about": "Main supply from the step-up converter.", "code": null}, "3V3": {"title": "3.3 V rail", "kind": "Power", "color": "#dc2626", "connects": ["LM2596 output", "FM10A VCC", "RFID 3.3V", "SD VCC", "RTC VCC"], "about": "Sensor supply. Never put 5 V on the RFID reader.", "code": null}, "GND": {"title": "Ground", "kind": "Power", "color": "#111827", "connects": ["Every module", "ESP32 GND", "converters", "battery \u2212"], "about": "All grounds must be joined. A missing ground is the most common wiring fault.", "code": null}, "CSI": {"title": "Camera ribbon (CSI)", "kind": "Camera", "color": "#78716c", "connects": ["Pi Camera", "Pi CSI port"], "about": "15-pin flat ribbon. On the Pi 3B the CSI port is between HDMI and the audio jack. Metal contacts face away from the Ethernet port. Enable the camera, then set camera_type to \"picamera\".", "code": "\"camera_type\": \"picamera\""}, "USBCAM": {"title": "USB webcam (alternative)", "kind": "Camera", "color": "#64748b", "connects": ["USB webcam", "Pi USB port"], "about": "Any UVC webcam works instead of the Pi Camera. This is the default in app.py.", "code": "\"camera_type\": \"usb\",\n\"camera_id\": 0"}, "PWR": {"title": "Power", "kind": "Power", "color": "#ea580c", "connects": ["5 V 2.5 A supply", "Pi micro-USB (USB-C on Pi 4)"], "about": "Use a proper 2.5 A supply; a weak phone charger causes camera dropouts and under-voltage warnings.", "code": null}, "LAN": {"title": "Network (Wi-Fi or Ethernet)", "kind": "Network", "color": "#0f766e", "connects": ["Pi", "router", "PHP server"], "about": "The Pi must reach the server at http://<server>/csc2052/. Set ota_server_url and ota_api_key (= the server's hardware key).", "code": "\"ota_server_url\": \"http://192.168.1.10\",\n\"ota_api_key\": \"<hardware key>\""}, "L-esp-att": {"title": "ESP32 \u2192 attendance.php", "kind": "HTTP POST", "color": "#1d6fe0", "connects": ["ESP32 node", "PHP api/attendance.php"], "about": "Each fingerprint or RFID scan is posted with the student, course, device and hardware key. If Wi-Fi is down it is queued and synced later.", "code": "serverURL = \"http://\" + SERVER_IP + \"/csc2052/api/attendance.php\";"}, "L-esp-hb": {"title": "ESP32 heartbeat", "kind": "HTTP GET \u00b7 every 10 s", "color": "#60a5fa", "connects": ["ESP32 node", "PHP api/heartbeat.php"], "about": "Tells the dashboard the node is online and registers it on the Hardware Nodes page.", "code": "const unsigned long HEARTBEAT_INTERVAL = 10000;"}, "L-rpi": {"title": "Pi \u2192 student.php", "kind": "HTTP POST", "color": "#138a52", "connects": ["Raspberry Pi", "PHP api/student.php"], "about": "Recognised faces are posted as attendance (modality rpi_face). The Pi also sends a heartbeat every 30 s and polls ota.php every 10 s for commands.", "code": "url = f\"{OTA_SERVER}/csc2052/api/student.php\""}, "L-web": {"title": "Browsers \u2194 PHP", "kind": "HTTPS / HTTP", "color": "#b45309", "connects": ["Admin, lecturer and student dashboards", "PHP pages and APIs"], "about": "Dashboards load data, start lectures and record webcam face, voice, QR and manual attendance.", "code": null}, "L-net-php": {"title": "Network \u2192 server", "kind": "HTTP", "color": "#9b1c1c", "connects": ["Wi-Fi / LAN", "Apache + PHP"], "about": "Every device reaches the same server at /csc2052/.", "code": null}, "L-php-db": {"title": "PHP \u2194 MySQL", "kind": "PDO", "color": "#4479A1", "connects": ["PHP", "MySQL csc2052 database"], "about": "One attendance_logs row per check-in, linked to the active lecture session.", "code": null}, "L-web-esp": {"title": "Dashboard \u2192 ESP32 /cmd", "kind": "HTTP GET \u00b7 LAN", "color": "#a16207", "connects": ["Admin browser", "ESP32 web server :80"], "about": "The Hardware Nodes page sends commands straight to a node (scan Wi-Fi, mirror the LCD, enrol, reboot).", "code": "fetch(`http://${ip}/cmd?command=GETLCD`)"}, "L-web-rpi": {"title": "Dashboard \u2190 Pi stream", "kind": "MJPEG", "color": "#047857", "connects": ["Raspberry Pi :5000/stream", "Admin dashboard camera card"], "about": "Live annotated camera view in the Raspberry Pi Camera card.", "code": null}}, "COMPS": {"esp32": {"title": "ESP32 DevKit V1", "about": "Runs esp32_firmware.ino: reads the sensors, posts attendance over Wi-Fi, keeps an offline queue, and serves /cmd for the dashboard.", "nets": ["D21", "D22", "D23", "D19", "D18", "D15", "D4", "D2", "D5", "TX2", "RX2", "D35", "5V", "GND"], "extra": []}, "lcd": {"title": "I2C LCD 16\u00d74", "about": "Shows status, course, student name and menus. Address is found automatically.", "nets": ["D21", "D22", "5V", "GND"], "extra": ["Feature flag: USE_LCD", "Test: test_display.ino"]}, "rtc": {"title": "HW-084 RTC (DS3231)", "about": "Optional real-time clock so timestamps stay right without Wi-Fi.", "nets": ["D21", "D22", "3V3", "GND"], "extra": ["Feature flag: USE_HW084", "Test: test_clock.ino"]}, "rfid": {"title": "MFRC522 RFID reader", "about": "Reads student ID cards and tags. 3.3 V only.", "nets": ["D15", "D18", "D23", "D19", "D22", "3V3", "GND"], "extra": ["Feature flag: USE_RFID", "Test: Test_frid.ino"]}, "sd": {"title": "MicroSD card module", "about": "Holds config.txt, fingerprint backups and logs.", "nets": ["D4", "D18", "D23", "D19", "3V3", "GND"], "extra": ["Format: FAT32", "Test: Test_sd.ino"]}, "led": {"title": "Status LED / buzzer", "about": "Feedback on every scan.", "nets": ["D2", "GND"], "extra": []}, "fp": {"title": "FM10A fingerprint sensor", "about": "Optical sensor that stores templates in slots and matches 1:N.", "nets": ["TX2", "RX2", "D35", "3V3", "FPGND"], "extra": ["Feature flag: USE_FINGERPRINT", "Test: fm10a_test.ino"]}, "mosfet": {"title": "N-MOSFET power switch", "about": "Switches the fingerprint sensor's ground. Gate from D5 through 220 \u03a9, 10 k\u03a9 gate-to-ground.", "nets": ["D5", "FPGND", "GND"], "extra": []}, "keypad": {"title": "4\u00d74 keypad", "about": "PIN entry, course picker (A, B/C to scroll, D to confirm).", "nets": ["D32", "D33", "D25", "D26", "D27", "D14", "D12", "D13"], "extra": ["Feature flag: USE_KEYPAD", "Test: keypad_test.ino"]}, "pi": {"title": "Raspberry Pi 3B / 3B+", "about": "Runs rpi_flask/app.py as a service: recognises faces at the door and posts attendance.", "nets": ["CSI", "USBCAM", "PWR", "LAN"], "extra": ["Setup: bash rpi_flask/setup.sh", "Service: sudo systemctl start rpi-face"]}, "picam": {"title": "Pi Camera Module", "about": "Camera for face recognition at the entrance, 640\u00d7480 at 30 fps by default.", "nets": ["CSI"], "extra": []}, "usbcam": {"title": "USB webcam", "about": "Use instead of the Pi Camera if you prefer.", "nets": ["USBCAM"], "extra": []}, "psu": {"title": "5 V 2.5 A power supply", "about": "Official Raspberry Pi supply recommended.", "nets": ["PWR"], "extra": []}, "router": {"title": "Wi-Fi router / switch", "about": "Connects the Pi, ESP32 nodes and the server.", "nets": ["LAN"], "extra": []}, "s-esp": {"title": "ESP32 nodes", "about": "Battery-powered terminals at classroom doors.", "nets": ["L-esp-att", "L-esp-hb", "L-web-esp"], "extra": []}, "s-rpi": {"title": "Raspberry Pi node", "about": "Camera at the entrance.", "nets": ["L-rpi", "L-web-rpi"], "extra": []}, "s-web": {"title": "Browsers", "about": "Admin, lecturer and student dashboards, plus the desktop app.", "nets": ["L-web", "L-web-esp", "L-web-rpi"], "extra": []}, "s-net": {"title": "Network", "about": "Everything talks over the same network.", "nets": ["L-esp-att", "L-esp-hb", "L-rpi", "L-web", "L-net-php"], "extra": []}, "s-php": {"title": "PHP server", "about": "Validates and records every check-in.", "nets": ["L-net-php", "L-php-db"], "extra": []}, "s-db": {"title": "MySQL", "about": "Stores students, courses, sessions and attendance.", "nets": ["L-php-db"], "extra": []}}};
+const GROUPS = {
+  esp: { "All": null, "SPI": ["D18","D19","D23","D15","D4"], "I2C": ["D21","D22"], "Fingerprint": ["TX2","RX2","D35","D5","FPGND"], "Keypad": ["D13","D12","D14","D27","D26","D25","D33","D32"], "Power": ["5V","3V3","GND","FPGND"] },
+  rpi: { "All": null },
+  sys: { "All": null, "From ESP32": ["L-esp-att","L-esp-hb","L-web-esp"], "From Pi": ["L-rpi","L-web-rpi"], "Server": ["L-net-php","L-php-db"] }
+};
+let cur = "esp", pinned = null;
+const svgOf = p => document.querySelector("#p-" + p + " svg");
+const netsIn = p => [...new Set([...svgOf(p).querySelectorAll("[data-net]")].map(e => e.dataset.net))].filter(n => DATA.NETS[n]);
+
+function highlight(nets) {
+  const svg = svgOf(cur);
+  svg.querySelectorAll(".on").forEach(e => e.classList.remove("on"));
+  if (!nets || !nets.length) { svg.classList.remove("focus"); return; }
+  svg.classList.add("focus");
+  nets.forEach(n => svg.querySelectorAll(`[data-net="${n}"]`).forEach(e => e.classList.add("on")));
+  svg.querySelectorAll(".comp").forEach(c => {
+    const info = DATA.COMPS[c.dataset.comp];
+    if (info && info.nets.some(n => nets.includes(n))) c.classList.add("on");
+    if (c.querySelector(".on")) c.classList.add("on");
+  });
+}
+function chain(items, color) { return `<ul class="chain" style="--c:${color}">` + items.map(i => `<li>${i}</li>`).join("") + "</ul>"; }
+function showNet(n) {
+  const d = DATA.NETS[n]; if (!d) return;
+  const el = document.getElementById("info");
+  el.innerHTML = `<div class="kind">${d.kind}</div><h3><span class="swatch" style="background:${d.color}"></span>${d.title}</h3>${chain(d.connects, d.color)}<p>${d.about}</p>` + (d.code ? `<pre><code>${d.code.replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}</code></pre>` : "");
+  el.classList.remove("anim"); void el.offsetWidth; el.classList.add("anim");
+  highlight([n]); markList(n);
+}
+function showComp(c) {
+  const d = DATA.COMPS[c]; if (!d) return;
+  const el = document.getElementById("info");
+  const chips = d.nets.filter(n => DATA.NETS[n]).map(n => `<button data-n="${n}"><span class="swatch" style="display:inline-block;width:9px;height:9px;background:${DATA.NETS[n].color};margin-right:5px"></span>${DATA.NETS[n].title.split(" · ")[0]}</button>`).join("");
+  el.innerHTML = `<div class="kind">Component</div><h3>${d.title}</h3><p>${d.about}</p>` + (d.extra.length ? `<p class="muted">${d.extra.join("<br>")}</p>` : "") + `<div class="kind" style="margin-top:6px">Its connections</div><div class="chips">${chips}</div>`;
+  el.querySelectorAll(".chips button").forEach(b => { b.onmouseenter = () => highlight([b.dataset.n]); b.onclick = () => { pinned = b.dataset.n; showNet(b.dataset.n); }; });
+  el.classList.remove("anim"); void el.offsetWidth; el.classList.add("anim");
+  highlight(d.nets);
+}
+function fillList(only) {
+  const list = document.getElementById("list");
+  list.innerHTML = netsIn(cur).filter(n => !only || only.includes(n)).map(n => `<button data-n="${n}"><span class="swatch" style="background:${DATA.NETS[n].color}"></span>${DATA.NETS[n].title}</button>`).join("");
+  list.querySelectorAll("button").forEach(b => { b.onmouseenter = () => showNet(b.dataset.n); b.onclick = () => { pinned = b.dataset.n; showNet(pinned); }; });
+  list.onmouseleave = () => pinned ? showNet(pinned) : highlight(only);
+}
+function buildList() {
+  fillList(null);
+  const f = document.getElementById("filters");
+  f.innerHTML = Object.keys(GROUPS[cur]).map((g, i) => `<button class="${i ? "" : "on"}" data-g="${g}">${g}</button>`).join(" ");
+  f.querySelectorAll("button").forEach(b => b.onclick = () => {
+    f.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b));
+    pinned = null; const g = GROUPS[cur][b.dataset.g];
+    highlight(g); fillList(g); document.getElementById("listtitle").textContent = g ? b.dataset.g + " connections" : "Connections";
+  });
+}
+function markList(n) { document.querySelectorAll("#list button").forEach(b => b.classList.toggle("on", b.dataset.n === n)); }
+
+document.querySelectorAll("svg.dia").forEach(svg => {
+  svg.addEventListener("mouseover", e => {
+    const t = e.target.closest("[data-net]");
+    if (t && DATA.NETS[t.dataset.net]) { showNet(t.dataset.net); return; }
+    const k = e.target.closest(".key");
+    if (k) { highlight([k.dataset.row, k.dataset.col]); const el = document.getElementById("info");
+      el.innerHTML = `<div class="kind">Keypad</div><h3>Key “${k.dataset.key}”</h3><p>Pressing this key connects row pin <b>${k.dataset.row}</b> to column pin <b>${k.dataset.col}</b>. The firmware drives each row LOW in turn and looks for a LOW column.</p>`; return; }
+    const c = e.target.closest(".comp");
+    if (c && DATA.COMPS[c.dataset.comp]) showComp(c.dataset.comp);
+  });
+  svg.addEventListener("mouseleave", () => pinned ? showNet(pinned) : highlight(null));
+  svg.addEventListener("click", e => {
+    const t = e.target.closest("[data-net]");
+    if (t && DATA.NETS[t.dataset.net]) { pinned = t.dataset.net; showNet(pinned); } else if (!e.target.closest(".comp")) { pinned = null; highlight(null); markList(null); }
+  });
+});
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.setAttribute("aria-selected", x === t));
+  document.querySelectorAll(".panel").forEach(p => p.classList.toggle("show", p.id === "p-" + t.dataset.p));
+  cur = t.dataset.p; pinned = null; buildList(); highlight(null);
+  document.getElementById("info").innerHTML = `<div class="kind">Start here</div><h3>Hover over a wire</h3><p>Each colour is one kind of signal. Pick a connection from the list, or move over the diagram.</p>`;
+  history.replaceState(null, "", "#" + cur);
+});
+document.getElementById("replay").onclick = () => { const p = document.querySelector(".panel.show"); p.classList.remove("show"); void p.offsetWidth; p.classList.add("show"); };
+let zoom = 1;
+function setZoom(z) { zoom = Math.min(2.5, Math.max(1, z)); document.querySelectorAll("svg.dia").forEach(s => s.style.width = (zoom * 100) + "%"); }
+document.getElementById("zin").onclick = () => setZoom(zoom + .25);
+document.getElementById("zout").onclick = () => setZoom(zoom - .25);
+buildList();
+const h = location.hash.slice(1); if (["rpi","sys"].includes(h)) document.querySelector(`.tab[data-p="${h}"]`).click();
+</script>
+</body>
+</html>

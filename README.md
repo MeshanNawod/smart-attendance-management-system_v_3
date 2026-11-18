@@ -39,6 +39,8 @@ Take the full guided tour on the **[project website](https://meshannawod.github.
 
 ## Build the ESP32 node
 
+⚡ **[Interactive wiring](https://meshannawod.github.io/smart-attendance-management-system_v_3/wiring.html)**: hover any wire to light up the whole connection, for the ESP32 node, the Raspberry Pi node and the whole system.
+
 Full step-by-step guide: **[ESP32 build guide](https://meshannawod.github.io/smart-attendance-management-system_v_3/build.html)** (parts list, pin table, power, assembly with test sketches, flashing, `config.txt`, troubleshooting).
 
 <img src="docs/images/esp32-wiring.svg" alt="ESP32 node wiring diagram" width="900">
