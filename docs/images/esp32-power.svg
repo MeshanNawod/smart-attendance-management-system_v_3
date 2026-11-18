@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1240 560" font-family="Segoe UI, system-ui, sans-serif">
+<defs>
+  <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#ea580c"/></marker>
+  <marker id="b" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#dc2626"/></marker>
+  <style>
+    .box{fill:#f8fafc;stroke:#cbd5e1;stroke-width:1.5}
+    .t{font-size:15px;font-weight:700;fill:#161a22}
+    .s{font-size:12.5px;fill:#5d6573}
+    .v5{stroke:#ea580c;stroke-width:3;fill:none;marker-end:url(#a)}
+    .v3{stroke:#dc2626;stroke-width:3;fill:none;marker-end:url(#b)}
+    .bat{stroke:#7c3aed;stroke-width:3;fill:none}
+    .lab{font-size:12px;font-weight:700}
+  </style>
+</defs>
+<rect width="100%" height="100%" fill="#fff"/>
+<text x="30" y="40" font-size="24" font-weight="700" fill="#161a22">Power diagram</text>
+<text x="30" y="64" font-size="14" fill="#5d6573">Battery-powered node from the project's parts list: 18650 cell, TP4056 charger, XL6009 step-up to 5 V, LM2596 step-down to 3.3 V. All GND pins are joined.</text>
+
+<!-- charger input -->
+<rect class="box" x="30" y="110" width="150" height="74" rx="10"/>
+<text class="t" x="46" y="140">USB 5 V in</text><text class="s" x="46" y="162">to charge the cell</text>
+<path d="M180 147 L238 147" stroke="#64748b" stroke-width="3" fill="none"/>
+
+<!-- battery -->
+<rect class="box" x="30" y="250" width="150" height="90" rx="10" style="stroke:#7c3aed"/>
+<text class="t" x="46" y="280">18650 Li-ion</text><text class="s" x="46" y="302">3.0–4.2 V</text><text class="s" x="46" y="322">in a holder</text>
+
+<!-- TP4056 -->
+<rect class="box" x="240" y="110" width="190" height="230" rx="10"/>
+<text class="t" x="256" y="140">TP4056</text>
+<text class="s" x="256" y="162">charger + protection</text>
+<text class="s" x="256" y="200">IN+ / IN−  ← USB</text>
+<text class="s" x="256" y="290">B+ / B−  ↔ battery</text>
+<text class="s" x="256" y="318">OUT+ / OUT− → switch</text>
+<path class="bat" d="M180 295 L240 295"/>
+
+<!-- switch -->
+<path class="bat" d="M430 314 L470 314"/>
+<circle cx="476" cy="314" r="5" fill="#fff" stroke="#334155" stroke-width="2"/>
+<path d="M480 312 L512 296" stroke="#334155" stroke-width="2.5"/>
+<circle cx="518" cy="314" r="5" fill="#fff" stroke="#334155" stroke-width="2"/>
+<text class="s" x="466" y="346">power switch</text>
+<path class="bat" d="M523 314 L560 314"/>
+
+<!-- XL6009 -->
+<rect class="box" x="560" y="250" width="190" height="110" rx="10"/>
+<text class="t" x="576" y="280">XL6009 step-up</text>
+<text class="s" x="576" y="302">3.7 V → 5.0 V</text>
+<text class="s" x="576" y="322">set 5.0 V with the trimmer</text>
+<text class="s" x="576" y="342">before connecting the load</text>
+
+<!-- 5V rail -->
+<path class="v5" d="M750 305 L800 305 L800 130 L870 130"/>
+<path class="v5" d="M800 230 L870 230"/>
+<path class="v5" d="M800 305 L870 305"/>
+<text class="lab" x="760" y="296" fill="#ea580c">5 V</text>
+
+<rect class="box" x="870" y="100" width="340" height="60" rx="10"/>
+<text class="t" x="886" y="126">ESP32 DevKit · VIN pin</text><text class="s" x="886" y="146">makes its own 3.3 V; leave the 3V3 pin unconnected</text>
+<rect class="box" x="870" y="200" width="340" height="60" rx="10"/>
+<text class="t" x="886" y="226">I2C LCD · VCC</text><text class="s" x="886" y="246">the backlight and PCF8574 backpack run on 5 V</text>
+
+<!-- LM2596 -->
+<rect class="box" x="870" y="280" width="340" height="60" rx="10"/>
+<text class="t" x="886" y="306">LM2596 step-down</text><text class="s" x="886" y="326">5 V → 3.3 V (set with the trimmer first)</text>
+
+<!-- 3.3V rail -->
+<path class="v3" d="M1040 340 L1040 380"/>
+<text class="lab" x="1050" y="372" fill="#dc2626">3.3 V</text>
+<path d="M330 400 L1150 400" stroke="#dc2626" stroke-width="3"/>
+<path d="M1040 380 L1040 400" stroke="#dc2626" stroke-width="3"/>
+<path class="v3" d="M330 400 L330 440"/><path class="v3" d="M540 400 L540 440"/><path class="v3" d="M750 400 L750 440"/><path class="v3" d="M960 400 L960 440"/>
+
+<rect class="box" x="250" y="440" width="170" height="80" rx="10"/>
+<text class="t" x="266" y="468">FM10A</text><text class="s" x="266" y="488">VCC; GND through the</text><text class="s" x="266" y="506">MOSFET (D5)</text>
+<rect class="box" x="460" y="440" width="170" height="80" rx="10"/>
+<text class="t" x="476" y="468">MFRC522 RFID</text><text class="s" x="476" y="488">3.3 V only, never 5 V</text>
+<rect class="box" x="670" y="440" width="170" height="80" rx="10"/>
+<text class="t" x="686" y="468">MicroSD module</text><text class="s" x="686" y="488">3.3 V (or 5 V if the</text><text class="s" x="686" y="506">module has a regulator)</text>
+<rect class="box" x="880" y="440" width="170" height="80" rx="10"/>
+<text class="t" x="896" y="468">HW-084 RTC</text><text class="s" x="896" y="488">optional</text>
+
+<rect x="30" y="400" width="190" height="120" rx="10" fill="#f1f5f9" stroke="#cbd5e1"/>
+<text class="t" x="46" y="428">Common ground</text>
+<text class="s" x="46" y="450">Join every GND: battery−,</text>
+<text class="s" x="46" y="468">converters, ESP32 and</text>
+<text class="s" x="46" y="486">all modules. Missing GND</text>
+<text class="s" x="46" y="504">is the #1 wiring fault.</text>
+</svg>

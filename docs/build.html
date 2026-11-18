@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build the ESP32 node · Sentinel Swarm</title>
+<meta name="description" content="How to build the Sentinel Swarm ESP32 attendance node: parts list, wiring diagram, power diagram, step-by-step assembly, flashing the firmware and first run.">
+<link rel="icon" href="images/favicon.svg">
+<style>
+  :root { --maroon:#9b1c1c; --ink:#161a22; --muted:#5d6573; --line:#e6e8ee; --bg:#f7f7f9; --card:#fff; font-family:"Segoe UI",system-ui,-apple-system,sans-serif; }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body { margin:0; color:var(--ink); background:var(--bg); line-height:1.6; }
+  a { color:var(--maroon); }
+  code, kbd { font-family: Consolas, "Cascadia Mono", monospace; font-size: .92em; background:#f1f2f5; border:1px solid var(--line); padding:1px 6px; border-radius:5px; }
+  pre { background:#111827; color:#e5e7eb; padding:16px 18px; border-radius:10px; overflow:auto; font-size:13.5px; line-height:1.5; }
+  pre code { background:none; border:0; padding:0; color:inherit; }
+  nav { position:sticky; top:0; z-index:5; background:rgba(255,255,255,.94); backdrop-filter:blur(8px); border-bottom:1px solid var(--line); }
+  nav .in { max-width:1180px; margin:0 auto; padding:0 24px; height:58px; display:flex; align-items:center; gap:20px; }
+  nav .brand { display:flex; gap:10px; align-items:center; font-weight:700; color:var(--ink); text-decoration:none; }
+  nav .brand img { width:28px; }
+  nav .links { margin-left:auto; display:flex; gap:18px; font-size:14px; }
+  nav .links a { color:var(--muted); text-decoration:none; }
+  @media (max-width:860px) { nav .links { display:none; } }
+  header { background:linear-gradient(160deg,#2a0b0b,#6e1212 60%,#9b1c1c); color:#fff; padding:56px 0 46px; }
+  header .in, main { max-width:1180px; margin:0 auto; padding:0 24px; }
+  header h1 { font-size:clamp(30px,4.4vw,48px); margin:8px 0 12px; line-height:1.1; }
+  header p { color:#f3dede; font-size:18px; max-width:760px; margin:0; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin-top:20px; }
+  .chips span { background:rgba(255,255,255,.13); border:1px solid rgba(255,255,255,.25); padding:5px 12px; border-radius:999px; font-size:13px; }
+  .layout { display:grid; grid-template-columns: 220px 1fr; gap:36px; padding-top:36px; }
+  @media (max-width:960px) { .layout { grid-template-columns:1fr; } .toc { display:none; } }
+  .toc { position:sticky; top:80px; align-self:start; font-size:14px; }
+  .toc a { display:block; padding:5px 0 5px 12px; color:var(--muted); text-decoration:none; border-left:2px solid var(--line); }
+  .toc a:hover { color:var(--maroon); border-color:var(--maroon); }
+  section { padding:8px 0 40px; }
+  h2 { font-size:28px; margin:0 0 6px; }
+  h2 small { font-size:14px; color:var(--maroon); display:block; text-transform:uppercase; letter-spacing:.1em; margin-bottom:2px; }
+  h3 { font-size:19px; margin:26px 0 8px; }
+  .lead { color:var(--muted); margin:0 0 20px; max-width:800px; }
+  table { width:100%; border-collapse:collapse; background:var(--card); border:1px solid var(--line); border-radius:10px; overflow:hidden; font-size:14.5px; }
+  th, td { text-align:left; padding:9px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { background:#f6f7fa; font-size:13px; text-transform:uppercase; letter-spacing:.04em; color:var(--muted); }
+  tr:last-child td { border-bottom:0; }
+  .figure { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:12px; cursor:zoom-in; }
+  .figure img { width:100%; display:block; }
+  .figure figcaption { font-size:13px; color:var(--muted); padding:8px 4px 2px; }
+  .steps { counter-reset:s; list-style:none; padding:0; margin:0; display:grid; gap:14px; }
+  .steps > li { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 20px 16px 64px; position:relative; }
+  .steps > li::before { counter-increment:s; content:counter(s); position:absolute; left:18px; top:16px; width:30px; height:30px; border-radius:50%; background:var(--maroon); color:#fff; font-weight:700; display:grid; place-items:center; }
+  .steps h4 { margin:0 0 6px; font-size:16.5px; }
+  .steps p { margin:4px 0; color:#333a45; }
+  .ok { color:#138a52; font-weight:600; }
+  .callout { border-radius:10px; padding:14px 16px; margin:16px 0; font-size:14.5px; }
+  .callout.warn { background:#fef9c3; border:1px solid #eab308; color:#713f12; }
+  .callout.info { background:#eff6ff; border:1px solid #93c5fd; color:#1e3a8a; }
+  .callout.danger { background:#fef2f2; border:1px solid #fca5a5; color:#7f1d1d; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:760px) { .grid2 { grid-template-columns:1fr; } }
+  .dot { display:inline-block; width:12px; height:12px; border-radius:3px; vertical-align:-1px; margin-right:6px; }
+  footer { border-top:1px solid var(--line); margin-top:30px; padding:28px 24px; text-align:center; color:var(--muted); font-size:14px; }
+  dialog { border:0; padding:0; background:#fff; max-width:98vw; max-height:96vh; border-radius:8px; }
+  dialog::backdrop { background:rgba(10,10,15,.85); }
+  dialog img { max-width:98vw; max-height:96vh; display:block; }
+</style>
+</head>
+<body>
+<nav><div class="in">
+  <a class="brand" href="index.html"><img src="images/logo.svg" alt="">Sentinel Swarm</a>
+  <div class="links">
+    <a href="index.html">Project</a>
+    <a href="#parts">Parts</a>
+    <a href="#wiring">Wiring</a>
+    <a href="#assemble">Assemble</a>
+    <a href="#flash">Firmware</a>
+    <a href="https://github.com/MeshanNawod/smart-attendance-management-system_v_3/tree/master/esp32_firmware">Source ↗</a>
+  </div>
+</div></nav>
+
+<header><div class="in">
+  <div style="opacity:.8;font-size:14px">Build guide</div>
+  <h1>Build the ESP32 attendance node</h1>
+  <p>Everything you need to build the fingerprint and RFID terminal: the parts, the full wiring and power diagrams, a test-as-you-go assembly order, and how to flash and configure the firmware. Every pin on this page comes from <code style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff">esp32_firmware.ino</code>.</p>
+  <div class="chips"><span>ESP32 DevKit V1</span><span>FM10A fingerprint</span><span>MFRC522 RFID</span><span>16×4 I2C LCD</span><span>4×4 keypad</span><span>MicroSD</span><span>18650 battery</span></div>
+</div></header>
+
+<main class="layout">
+  <aside class="toc">
+    <a href="#parts">1. Parts list</a>
+    <a href="#wiring">2. Wiring diagram</a>
+    <a href="#pins">3. Pin table</a>
+    <a href="#power">4. Power</a>
+    <a href="#assemble">5. Assemble and test</a>
+    <a href="#flash">6. Flash the firmware</a>
+    <a href="#config">7. Configure</a>
+    <a href="#run">8. First run</a>
+    <a href="#trouble">9. Troubleshooting</a>
+  </aside>
+
+  <div>
+  <section id="parts">
+    <h2><small>Step 1</small>Parts list</h2>
+    <p class="lead">One node. The modules marked optional can be left out; switch them off in the firmware's feature flags.</p>
+    <table>
+      <tr><th>Qty</th><th>Part</th><th>Used for</th></tr>
+      <tr><td>1</td><td><b>ESP32 DevKit V1</b> (ESP-WROOM-32, 30-pin)</td><td>The brain: Wi-Fi, web server, OTA commands</td></tr>
+      <tr><td>1</td><td><b>FM10A</b> optical fingerprint sensor (with touch output)</td><td>Fingerprint attendance and enrolment</td></tr>
+      <tr><td>1</td><td><b>MFRC522 RFID-RC522</b> reader + cards or tags</td><td>Student ID card attendance</td></tr>
+      <tr><td>1</td><td><b>16×4 character LCD</b> with I2C backpack (PCF8574)</td><td>Status, student name, menus</td></tr>
+      <tr><td>1</td><td><b>4×4 membrane keypad</b></td><td>PIN, course picker, menus</td></tr>
+      <tr><td>1</td><td><b>MicroSD card module</b> (SPI) + microSD card (FAT32)</td><td><code>config.txt</code>, fingerprint template backups, logs</td></tr>
+      <tr><td>1</td><td><b>N-channel MOSFET</b> (we used 2SK2161) + 220 Ω and 10 kΩ resistors</td><td>Switching the fingerprint sensor's power</td></tr>
+      <tr><td>1</td><td>Status LED or <b>active buzzer</b></td><td>Scan feedback on D2</td></tr>
+      <tr><td>1</td><td><b>18650</b> Li-ion cell + holder</td><td>Battery power</td></tr>
+      <tr><td>1</td><td><b>TP4056</b> charger module (with protection)</td><td>Charging the cell from USB</td></tr>
+      <tr><td>1</td><td><b>XL6009</b> step-up converter</td><td>Battery → 5 V</td></tr>
+      <tr><td>1</td><td><b>LM2596</b> step-down converter</td><td>5 V → 3.3 V for the modules</td></tr>
+      <tr><td>1</td><td>Slide switch, perfboard or custom PCB, headers, jumper wires, enclosure</td><td>Putting it together</td></tr>
+      <tr><td>opt.</td><td><b>HW-084 / DS3231</b> RTC module</td><td>Keeps time when offline (the firmware falls back to the ESP32 clock)</td></tr>
+    </table>
+    <p class="lead" style="margin-top:14px">Tools: soldering iron, multimeter (needed to set the converters), USB cable, a PC with the Arduino IDE.</p>
+  </section>
+
+  <section id="wiring">
+    <h2><small>Step 2</small>Wiring diagram</h2>
+    <p class="lead">Click to enlarge. Coloured tags such as <span class="dot" style="background:#dc2626"></span>3V3, <span class="dot" style="background:#ea580c"></span>5V and <span class="dot" style="background:#111827"></span>GND mean "connect to that power rail" (see the power diagram).</p>
+    <figure class="figure" data-full="images/esp32-wiring.svg"><img src="images/esp32-wiring.svg" alt="Wiring diagram: ESP32 connected to keypad, LCD, RTC, RFID reader, SD card, LED and fingerprint sensor through a MOSFET"><figcaption>Download: <a href="images/esp32-wiring.svg" download>esp32-wiring.svg</a></figcaption></figure>
+    <div class="callout info"><b>Two buses are shared.</b> The <b>SPI</b> lines D18 (SCK), D19 (MISO) and D23 (MOSI) go to both the RFID reader and the SD card; each has its own chip-select (D15 and D4). The <b>I2C</b> lines D21 (SDA) and D22 (SCL) go to both the LCD and the RTC.</div>
+    <div class="callout warn"><b>D22 does two jobs on purpose.</b> It is the I2C clock and also the RFID reader's RST pin. The firmware switches the pin between the two (<code>restoreI2cForLcd()</code>), so connect LCD SCL, RTC SCL and RFID RST all to D22.</div>
+  </section>
+
+  <section id="pins">
+    <h2><small>Step 3</small>Pin table</h2>
+    <p class="lead">Copied from the pin map in the firmware. If you change a pin, change it in <code>esp32_firmware.ino</code> too.</p>
+    <table>
+      <tr><th>Module</th><th>Module pin</th><th>ESP32</th><th>Notes</th></tr>
+      <tr><td rowspan="5"><b>FM10A</b> fingerprint</td><td>TX</td><td>D16 (RX2)</td><td>UART2, baud auto-detected (57600 first)</td></tr>
+      <tr><td>RX</td><td>D17 (TX2)</td><td></td></tr>
+      <tr><td>T-out (touch)</td><td>D35</td><td>Goes HIGH when a finger touches. D35 is input-only</td></tr>
+      <tr><td>VCC</td><td>3.3 V</td><td></td></tr>
+      <tr><td>GND</td><td>MOSFET drain</td><td>Gate ← D5 (HIGH = sensor on), source → GND</td></tr>
+      <tr><td rowspan="7"><b>MFRC522</b> RFID</td><td>SDA (SS)</td><td>D15</td><td>SPI chip-select</td></tr>
+      <tr><td>SCK</td><td>D18</td><td>shared with SD</td></tr>
+      <tr><td>MOSI</td><td>D23</td><td>shared with SD</td></tr>
+      <tr><td>MISO</td><td>D19</td><td>shared with SD</td></tr>
+      <tr><td>RST</td><td>D22</td><td>shared with I2C SCL (see note)</td></tr>
+      <tr><td>3.3V / GND</td><td>3.3 V / GND</td><td>3.3 V only</td></tr>
+      <tr><td>IRQ</td><td>—</td><td>not used</td></tr>
+      <tr><td rowspan="3"><b>MicroSD</b></td><td>CS</td><td>D4</td><td></td></tr>
+      <tr><td>SCK / MOSI / MISO</td><td>D18 / D23 / D19</td><td>shared with RFID</td></tr>
+      <tr><td>VCC / GND</td><td>3.3 V / GND</td><td>use 5 V only if your module has a regulator</td></tr>
+      <tr><td rowspan="2"><b>I2C LCD 16×4</b></td><td>SDA / SCL</td><td>D21 / D22</td><td>address found automatically (0x27, 0x3F, …)</td></tr>
+      <tr><td>VCC / GND</td><td>5 V / GND</td><td></td></tr>
+      <tr><td rowspan="2"><b>HW-084 RTC</b> (optional)</td><td>SDA / SCL</td><td>D21 / D22</td><td>DS3231, shares I2C with the LCD</td></tr>
+      <tr><td>VCC / GND</td><td>3.3 V / GND</td><td></td></tr>
+      <tr><td rowspan="2"><b>4×4 keypad</b></td><td>Row 1–4</td><td>D13, D12, D14, D27</td><td>outputs</td></tr>
+      <tr><td>Col 1–4</td><td>D26, D25, D33, D32</td><td>inputs with internal pull-ups</td></tr>
+      <tr><td><b>LED / buzzer</b></td><td>Signal</td><td>D2</td><td>same pin as the on-board blue LED</td></tr>
+    </table>
+  </section>
+
+  <section id="power">
+    <h2><small>Step 4</small>Power</h2>
+    <p class="lead">The node runs from one 18650 cell. The XL6009 makes 5 V for the ESP32 and the LCD; the LM2596 makes 3.3 V for the sensors.</p>
+    <figure class="figure" data-full="images/esp32-power.svg"><img src="images/esp32-power.svg" alt="Power diagram: USB charges an 18650 through a TP4056; a switch feeds an XL6009 boost to 5 V, which powers the ESP32 VIN, the LCD and an LM2596 that makes 3.3 V for the fingerprint sensor, RFID reader, SD card and RTC"><figcaption>Download: <a href="images/esp32-power.svg" download>esp32-power.svg</a></figcaption></figure>
+    <div class="callout danger"><b>Set both converters before you connect anything.</b> Power the XL6009 from the battery and turn its trimmer until the output reads 5.0 V on a multimeter. Then feed that into the LM2596 and set it to 3.3 V. A converter fresh out of the bag can put out much more and destroy the ESP32 or the RFID reader.</div>
+    <p>Don't connect the ESP32's own <b>3V3</b> pin to the LM2596 rail: the board already makes its own 3.3 V from VIN, and two regulators fighting each other is a common fault. Join all grounds.</p>
+    <p>For bench testing you can skip the battery and power everything from the ESP32's USB port, taking 3.3 V from the board's 3V3 pin. Use that only while testing; the fingerprint sensor and RFID reader together can draw more than the board's regulator likes.</p>
+  </section>
+
+  <section id="assemble">
+    <h2><small>Step 5</small>Assemble and test, one part at a time</h2>
+    <p class="lead">The repository has a small test sketch for each part in <code>esp32_firmware/</code>. Add one module, run its test, and only then add the next. When something fails, you know exactly which wires to check.</p>
+    <ol class="steps">
+      <li><h4>Power and ESP32</h4><p>Set the converters (see Power). Fit the ESP32 on headers so it can be removed. Plug in USB, open the Serial Monitor at <b>115200</b> baud and upload any example sketch to check the board and driver.</p></li>
+      <li><h4>LCD</h4><p>Wire SDA → D21, SCL → D22, VCC → 5 V, GND. Upload <code>test_display/test_display.ino</code>.</p><p class="ok">✓ Text appears on all four lines. If the screen is blank or shows blocks, turn the contrast trimmer on the backpack.</p></li>
+      <li><h4>Keypad</h4><p>Rows to D13, D12, D14, D27 and columns to D26, D25, D33, D32. Upload <code>keypad_test/keypad_test.ino</code>.</p><p class="ok">✓ Every key prints the right character in the Serial Monitor.</p></li>
+      <li><h4>MicroSD card</h4><p>Format the card as FAT32. Wire CS → D4 and the SPI lines to D18, D19, D23. Upload <code>Test_sd/Test_sd.ino</code>.</p><p class="ok">✓ The sketch mounts the card and writes and reads a file.</p></li>
+      <li><h4>RFID reader</h4><p>Add SDA → D15 and RST → D22 (the SPI lines are already there). <b>3.3 V only.</b> Upload <code>Test_frid/Test_frid.ino</code>.</p><p class="ok">✓ The reader's firmware version prints, and tapping a card prints its UID.</p></li>
+      <li><h4>RTC (optional)</h4><p>SDA → D21, SCL → D22, 3.3 V. Upload <code>test_clock/test_clock.ino</code>.</p><p class="ok">✓ The date and time tick on the LCD every second.</p></li>
+      <li><h4>Fingerprint sensor and MOSFET</h4><p>Wire the MOSFET: gate to D5 through 220 Ω, a 10 kΩ resistor from gate to GND, source to GND, drain to the FM10A's GND wire. Then FM10A TX → D16, RX → D17, T-out → D35, VCC → 3.3 V.</p><p>The firmware turns the sensor on with D5 and power-cycles it if it ever hangs, so this step is worth doing even on the bench.</p></li>
+      <li><h4>LED or buzzer</h4><p>Signal → D2, GND. It blinks or beeps on every scan.</p></li>
+    </ol>
+  </section>
+
+  <section id="flash">
+    <h2><small>Step 6</small>Flash the firmware</h2>
+    <ol class="steps">
+      <li><h4>Install the ESP32 boards</h4><p>In the Arduino IDE open <b>Boards Manager</b>, install <b>esp32 by Espressif Systems</b>, then choose <b>Tools → Board → ESP32 Dev Module</b>.</p></li>
+      <li><h4>Install the libraries</h4><p>From <b>Library Manager</b>:</p>
+        <table>
+          <tr><th>Library</th><th>Needed for</th></tr>
+          <tr><td>Adafruit Fingerprint Sensor Library</td><td><code>USE_FINGERPRINT</code></td></tr>
+          <tr><td>MFRC522 (by GithubCommunity / miguelbalboa)</td><td><code>USE_RFID</code></td></tr>
+          <tr><td>LiquidCrystal I2C</td><td><code>USE_LCD</code></td></tr>
+          <tr><td>RTClib (by Adafruit)</td><td><code>USE_HW084</code></td></tr>
+        </table>
+        <p>WiFi, WebServer, HTTPClient, Preferences, SD, SPI, Wire and LittleFS come with the ESP32 boards. The keypad is scanned by the firmware itself, so no keypad library is needed.</p></li>
+      <li><h4>Choose your hardware</h4><p>At the top of <code>esp32_firmware.ino</code>, comment out any module you did not fit:</p>
+<pre><code>#define USE_FINGERPRINT     // FM10A fingerprint sensor
+#define USE_RFID            // MFRC522 RFID reader
+#define USE_LCD             // I2C LCD
+#define USE_HW084           // HW-084 / DS3231 RTC (optional)
+#define USE_KEYPAD          // 4x4 keypad</code></pre></li>
+      <li><h4>Upload</h4><p>Open <code>esp32_firmware/esp32_firmware.ino</code>, select the COM port and click <b>Upload</b>. If the upload stalls at "Connecting…", hold the board's <b>BOOT</b> button until it starts.</p></li>
+    </ol>
+  </section>
+
+  <section id="config">
+    <h2><small>Step 7</small>Configure</h2>
+    <p class="lead">The node reads <code>config.txt</code> from the root of the SD card on every boot. Values there override what is saved in the ESP32's memory.</p>
+<pre><code># Sentinel Swarm — ESP32 Configuration (config.txt on the SD card)
+DEVICE_NAME=ESP32-Lab1
+WIFI_SSID=your-wifi-name
+WIFI_PASS=your-wifi-password
+SERVER_URL=http://192.168.1.10/csc2052
+# or: SERVER_IP=192.168.1.10
+STATIC_DNS=8.8.8.8
+HARDWARE_KEY=same-value-as-SS_HARDWARE_API_KEY-on-the-server
+SECRET_KEY=same-value-as-SS_HEARTBEAT_SECRET-on-the-server</code></pre>
+    <table>
+      <tr><th>Key</th><th>What to put</th></tr>
+      <tr><td><code>DEVICE_NAME</code></td><td>A unique name; this is how the node appears in the dashboard</td></tr>
+      <tr><td><code>WIFI_SSID</code> / <code>WIFI_PASS</code></td><td>Your Wi-Fi (a normal password network; the firmware connects with SSID and password only)</td></tr>
+      <tr><td><code>SERVER_URL</code></td><td>Address of the PHP server. The firmware keeps only the host part and always calls <code>http://&lt;host&gt;/csc2052/api/…</code>, so install the server in a folder named <code>csc2052</code></td></tr>
+      <tr><td><code>HARDWARE_KEY</code></td><td>Sent with every request. Must match <code>SS_HARDWARE_API_KEY</code> on the server, or scans and heartbeats are rejected</td></tr><tr><td><code>SECRET_KEY</code></td><td>Read from the file but not used by the current firmware; set it to the server's <code>SS_HEARTBEAT_SECRET</code> for future use</td></tr>
+    </table>
+    <div class="callout warn"><b>Keep your real config private.</b> Don't commit a <code>config.txt</code> with your real Wi-Fi password or keys to a public repository. Also change the keypad's default system PIN (<code>123</code>) from the dashboard before deploying.</div>
+  </section>
+
+  <section id="run">
+    <h2><small>Step 8</small>First run</h2>
+    <ol class="steps">
+      <li><h4>Boot</h4><p>Insert the SD card and power on. The LCD shows the boot steps; the Serial Monitor (115200) prints a status block with SSID, server, sensors and the offline queue.</p></li>
+      <li><h4>Check the dashboard</h4><p>Within about 10 seconds the node sends its first heartbeat and appears on the <b>Hardware Nodes</b> page as online. From there you can send commands, sync courses and change settings.</p></li>
+      <li><h4>Enrol a student</h4><p>Press <kbd>E</kbd> in the Serial Monitor (or start enrol mode from the dashboard) and place the same finger twice. Press <kbd>I</kbd> to link an RFID card. Then link the fingerprint slot to the student in the dashboard.</p></li>
+      <li><h4>Take attendance</h4><p>Start a lecture from the dashboard, or press <kbd>A</kbd> on the keypad and pick the course with <kbd>B</kbd>/<kbd>C</kbd>, confirming with <kbd>D</kbd>. Scans appear in the live log; if Wi-Fi drops, they queue on the node and sync later.</p></li>
+    </ol>
+    <h3>Serial Monitor commands</h3>
+    <div class="grid2">
+      <table>
+        <tr><th>Key</th><th>Action</th></tr>
+        <tr><td><kbd>E</kbd></td><td>Enrol a fingerprint</td></tr>
+        <tr><td><kbd>I</kbd></td><td>Enrol an RFID card</td></tr>
+        <tr><td><kbd>D</kbd></td><td>Delete a fingerprint slot</td></tr>
+        <tr><td><kbd>C</kbd></td><td>Change the course</td></tr>
+        <tr><td><kbd>A</kbd></td><td>Start attendance</td></tr>
+        <tr><td><kbd>T</kbd></td><td>Today's session totals</td></tr>
+        <tr><td><kbd>S</kbd></td><td>Diagnostics</td></tr>
+      </table>
+      <table>
+        <tr><th>Key</th><th>Action</th></tr>
+        <tr><td><kbd>Y</kbd></td><td>Sync the offline queue now</td></tr>
+        <tr><td><kbd>O</kbd></td><td>Show the offline queue</td></tr>
+        <tr><td><kbd>K</kbd></td><td>Clear the offline queue</td></tr>
+        <tr><td><kbd>F</kbd></td><td>Back up fingerprints to the server</td></tr>
+        <tr><td><kbd>G</kbd></td><td>Restore fingerprints from the server</td></tr>
+        <tr><td><kbd>X</kbd></td><td>Wipe all fingerprints on the sensor</td></tr>
+        <tr><td><kbd>R</kbd></td><td>Reboot</td></tr>
+      </table>
+    </div>
+  </section>
+
+  <section id="trouble">
+    <h2><small>Step 9</small>Troubleshooting</h2>
+    <table>
+      <tr><th>Problem</th><th>Check</th></tr>
+      <tr><td>LCD backlight on, no text</td><td>Turn the contrast trimmer. Check SDA = D21 and SCL = D22. The firmware tries addresses 0x27, 0x3F, 0x3E, 0x23, 0x21, 0x25, 0x26 and 0x20 and prints which one it found.</td></tr>
+      <tr><td>Fingerprint sensor not found</td><td>TX and RX are crossed on purpose: sensor TX → D16, sensor RX → D17. Check the MOSFET: with D5 HIGH the sensor's light should come on. The firmware tries 57600, 9600, 19200, 115200, 4800 and 38400 baud.</td></tr>
+      <tr><td>Finger not detected until pressed hard</td><td>Check the T-out wire to D35.</td></tr>
+      <tr><td>SD card fails to mount</td><td>FAT32 format, CS on D4, and the module on the right supply (3.3 V unless it has its own regulator).</td></tr>
+      <tr><td>RFID version reads 0x00 or 0xFF</td><td>SS on D15, RST on D22, and 3.3 V (5 V damages the reader). Keep the SPI wires short.</td></tr>
+      <tr><td>Random keypad presses</td><td>A row or column wire is loose or touching another. The firmware ignores a scan when a column is LOW with no row selected.</td></tr>
+      <tr><td>Node never shows online</td><td>The server must be reachable from the node's Wi-Fi at <code>http://&lt;host&gt;/csc2052/</code>, and <code>HARDWARE_KEY</code> must match the server.</td></tr>
+      <tr><td>Resets when the sensor or Wi-Fi switches on</td><td>Supply too weak. Recheck the XL6009 output under load and the battery charge.</td></tr>
+    </table>
+    <p style="margin-top:22px">More detail: <a href="https://github.com/MeshanNawod/smart-attendance-management-system_v_3/blob/master/ARCHITECTURE.md#7-esp32-firmware">ARCHITECTURE.md, section 7: ESP32 Firmware</a>.</p>
+  </section>
+  </div>
+</main>
+
+<footer>Sentinel Swarm · Faculty of Science, University of Peradeniya · <a href="index.html">Project home</a> · <a href="https://github.com/MeshanNawod/smart-attendance-management-system_v_3">Source on GitHub</a></footer>
+
+<dialog id="lb"><img id="lbimg" alt=""></dialog>
+<script>
+const lb = document.getElementById("lb"), im = document.getElementById("lbimg");
+document.querySelectorAll(".figure").forEach(f => f.onclick = e => { if (e.target.tagName === "A") return; im.src = f.dataset.full; lb.showModal(); });
+lb.onclick = () => lb.close();
+</script>
+</body>
+</html>

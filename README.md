@@ -37,6 +37,14 @@ Take the full guided tour on the **[project website](https://meshannawod.github.
 
 <sub>Screenshots use demo data; student and lecturer names are made up.</sub>
 
+## Build the ESP32 node
+
+Full step-by-step guide: **[ESP32 build guide](https://meshannawod.github.io/smart-attendance-management-system_v_3/build.html)** (parts list, pin table, power, assembly with test sketches, flashing, `config.txt`, troubleshooting).
+
+<img src="docs/images/esp32-wiring.svg" alt="ESP32 node wiring diagram" width="900">
+
+<img src="docs/images/esp32-power.svg" alt="ESP32 node power diagram" width="900">
+
 ### At Pera Nexus 2026
 
 | | |

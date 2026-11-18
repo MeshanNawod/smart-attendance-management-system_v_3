@@ -119,6 +119,13 @@
   .ver h4 { margin: 10px 0 6px; font-size: 17px; }
   .ver p { margin: 0; font-size: 14px; color: var(--muted); }
 
+  .buildgrid { display: grid; grid-template-columns: 1.5fr 1fr; gap: 28px; align-items: center; }
+  @media (max-width: 900px) { .buildgrid { grid-template-columns: 1fr; } }
+  .buildgrid .frame img { width: 100%; }
+  .checks { list-style: none; padding: 0; margin: 0; }
+  .checks li { padding: 9px 0 9px 30px; position: relative; border-bottom: 1px solid var(--line); font-size: 15px; }
+  .checks li::before { content: "✓"; position: absolute; left: 4px; color: var(--maroon); font-weight: 700; }
+  code { font-family: Consolas, monospace; font-size: .9em; background: #f1f2f5; padding: 1px 5px; border-radius: 4px; }
   footer { background: #1b0707; color: #d8c9c9; padding: 40px 0; font-size: 14px; }
   footer a { color: #fff; }
   footer .wrap { display: flex; gap: 20px; justify-content: space-between; flex-wrap: wrap; align-items: center; }
@@ -138,6 +145,7 @@
       <a href="#tour">Dashboard tour</a>
       <a href="#how">How it works</a>
       <a href="#hardware">Hardware</a>
+      <a href="build.html">Build guide</a>
       <a href="#stack">Tech</a>
       <a href="https://github.com/MeshanNawod/smart-attendance-management-system_v_3">GitHub ↗</a>
     </div>
@@ -293,6 +301,28 @@
   </div>
 </section>
 
+<section id="build">
+  <div class="wrap">
+    <div class="eyebrow">Build your own</div>
+    <h2>Wiring diagram and build guide</h2>
+    <p class="lead">Every connection of the ESP32 node, drawn from the pin map in the firmware, plus a test-as-you-go assembly order and how to flash and configure it.</p>
+    <div class="buildgrid">
+      <a class="frame" href="build.html#wiring" style="cursor:pointer"><div class="bar"><i></i><i></i><i></i><span>esp32-wiring.svg</span></div><img src="images/esp32-wiring.svg" alt="ESP32 node wiring diagram"></a>
+      <div>
+        <ul class="checks">
+          <li><b>Parts list</b> for one node, battery included</li>
+          <li><b>Wiring diagram</b> and pin table from <code>esp32_firmware.ino</code></li>
+          <li><b>Power diagram:</b> 18650 → TP4056 → XL6009 5 V → LM2596 3.3 V</li>
+          <li><b>Assemble one module at a time</b> with the test sketch for each part</li>
+          <li><b>Flash and configure:</b> libraries, feature flags and <code>config.txt</code></li>
+          <li><b>First run</b> and troubleshooting</li>
+        </ul>
+        <div class="btns" style="margin:22px 0 0"><a class="btn" style="background:var(--maroon);color:#fff" href="build.html">Open the build guide →</a><a class="btn" style="border:1px solid var(--line);color:var(--ink)" href="images/esp32-wiring.svg" download>Download diagram</a></div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <section id="stack">
   <div class="wrap">
     <div class="eyebrow">Technology</div>
@@ -342,7 +372,7 @@ const VIEWS = [
     l: ["Attendance rate per course with a progress bar", "Full attendance history", "Rate lectures and join the course forum", "Scan the lecture QR code to check in"] },
   { id: "device", tab: "Hardware nodes", img: "images/device.png", url: "/device.php",
     t: "Control the hardware remotely", d: "Every ESP32 and Raspberry Pi node registers itself with a heartbeat and can be managed from the browser.",
-    l: ["List of nodes with IP, online status and actions", "Wi-Fi setup, including WPA2-Enterprise for campus Wi-Fi", "SD card files, offline queue sync and live telemetry", "Turn sensors on or off and push fingerprint templates"] },
+    l: ["List of nodes with IP, online status and actions", "Wi-Fi setup pushed to the node from the browser", "SD card files, offline queue sync and live telemetry", "Turn sensors on or off and push fingerprint templates"] },
   { id: "students", tab: "Students & courses", img: "images/students.png", url: "/students.php",
     t: "Manage courses and enrolments", d: "Add courses, enrol students one by one or in bulk from a CSV file, and manage the weekly schedule.",
     l: ["Course manager and weekly schedule", "Bulk enrolment from CSV", "Student database with fingerprint, RFID and face templates", "Course enrolment lookup"] },
