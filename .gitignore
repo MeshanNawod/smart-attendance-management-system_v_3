@@ -54,3 +54,8 @@ yarn.lock
 Desktop.ini
 desktop.ini
 $RECYCLE.BIN/
+
+# ─── Build output ─────────────────────────────────────────
+frontend/src-tauri/target/
+frontend/node_modules/
+frontend/dist/

@@ -2,9 +2,19 @@
   <img src="assets/sentinel_swarm_logo.svg" alt="Sentinel Swarm" width="200">
 </p>
 
+<div align="center">
+
 # Sentinel Swarm — Smart Attendance Management System
 
-A full-stack, multi-modal **Attendance Management System** combining IoT hardware (ESP32 + Raspberry Pi) with a PHP/JS web dashboard. Designed for **University of Peradeniya** to replace manual roll-call with autonomous attendance collection.
+A full-stack, multi-modal **attendance management system** combining IoT hardware (ESP32 + Raspberry Pi) with a PHP/JS web dashboard, built for the **University of Peradeniya** to replace manual roll-call. Exhibited at **Pera Nexus 2026**.
+
+![PHP](https://img.shields.io/badge/PHP-777BB4?style=flat-square&logo=php&logoColor=white) ![MySQL](https://img.shields.io/badge/MySQL-4479A1?style=flat-square&logo=mysql&logoColor=white) ![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=flat-square&logo=javascript&logoColor=black) ![ESP32](https://img.shields.io/badge/ESP32-E7352C?style=flat-square&logo=espressif&logoColor=white) ![Raspberry Pi](https://img.shields.io/badge/Raspberry_Pi-A22846?style=flat-square&logo=raspberrypi&logoColor=white) ![Python](https://img.shields.io/badge/Python-3776AB?style=flat-square&logo=python&logoColor=white) ![OpenCV](https://img.shields.io/badge/OpenCV-5C3EE8?style=flat-square&logo=opencv&logoColor=white)
+
+**Fingerprint · RFID · Face · Voice · QR · Manual**
+
+</div>
+
+> **Versions:** this is **v3**, the complete system. Earlier stages: [v2](https://github.com/MeshanNawod/smart-attendance-management-system_v_2) (first PHP dashboard with face recognition) and [v1](https://github.com/MeshanNawod/smart-attendance-management-system_v_1) (deployment pipeline). Photos from the exhibition are on [my portfolio](https://meshannawod.github.io/).
 
 ---
 
