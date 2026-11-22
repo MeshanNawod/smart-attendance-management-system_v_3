@@ -1747,3 +1747,7 @@ h3, .h3, .display-5 {
 #ai-chat-messages::-webkit-scrollbar-track { background: transparent; }
 #ai-chat-messages::-webkit-scrollbar-thumb { background: #dadce0; border-radius: 4px; }
 
+
+/* LCD mirror rows keep the 16-column spacing; icons take one character cell */
+.virtual-lcd > div { white-space: pre; min-height: 1.5em; }
+.virtual-lcd .lcd-icon { display: inline-block; width: calc(1ch + 1.8px); text-align: center; font-size: 0.9em; }

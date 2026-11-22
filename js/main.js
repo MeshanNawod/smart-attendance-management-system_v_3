@@ -665,6 +665,15 @@ async function fetchESPLogs() {
     } catch (e) { /* Silent fail if offline */ }
 }
 
+// ESP32 LCD mirror. The node sends icons as ~1..~7 (custom LCD characters);
+// draw them with Bootstrap Icons and keep the spacing of the 16-column rows.
+const LCD_ICONS = { '1': 'check-lg', '2': 'x-lg', '3': 'wifi', '4': 'wifi-off', '5': 'fingerprint', '6': 'credit-card-2-front', '7': 'lock-fill' };
+window.renderLcdLine = function(el, text) {
+    if (!el) return;
+    const safe = String(text ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c]));
+    el.innerHTML = safe.replace(/~([1-7])/g, (m, n) => `<i class="bi bi-${LCD_ICONS[n]} lcd-icon" aria-hidden="true"></i>`);
+};
+
 async function pollLcdMirror() {
     const targetIP = getEspIp();
     if (!targetIP) return;
@@ -674,8 +683,7 @@ async function pollLcdMirror() {
         if (data.includes("|")) {
             const lines = data.split("|");
             lines.forEach((lineText, index) => {
-                const el = document.getElementById('lcd' + index);
-                if (el) el.textContent = lineText;
+                window.renderLcdLine(document.getElementById('lcd' + index), lineText);
             });
         }
     } catch (error) { /* Silently fail */ }
