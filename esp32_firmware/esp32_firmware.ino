@@ -9,7 +9,7 @@
 // Comment out any feature you do NOT have hardware for.
 #define USE_FINGERPRINT     // Enable FM10A fingerprint sensor
 #define USE_RFID            // Enable MFRC522 RFID-RC522 reader
-#define USE_LCD             // Enable I2C LCD display (16x2 or 20x4)
+#define USE_LCD             // Enable I2C LCD display (16x4)
 #define USE_HW084           // Enable HW-084 (now using onboard ESP32 clock)
 #define USE_KEYPAD          // Enable 4×4 matrix keypad (install Keypad library)
 // ───────────────────────────────────────────────────────────
@@ -129,7 +129,7 @@ void pollKeypad() {
 #endif
 
 // ============================================================
-// ⚙️ SYSTEM & HARDWARE PIN MAPPING
+// SYSTEM & HARDWARE PIN MAPPING
 // ============================================================
 // Default Configuration Parameters
 const char* DEFAULT_SSID = "Card ekak daganin bn";
@@ -293,6 +293,11 @@ bool i2cBusDirty      = true;   // Tracks if I2C was used since the last RFID ch
 bool sdCardReady      = false;  // Tracks general SD card initialization
 #ifdef USE_FINGERPRINT
 bool sdFpReady = false;
+// Declared here, before first use (they were declared after the template
+// download code that uses them, so the sketch did not compile).
+HardwareSerial mySerial(2);
+Adafruit_Fingerprint finger = Adafruit_Fingerprint(&mySerial);
+bool fpOK = false;
 #endif
 
 // Power saving
@@ -538,12 +543,132 @@ const unsigned long fpIdleThreshold = 60000; // 60s idle → slow poll
 const unsigned long fpSlowPoll = 5000;       // poll every 5s when idle
 
 // ============================================================
-// VIRTUAL LCD SCREEN EMULATOR
+// LCD USER INTERFACE (16x4 I2C character display)
 // ============================================================
+// Every screen goes through lcdWrite(), which keeps a copy of each row in
+// lcdLine[] so the web dashboard can mirror the display (GETLCD).
+//
+// Layout used by all screens:
+//   row 0  title / status bar
+//   row 1  main message
+//   row 2  detail
+//   row 3  key hints
+//
+// Icons are custom characters stored in the LCD's CGRAM, slots 1-7 (slot 0
+// is not used because '\0' would end an Arduino String). Use them with
+// String(IC_OK) etc. The dashboard shows them as Bootstrap Icons.
+const char IC_OK      = 1;  // check mark
+const char IC_FAIL    = 2;  // cross
+const char IC_WIFI    = 3;  // connected
+const char IC_OFFLINE = 4;  // no connection
+const char IC_FINGER  = 5;  // fingerprint
+const char IC_CARD    = 6;  // RFID card
+const char IC_LOCK    = 7;  // locked
+
+const uint8_t LCD_GLYPHS[7][8] = {
+  {0x00, 0x01, 0x03, 0x16, 0x1C, 0x08, 0x00, 0x00},  // 1 check
+  {0x00, 0x11, 0x0A, 0x04, 0x0A, 0x11, 0x00, 0x00},  // 2 cross
+  {0x00, 0x0E, 0x11, 0x04, 0x0A, 0x00, 0x04, 0x00},  // 3 wifi
+  {0x01, 0x0F, 0x13, 0x06, 0x0E, 0x08, 0x0C, 0x10},  // 4 offline (wifi with a slash)
+  {0x0E, 0x11, 0x0E, 0x11, 0x15, 0x15, 0x11, 0x0E},  // 5 fingerprint
+  {0x00, 0x1F, 0x11, 0x1F, 0x11, 0x17, 0x1F, 0x00},  // 6 card
+  {0x0E, 0x11, 0x11, 0x1F, 0x1B, 0x1B, 0x1F, 0x00},  // 7 lock
+};
+
+// Some 16x4 modules address rows 3 and 4 at 0x10/0x50 instead of the
+// 20x4 offsets the library uses. Set LCD_LAYOUT=1604 in config.txt if the
+// bottom two rows start four characters to the right.
+bool lcdLayout1604 = false;
+
+unsigned long lcdHomeAt = 0;     // when to return to the home screen (0 = stay)
+bool lcdOnHome = false;          // home screen is showing (status bar refreshes)
+bool lcdPaintingHome = false;
+unsigned long lcdLastHomeTick = 0;
+int lcdQueueCache = 0;
+unsigned long lcdQueueCheckedAt = 0;
+String scanDisplayName = "";     // student name for the next result screen
+
+void lcdInitIcons() {
+#ifdef USE_LCD
+  if (!lcdOK) return;
+  for (int i = 0; i < 7; i++) lcdPtr->createChar(i + 1, (uint8_t*)LCD_GLYPHS[i]);
+#endif
+}
+
+void lcdSetCursorRow(int row) {
+#ifdef USE_LCD
+  if (lcdLayout1604) {
+    const uint8_t offsets[4] = {0x00, 0x40, 0x10, 0x50};
+    lcdPtr->command(0x80 | offsets[row]);
+  } else {
+    lcdPtr->setCursor(0, row);
+  }
+#endif
+}
+
+// Keep only what the LCD can show: printable ASCII and the icon codes.
+// Common UTF-8 punctuation becomes its ASCII look-alike; '~' and '\' are
+// replaced because the LCD's character ROM draws them as arrows and a yen sign.
+String lcdClean(const String &in) {
+  String out;
+  out.reserve(in.length());
+  for (unsigned int i = 0; i < in.length(); i++) {
+    uint8_t c = (uint8_t)in[i];
+    if (c >= 1 && c <= 7) { out += (char)c; continue; }
+    if (c >= 0x20 && c < 0x7F) {
+      if (c == '~') out += '-';
+      else if (c == '\\') out += '/';
+      else out += (char)c;
+      continue;
+    }
+    if (c == 0xE2 && i + 2 < in.length()) {           // 3-byte punctuation
+      uint8_t b1 = (uint8_t)in[i + 1], b2 = (uint8_t)in[i + 2];
+      if (b1 == 0x80 && (b2 == 0x93 || b2 == 0x94)) out += '-';        // en/em dash
+      else if (b1 == 0x80 && b2 == 0xA6) out += "...";                  // ellipsis
+      else if (b1 == 0x80 && (b2 == 0x98 || b2 == 0x99)) out += '\'';   // curly quotes
+      else if (b1 == 0x86 && b2 == 0x92) out += '>';                    // right arrow
+      i += 2;
+      continue;
+    }
+    if (c == 0xC3 && i + 1 < in.length() && (uint8_t)in[i + 1] == 0x97) { out += 'x'; i++; continue; }  // multiply sign
+    if (c >= 0xC0) {                                   // skip any other multi-byte char
+      while (i + 1 < in.length() && ((uint8_t)in[i + 1] & 0xC0) == 0x80) i++;
+    }
+  }
+  return out;
+}
+
+String lcdFit(String text) {
+  text = lcdClean(text);
+  if ((int)text.length() > LCD_COLS) text = text.substring(0, LCD_COLS);
+  while ((int)text.length() < LCD_COLS) text += ' ';
+  return text;
+}
+
+String lcdCenter(String text) {
+  text = lcdClean(text);
+  if ((int)text.length() >= LCD_COLS) return text.substring(0, LCD_COLS);
+  int pad = (LCD_COLS - text.length()) / 2;
+  String out;
+  for (int i = 0; i < pad; i++) out += ' ';
+  return out + text;
+}
+
+// Left text and right text on one row; the left side is shortened if needed.
+String lcdLR(String left, String right) {
+  left = lcdClean(left); right = lcdClean(right);
+  int room = LCD_COLS - right.length() - 1;
+  if (room < 0) return right.substring(0, LCD_COLS);
+  if ((int)left.length() > room) left = left.substring(0, room);
+  String out = left;
+  while ((int)(out.length() + right.length()) < LCD_COLS) out += ' ';
+  return out + right;
+}
+
 void lcdWrite(int row, String text) {
   if (row < 0 || row > 3) return;
-  while (text.length() < LCD_COLS) text += ' ';
-  if (text.length() > LCD_COLS) text = text.substring(0, LCD_COLS);
+  text = lcdFit(text);
+  if (!lcdPaintingHome) lcdOnHome = false;
   if (lcdLine[row] == text && !lcdDirty[row]) return;
   lcdLine[row] = text;
   lcdDirty[row] = true;
@@ -553,7 +678,7 @@ void lcdWrite(int row, String text) {
 #ifdef USE_RFID
     if (!i2cBusDirty) restoreI2cForLcd();
 #endif
-    lcdPtr->setCursor(0, row);
+    lcdSetCursorRow(row);
     lcdPtr->print(text);
     lcdDirty[row] = false;
   }
@@ -561,21 +686,105 @@ void lcdWrite(int row, String text) {
 }
 
 void lcdClear() {
-  String blank = "";
-  while (blank.length() < LCD_COLS) blank += ' ';
+  lcdOnHome = false;
+  lcdHomeAt = 0;
   for (int i = 0; i < 4; i++) {
-    lcdLine[i] = blank;
+    lcdLine[i] = lcdFit("");
     lcdDirty[i] = true;
 #ifdef USE_LCD
     if (lcdOK) {
 #ifdef USE_RFID
       if (!i2cBusDirty) restoreI2cForLcd();
 #endif
-      lcdPtr->setCursor(0, i);
+      lcdSetCursorRow(i);
       lcdPtr->print(lcdLine[i]);
       lcdDirty[i] = false;
     }
 #endif
+  }
+}
+
+// Draw a full four-row screen. holdMs > 0 returns to the home screen after
+// that many milliseconds (unless another screen is drawn first).
+void lcdScreen(const String &r0, const String &r1, const String &r2, const String &r3, unsigned long holdMs = 0) {
+  lcdWrite(0, r0); lcdWrite(1, r1); lcdWrite(2, r2); lcdWrite(3, r3);
+  lcdHomeAt = holdMs ? millis() + holdMs : 0;
+}
+
+// Result of a scan or an action: icon + title on top, two detail rows.
+void lcdResult(char icon, const String &title, const String &line1, const String &line2 = "", const String &line3 = "", unsigned long holdMs = 3000) {
+  lcdScreen(String(icon) + " " + title, line1, line2, line3, holdMs);
+}
+
+bool lcdNoCourse() {
+  return currentCourse.length() == 0 || currentCourse == "Unassigned Session" || currentCourse == "none";
+}
+
+// "08:15", or "" while the clock has not been set (no NTP / RTC yet).
+String lcdClock() {
+  time_t now; struct tm t;
+  time(&now); localtime_r(&now, &t);
+  if (t.tm_year < 120) return "";
+  char buf[6]; snprintf(buf, sizeof(buf), "%02d:%02d", t.tm_hour, t.tm_min);
+  return String(buf);
+}
+
+void lcdPaintHomeStatus() {
+  if (millis() - lcdQueueCheckedAt > 15000 || lcdQueueCheckedAt == 0) {
+    lcdQueueCache = offlineQueueCount();
+    lcdQueueCheckedAt = millis();
+  }
+  bool online = isOnline && WiFi.status() == WL_CONNECTED;
+  String course = lcdNoCourse() ? String("No course") : currentCourse;
+  lcdPaintingHome = true;
+  lcdWrite(0, lcdLR(String(online ? IC_WIFI : IC_OFFLINE) + " " + course, lcdClock()));
+  // Row 2: scans this session, and scans waiting to be sent (if any).
+  String left = "Marked " + String(sessionScanned);
+  String right = lcdQueueCache > 0 ? "Sync " + String(lcdQueueCache) : String("");
+  if ((int)(left.length() + right.length()) >= LCD_COLS) right = String(IC_OFFLINE) + String(lcdQueueCache);
+  lcdWrite(2, lcdLR(left, right));
+  lcdPaintingHome = false;
+}
+
+// Home screen: the course, the clock, connection state and what to do next.
+void lcdShowHome() {
+  if (systemLocked) return;
+  lcdHomeAt = 0;
+  lcdPaintingHome = true;
+  if (lcdNoCourse()) {
+    lcdWrite(1, lcdCenter("Select a course"));
+    lcdWrite(3, "A Course C Info");
+  } else if (currentMode == "ENROLL_MODE") {
+    lcdWrite(1, lcdCenter("Enrolment mode"));
+    lcdWrite(3, "A Course * Back");
+  } else {
+    lcdWrite(1, lcdCenter(String(IC_FINGER) + String(IC_CARD) + " Scan to mark"));
+    lcdWrite(3, "A Course B Stats");
+  }
+  lcdPaintingHome = false;
+  lcdPaintHomeStatus();
+  lcdOnHome = true;
+  lcdLastHomeTick = millis();
+}
+
+void lcdShowLocked(const String &entry = "") {
+  lcdClear();
+  lcdWrite(0, lcdCenter(String(IC_LOCK) + " LOCKED"));
+  lcdWrite(1, "PIN: " + entry);
+  lcdWrite(3, "# OK    * Clear");
+}
+
+// Called every loop(): returns to home after a timed screen and keeps the
+// clock and status on the home screen current.
+void lcdTick() {
+  if (lcdHomeAt && (long)(millis() - lcdHomeAt) >= 0) {
+    lcdHomeAt = 0;
+    lcdShowHome();
+    return;
+  }
+  if (lcdOnHome && millis() - lcdLastHomeTick >= 1000) {
+    lcdLastHomeTick = millis();
+    lcdPaintHomeStatus();
   }
 }
 
@@ -689,6 +898,7 @@ void readSDConfig() {
     else if (key == "SERVER_IP")    { SERVER_IP = val; espPrintln("[SD-CONFIG]  Server IP = " + val); }
     else if (key == "SERVER_URL")   { SERVER_IP = val; SERVER_IP.replace("http://", ""); SERVER_IP.replace("/csc2052", ""); SERVER_IP.replace("/", ""); espPrintln("[SD-CONFIG]  Server URL → IP: " + SERVER_IP); }
     else if (key == "DEVICE_NAME")  { DEVICE_NAME = val; espPrintln("[SD-CONFIG]  Device Name = " + val); }
+    else if (key == "LCD_LAYOUT")   { lcdLayout1604 = (val == "1604"); espPrintln("[SD-CONFIG]  LCD layout = " + String(lcdLayout1604 ? "16x4 (0x10/0x50 rows)" : "default")); }
     else if (key == "SECRET_KEY")   { secretKey = val; espPrintln("[SD-CONFIG]  Secret Key set."); }
     else if (key == "HARDWARE_KEY") { hardwareKey = val; espPrintln("[SD-CONFIG]  Hardware Key set."); }
     else if (key == "STATIC_DNS")     { staticDNS = val; espPrintln("[SD-CONFIG]  DNS = " + val); }
@@ -1154,7 +1364,7 @@ int downloadAndImportMissingTemplates() {
   if (currentCourse.length() == 0 || currentCourse == "Unassigned Session" || currentCourse == "none") return -1;
 
   espPrintln("[FP-SYNC] Checking missing templates for course: " + currentCourse);
-  lcdWrite(2, "Syncing FP...");
+  lcdWrite(2, lcdCenter("Syncing fingers"));
 
   WiFiClient client;
   HTTPClient http;
@@ -1315,11 +1525,25 @@ void sendHeartbeat() {
 // ============================================================
 // LOGICAL ATTENDANCE PIPELINE
 // ============================================================
+// Name and number lines for the result screen. Without a name lookup the ID
+// is a student number (RFID/online) or a sensor slot (fingerprint offline).
+String scanWho(const String &id) {
+  if (scanDisplayName.length() > 0) return scanDisplayName;
+  bool digits = id.length() > 0;
+  for (unsigned int i = 0; i < id.length(); i++) if (!isDigit(id[i])) { digits = false; break; }
+  return digits ? "Finger ID " + id : id;
+}
+String scanSub(const String &id) {
+  return scanDisplayName.length() > 0 ? id : String("");
+}
+
 void markAttendance(String fingerId, String modality, String ts) {
+  String who = scanWho(fingerId), sub = scanSub(fingerId);
+  scanDisplayName = "";
   // Cooldown filter
   if (fingerId == lastScannedID && (millis() - lastScanTime < COOLDOWN_MS)) {
     espPrintln("[SYSTEM] Cooldown filtering duplicate scan for: " + fingerId);
-    lcdWrite(2, "Already Logged!");
+    lcdResult(IC_OK, "Already marked", who, sub);
     delay(1000);
     printMenu();
     return;
@@ -1333,7 +1557,7 @@ void markAttendance(String fingerId, String modality, String ts) {
     sessionScanned++;
     logAttendanceSD(fingerId, modality + "(offline)");
     indicatorBlink(3, 60);
-    lcdWrite(2, "Logged Offline");
+    lcdResult(IC_OFFLINE, "Saved offline", who, "Sends when the", "server is back");
     delay(1200);
     printMenu();
     return;
@@ -1366,7 +1590,7 @@ void markAttendance(String fingerId, String modality, String ts) {
     // Dynamic Admin commands mapping
     if (payload.indexOf("\"status\":\"admin\"") >= 0 || payload.indexOf("\"status\": \"admin\"") >= 0) {
       espPrintln("\n[ADMIN] Administrator matched! Resetting dynamic lecture session.");
-      lcdWrite(2, "Admin Matched!");
+      lcdResult(IC_LOCK, "Admin card", lcdCenter("Session reset"));
       currentCourse = "Unassigned Session";
       syncOfflineQueue();
       delay(1500);
@@ -1378,7 +1602,7 @@ void markAttendance(String fingerId, String modality, String ts) {
     // Handle new session-based responses
     if (payload.indexOf("\"status\":\"not_enrolled\"") >= 0 || payload.indexOf("\"status\": \"not_enrolled\"") >= 0) {
       espPrintln("[ATTENDANCE] Student not enrolled in this course.");
-      lcdWrite(2, "Not Enrolled!");
+      lcdResult(IC_FAIL, "Not enrolled", who, "in " + currentCourse);
       delay(1500);
       printMenu();
       http.end();
@@ -1386,7 +1610,7 @@ void markAttendance(String fingerId, String modality, String ts) {
     }
     if (payload.indexOf("\"status\":\"no_session\"") >= 0 || payload.indexOf("\"status\": \"no_session\"") >= 0) {
       espPrintln("[ATTENDANCE] No active lecture session.");
-      lcdWrite(2, "No Active Lecture");
+      lcdResult(IC_FAIL, "No lecture", "Start it on the", "web dashboard");
       delay(1500);
       printMenu();
       http.end();
@@ -1394,7 +1618,7 @@ void markAttendance(String fingerId, String modality, String ts) {
     }
     if (payload.indexOf("\"status\":\"duplicate\"") >= 0 || payload.indexOf("\"status\": \"duplicate\"") >= 0) {
       espPrintln("[ATTENDANCE] Already recorded for today.");
-      lcdWrite(2, "Already Logged!");
+      lcdResult(IC_OK, "Already marked", who, sub);
       delay(1000);
       printMenu();
       http.end();
@@ -1407,14 +1631,15 @@ void markAttendance(String fingerId, String modality, String ts) {
 
     if (payload.indexOf("\"status\":\"updated\"") >= 0 || payload.indexOf("\"status\": \"updated\"") >= 0) {
       espPrintln("[ATTENDANCE] Re-scan — record updated.");
-      lcdWrite(2, "Updated (Re-scan)");
+      lcdResult(IC_OK, "Present", who, sub, lcdLR("Re-scan saved", lcdClock()));
     } else {
-      lcdWrite(2, "Attendance Marked");
+      lcdResult(IC_OK, "Present", who, sub, lcdLR(currentCourse, lcdClock()));
     }
   } else {
     espPrintln("[SERVER] POST Failure (" + http.errorToString(code) + "). Saved in queue.");
     saveToOfflineQueue(fingerId, modality, ts);
     isOnline = false;
+    lcdResult(IC_OFFLINE, "Saved offline", who, "Server did not", "answer");
     flashLED(1, 600);
   }
   http.end();
@@ -1424,9 +1649,7 @@ void markAttendance(String fingerId, String modality, String ts) {
 // BIOMETRICS ENROLLMENT WIZARD (Dynamic Web & Serial Dual Mode)
 // ============================================================
 #ifdef USE_FINGERPRINT
-HardwareSerial mySerial(2);
-Adafruit_Fingerprint finger = Adafruit_Fingerprint(&mySerial);
-bool fpOK = false;
+// (mySerial, finger and fpOK are declared with the other globals near the top.)
 
 // ─── SD Card Fingerprint Template Storage ───────────────────
 bool initFingerprintSD() {
@@ -1538,10 +1761,8 @@ int scanSDAndImport() {
 
 void runEnrollment(int overrideSlot) {
   if (!fpOK) {
-    espPrintln("[ENROLL] ⚠ Fingerprint sensor not detected. Fix power (external 3.3V) and wiring.");
-    lcdClear();
-    lcdWrite(0, "FP SENSOR DOWN");
-    lcdWrite(1, "Check power/wire");
+    espPrintln("[ENROLL] WARNING: Fingerprint sensor not detected. Fix power (external 3.3V) and wiring.");
+    lcdResult(IC_FAIL, "Sensor offline", "Check power and", "sensor wiring", "", 0);
     delay(2000);
     printMenu();
     return;
@@ -1555,10 +1776,10 @@ void runEnrollment(int overrideSlot) {
     espPrintln("=============================================");
     espPrintln("Enter Student No via keypad (digits + # for /)");
     lcdClear();
-    lcdWrite(0, "Enroll Student #");
+    lcdWrite(0, String(IC_FINGER) + " Enrol student");
     lcdWrite(1, "S/_");
-    lcdWrite(2, "0-9=type #=/ D=OK");
-    lcdWrite(3, "*=del A=cancel");
+    lcdWrite(2, "# adds /   D OK");
+    lcdWrite(3, "* Del  A Cancel");
     while (Serial.available()) Serial.read();
 
     String enrollBuf = "";
@@ -1571,7 +1792,7 @@ void runEnrollment(int overrideSlot) {
         pendingKeypadKey = "";
         if (key == "A") {
           espPrintln("[ENROLL] Cancelled via Keypad.");
-          lcdWrite(1, "Cancelled");
+          lcdResult(IC_FAIL, "Cancelled", "", "", "", 1500);
           delay(800);
           return;
         }
@@ -1603,7 +1824,7 @@ void runEnrollment(int overrideSlot) {
       }
       if (millis() - waitStart > 120000) {
         espPrintln("[ENROLL] Input timeout. Aborting.");
-        lcdWrite(1, "Timeout!");
+        lcdResult(IC_FAIL, "Timed out", "No number typed", "", "", 2000);
         delay(1000);
         return;
       }
@@ -1661,24 +1882,24 @@ enroll_restart:
   enrollAttempts++;
   if (enrollAttempts > 3) {
     espPrintln("[ENROLL] Failed after 3 full attempts. Aborting.");
-    lcdWrite(1, "Failed x3!");
+    lcdResult(IC_FAIL, "Enrol failed", "3 attempts used", "Clean the sensor");
     delay(1500);
     return;
   }
   if (enrollAttempts > 1) {
     espPrintln("\n[ENROLL] Full restart (attempt " + String(enrollAttempts) + "/3). Clean sensor and try again.");
     lcdClear();
-    lcdWrite(0, ">> ENROLL #" + String(slotId));
-    lcdWrite(1, "Attempt " + String(enrollAttempts) + "/3");
+    lcdWrite(0, String(IC_FINGER) + " Enrol slot " + String(slotId));
+    lcdWrite(1, lcdCenter("Attempt " + String(enrollAttempts) + " of 3"));
     delay(2000);
   }
 
   lcdClear();
-  lcdWrite(0, ">> ENROLL SLOT #" + String(slotId));
+  lcdWrite(0, String(IC_FINGER) + " Enrol slot " + String(slotId));
   // ── First capture: wait for finger (180s, auto-retry) ──────
   unsigned long timeout = millis() + 180000;
-  lcdWrite(1, "PLACE FINGER NOW");
-  lcdWrite(3, "A/* cancel");
+  lcdWrite(1, lcdCenter("Place finger"));
+  lcdWrite(3, "A or * to cancel");
   while (finger.getImage() != FINGERPRINT_OK) {
     webServer.handleClient();
     pollKeypad();
@@ -1687,7 +1908,7 @@ enroll_restart:
       pendingKeypadKey = "";
       if (key == "A" || key == "*") {
         espPrintln("[ENROLL] Cancelled via Virtual Keypad (" + key + ").");
-        lcdWrite(1, "Enroll Aborted!");
+        lcdResult(IC_FAIL, "Cancelled", "", "", "", 1500);
         delay(1200);
         return;
       }
@@ -1697,15 +1918,15 @@ enroll_restart:
       in.trim();
       if (in.equalsIgnoreCase("cancel")) {
         espPrintln("[ENROLL] Cancelled.");
-        lcdWrite(1, "Enroll Aborted!");
+        lcdResult(IC_FAIL, "Cancelled", "", "", "", 1500);
         delay(1200);
         return;
       }
     }
     if (millis() > timeout) {
       espPrintln("[ENROLL] Timeout waiting for sensor image (3 min). Touch sensor to retry.");
-      lcdWrite(1, "Place finger...");
-      lcdWrite(3, "A/* cancel");
+      lcdWrite(1, lcdCenter("Place finger"));
+      lcdWrite(3, "A or * to cancel");
       timeout = millis() + 180000;  // reset timeout — keep trying
       delay(50);
       continue;
@@ -1714,7 +1935,7 @@ enroll_restart:
   }
 
   espPrintln("[OK] First scan captured successfully!");
-  lcdWrite(1, "Image captured!");
+  lcdWrite(1, lcdCenter("Captured"));
   flashLED(1, 100);
 
   // Convert first image to template (retry up to 3 times on poor quality)
@@ -1723,15 +1944,15 @@ enroll_restart:
     tzRetries++;
     if (tzRetries >= 3) {
       espPrintln("[ERROR] Poor scan quality on first image after 3 attempts. Restarting.");
-      lcdWrite(1, "Poor Quality x3!");
+      lcdResult(IC_FAIL, "Enrol failed", "Scan unclear", "3 times");
       delay(1500);
       goto enroll_restart;
     }
     espPrintln("[WARN] Poor scan quality (attempt " + String(tzRetries) + "/3). Clean sensor and retry.");
-    lcdWrite(1, "Poor Quality!");
-    lcdWrite(3, "Retry " + String(tzRetries) + "/3");
+    lcdWrite(1, lcdCenter("Scan unclear"));
+    lcdWrite(3, lcdCenter("Retry " + String(tzRetries) + " of 3"));
     delay(1000);
-    lcdWrite(1, "Place finger again");
+    lcdWrite(1, lcdCenter("Place it again"));
     // Wait for finger removal
     unsigned long rTimeout = millis() + 15000;
     while (finger.getImage() != FINGERPRINT_NOFINGER && millis() < rTimeout) { delay(50); }
@@ -1743,7 +1964,7 @@ enroll_restart:
     }
     if (millis() >= rTimeout) {
       espPrintln("[ENROLL] Timeout waiting for retry finger. Aborting.");
-      lcdWrite(1, "Enroll Timeout!");
+      lcdResult(IC_FAIL, "Timed out", "No finger placed", "", "", 2000);
       delay(1200);
       return;
     }
@@ -1754,8 +1975,8 @@ enroll_restart:
   for (int scan = 2; scan <= enrollCount; scan++) {
     // Wait for finger removal
     espPrintln("=> REMOVE FINGER (" + String(scan-1) + "/" + String(enrollCount) + " done)...");
-    lcdWrite(1, "Remove finger");
-    lcdWrite(3, "A/* cancel");
+    lcdWrite(1, lcdCenter("Lift finger"));
+    lcdWrite(3, "A or * to cancel");
     delay(1000);
     unsigned long rTimeout = millis() + 60000;
     while (finger.getImage() != FINGERPRINT_NOFINGER) {
@@ -1763,7 +1984,7 @@ enroll_restart:
       pollKeypad();
       if (pendingKeypadKey.length() > 0) {
         String key = pendingKeypadKey; pendingKeypadKey = "";
-        if (key == "A" || key == "*") { espPrintln("[ENROLL] Cancelled."); lcdWrite(1, "Cancelled"); delay(800); return; }
+        if (key == "A" || key == "*") { espPrintln("[ENROLL] Cancelled."); lcdResult(IC_FAIL, "Cancelled", "", "", "", 1500); delay(800); return; }
       }
       if (Serial.available() > 0) { String in = Serial.readStringUntil('\n'); in.trim(); if (in.equalsIgnoreCase("cancel")) { espPrintln("[ENROLL] Cancelled."); return; } }
       if (millis() > rTimeout) { espPrintln("[ENROLL] Remove timeout. Proceeding..."); break; }
@@ -1772,7 +1993,7 @@ enroll_restart:
 
     // Wait for finger placement
     espPrintln("=> PLACE SAME FINGER (scan " + String(scan) + "/" + String(enrollCount) + ")");
-    lcdWrite(1, "Scan " + String(scan) + "/" + String(enrollCount));
+    lcdWrite(1, lcdCenter("Place finger " + String(scan) + "/" + String(enrollCount)));
     timeout = millis() + 180000;
     while (finger.getImage() != FINGERPRINT_OK) {
       webServer.handleClient();
@@ -1784,7 +2005,7 @@ enroll_restart:
     }
 
     espPrintln("[OK] Scan " + String(scan) + " captured!");
-    lcdWrite(1, "Captured!");
+    lcdWrite(1, lcdCenter("Captured"));
     flashLED(1, 100);
 
     // Convert to buffer 2 and merge
@@ -1793,24 +2014,24 @@ enroll_restart:
       tzRetry++;
       if (tzRetry >= 3) {
         espPrintln("[ERROR] Poor quality x3. Restarting enrollment.");
-        lcdWrite(1, "Poor Quality x3!");
+        lcdResult(IC_FAIL, "Enrol failed", "Scan unclear", "3 times");
         delay(1500);
         goto enroll_restart;
       }
       espPrintln("[WARN] Poor quality (attempt " + String(tzRetry) + "/3). Retrying scan " + String(scan) + "...");
-      lcdWrite(3, "Retry " + String(tzRetry) + "/3");
+      lcdWrite(3, lcdCenter("Retry " + String(tzRetry) + " of 3"));
       delay(1000);
       unsigned long rt = millis() + 15000;
       while (finger.getImage() != FINGERPRINT_NOFINGER && millis() < rt) { delay(50); }
       rt = millis() + 30000;
       while (finger.getImage() != FINGERPRINT_OK && millis() < rt) { webServer.handleClient(); delay(50); }
-      if (millis() >= rt) { espPrintln("[ENROLL] Timeout retrying. Aborting."); lcdWrite(1, "Timeout!"); delay(1000); return; }
+      if (millis() >= rt) { espPrintln("[ENROLL] Timeout retrying. Aborting."); lcdResult(IC_FAIL, "Timed out", "", "", "", 2000); delay(1000); return; }
     }
 
     // Merge with existing model in buffer 1
     if (finger.createModel() != FINGERPRINT_OK) {
       espPrintln("FAILED. Fingerprints did not match (scan " + String(scan) + "/" + String(enrollCount) + "). Restarting.");
-      lcdWrite(1, "No Match!");
+      lcdResult(IC_FAIL, "Scans differ", "Use the same", "finger each time");
       delay(1500);
       goto enroll_restart;
     }
@@ -1818,19 +2039,18 @@ enroll_restart:
   }
 
   espPrintln("[OK] All " + String(enrollCount) + " scans enrolled successfully!");
-  lcdWrite(1, "All " + String(enrollCount) + " done!");
+  lcdWrite(1, lcdCenter("Saving..."));
 
   // Store model
   espPrint("Storing model in flash memory slot #" + String(slotId) + "... ");
   if (finger.storeModel(slotId) != FINGERPRINT_OK) {
     espPrintln("FAILED. Sensor memory write error.");
-    lcdWrite(1, "Store Error!");
+    lcdResult(IC_FAIL, "Save failed", "Sensor storage", "error");
     delay(1500);
     return;
   }
   espPrintln("SUCCESS!");
-  lcdWrite(1, "Enroll Success!");
-  lcdWrite(2, "Slot #" + String(slotId));
+  lcdResult(IC_OK, "Enrolled", studentNo.length() ? studentNo : String("Finger saved"), "Finger ID " + String(slotId));
   flashLED(3, 80);
 
   // Save template to SD card for backup/restore
@@ -1864,7 +2084,7 @@ enroll_restart:
       http.end();
     } else {
       saveEnrollmentToQueue(studentNo, slotId);
-      lcdWrite(2, "Offline — queued");
+      lcdWrite(3, "Sync when online");
       delay(1500);
     }
   } else {
@@ -1902,7 +2122,7 @@ void reclaimRstForRfid() {
   // Verify the chip is alive
   byte ver = mfrc522.PCD_ReadRegister(MFRC522::VersionReg);
   if (ver == 0x00 || ver == 0xFF) {
-    espPrintln("[RFID] ⚠ reclaimRstForRfid: MFRC522 NOT responding after reset!");
+    espPrintln("[RFID] WARNING: reclaimRstForRfid: MFRC522 NOT responding after reset!");
   }
   i2cBusDirty = false;
 }
@@ -1945,8 +2165,7 @@ void scanForAttendance() {
     mfrc522.PCD_StopCrypto1();
     restoreI2cForLcd();
     espPrintln("[RFID] Card tapped but no active course session. Set course via START_COURSE or keypad A.");
-    lcdWrite(2, "Set Course First!");
-    lcdWrite(3, "A=pick course");
+    lcdResult(IC_FAIL, "No course set", "Press A to pick", "the course first");
     { unsigned long _t = millis(); while (millis() - _t < 2000) { webServer.handleClient(); delay(20); } }
     printMenu();
     return;
@@ -1968,7 +2187,7 @@ void scanForAttendance() {
     rfidUid.toUpperCase();
     restoreI2cForLcd();
     espPrintln("\n" + ts + " [RFID] Card Read: " + rfidUid);
-    lcdWrite(1, "Card: " + rfidUid);
+    lcdScreen(String(IC_CARD) + " Card " + rfidUid, "", lcdCenter("Checking..."), "");
 
     // Push UID to rfid_scanned.php for web dashboard polling
     if (WiFi.status() == WL_CONNECTED) {
@@ -1994,7 +2213,7 @@ void scanForAttendance() {
 
       if (rfidResp.startsWith("ERR") || rfidResp.length() == 0) {
         espPrintln("[RFID] Unknown card UID: " + rfidUid);
-        lcdWrite(2, "Unknown Card!");
+        lcdResult(IC_FAIL, "Unknown card", lcdCenter(rfidUid), lcdCenter("Not registered"));
         logUnrecognizedAttempt(rfidUid, "rfid");
         mfrc522.PICC_HaltA();
         mfrc522.PCD_StopCrypto1();
@@ -2009,11 +2228,8 @@ void scanForAttendance() {
         String studentName = (pipeIdx > 0) ? rfidResp.substring(pipeIdx + 1) : "";
         indicatorBlink(1, 60);
         espPrintln("[RFID] Resolved: " + studentNo + " (" + studentName + ")");
-        lcdWrite(2, studentName.substring(0, LCD_COLS));
-        lcdWrite(3, "Processing...");
-        // markAttendance handles LCD line 2 with result
+        scanDisplayName = studentName;   // shown on the result screen
         markAttendance(studentNo, "rfid", ts);
-        lcdWrite(3, "");
       }
     } else {
       // Offline fallback: use raw UID directly
@@ -2062,12 +2278,12 @@ void scanForAttendance() {
 
   if (p == FINGERPRINT_OK) {
     espPrintln("\n" + ts + " [FP] Touch detected. Capturing scan...");
-    lcdWrite(2, "Analyzing scan...");
+    lcdScreen(String(IC_FINGER) + " Reading...", "", lcdCenter("Please wait"), "");
     flashLED(1, 50);
 
     if (finger.image2Tz() != FINGERPRINT_OK) {
       espPrintln("[FP] Scan quality too low. Try placing finger again.");
-      lcdWrite(2, "Bad image quality");
+      lcdResult(IC_FAIL, "Unclear scan", "Hold the finger", "flat and still");
       { unsigned long _t = millis(); while (millis() - _t < 800) { webServer.handleClient(); delay(10); } }
       printMenu();
       return;
@@ -2076,7 +2292,7 @@ void scanForAttendance() {
     if (finger.fingerFastSearch() == FINGERPRINT_OK) {
       espPrintln("[FP] Match Found! Slot #" + String(finger.fingerID) + " Conf: " + String(finger.confidence));
       indicatorBlink(1, 60);
-      lcdWrite(2, "Match! Slot #" + String(finger.fingerID));
+      lcdWrite(2, lcdCenter("Checking..."));
       String fpStudentNo = String(finger.fingerID);
       if (WiFi.status() == WL_CONNECTED && isOnline) {
         WiFiClient fclient;
@@ -2092,8 +2308,7 @@ void scanForAttendance() {
           if (fpipe > 0) {
             fpStudentNo = fresp.substring(0, fpipe);
             String fpName = fresp.substring(fpipe + 1);
-            lcdWrite(2, fpName.substring(0, LCD_COLS));
-            lcdWrite(3, "Marked: " + fpStudentNo);
+            scanDisplayName = fpName;   // shown on the result screen
           }
         }
         fhttp.end();
@@ -2101,15 +2316,15 @@ void scanForAttendance() {
       markAttendance(fpStudentNo, "fingerprint", ts);
     } else {
       espPrintln("[FP] No match found. Trying SD card import...");
-      lcdWrite(2, "No match. Check SD...");
+      lcdWrite(2, lcdCenter("Searching..."));
 
       int imported = scanSDAndImport();
       if (imported > 0) {
         espPrintln("[FP] Imported " + String(imported) + " templates from SD. Retrying match...");
-        lcdWrite(3, "Imported " + String(imported));
+        lcdWrite(3, lcdCenter(String(imported) + " new templates"));
         if (finger.fingerFastSearch() == FINGERPRINT_OK) {
           espPrintln("[FP] Match Found (after SD import)! Slot #" + String(finger.fingerID));
-          lcdWrite(2, "Match! Slot #" + String(finger.fingerID));
+          lcdWrite(2, lcdCenter("Checking..."));
           String fpStudentNo2 = String(finger.fingerID);
           if (WiFi.status() == WL_CONNECTED && isOnline) {
             WiFiClient fclient;
@@ -2125,8 +2340,7 @@ void scanForAttendance() {
               if (fpipe > 0) {
                 fpStudentNo2 = fresp.substring(0, fpipe);
                 String fpName = fresp.substring(fpipe + 1);
-                lcdWrite(2, fpName.substring(0, LCD_COLS));
-                lcdWrite(3, "Marked: " + fpStudentNo2);
+                scanDisplayName = fpName;   // shown on the result screen
               }
             }
             fhttp.end();
@@ -2134,21 +2348,21 @@ void scanForAttendance() {
           markAttendance(fpStudentNo2, "fingerprint", ts);
         } else {
           espPrintln("[FP] Still no match after SD import. Access Denied.");
-          lcdWrite(2, "Access Denied!");
+          lcdResult(IC_FAIL, "Not recognised", "Try again, or", "tap your ID card");
           sessionDenied++;
           logUnrecognizedAttempt(String(finger.fingerID), "fingerprint");
           flashLED(1, 400);
         }
       } else {
         espPrintln("[FP] No new templates on SD. Trying server download...");
-        lcdWrite(2, "Trying server...");
+        lcdWrite(2, lcdCenter("Asking server..."));
         int dl = downloadAndImportMissingTemplates();
         if (dl > 0) {
           espPrintln("[FP] Downloaded " + String(dl) + " templates from server. Retrying match...");
-          lcdWrite(3, "Imported " + String(dl));
+          lcdWrite(3, lcdCenter(String(dl) + " new templates"));
           if (finger.fingerFastSearch() == FINGERPRINT_OK) {
             espPrintln("[FP] Match Found (after server import)! Slot #" + String(finger.fingerID));
-            lcdWrite(2, "Match! Slot #" + String(finger.fingerID));
+            lcdWrite(2, lcdCenter("Checking..."));
             String fpStudentNo3 = String(finger.fingerID);
             if (WiFi.status() == WL_CONNECTED && isOnline) {
               WiFiClient fclient;
@@ -2164,8 +2378,7 @@ void scanForAttendance() {
                 if (fpipe > 0) {
                   fpStudentNo3 = fresp.substring(0, fpipe);
                   String fpName = fresp.substring(fpipe + 1);
-                  lcdWrite(2, fpName.substring(0, LCD_COLS));
-                  lcdWrite(3, "Marked: " + fpStudentNo3);
+                  scanDisplayName = fpName;   // shown on the result screen
                 }
               }
               fhttp.end();
@@ -2173,14 +2386,14 @@ void scanForAttendance() {
             markAttendance(fpStudentNo3, "fingerprint", ts);
           } else {
             espPrintln("[FP] Still no match after server import. Access Denied.");
-            lcdWrite(2, "Access Denied!");
+            lcdResult(IC_FAIL, "Not recognised", "Try again, or", "tap your ID card");
             sessionDenied++;
             logUnrecognizedAttempt(String(finger.fingerID), "fingerprint");
             flashLED(1, 400);
           }
         } else {
           espPrintln("[FP] No templates from server. Access Denied.");
-          lcdWrite(2, "Access Denied!");
+          lcdResult(IC_FAIL, "Not recognised", "Try again, or", "tap your ID card");
           sessionDenied++;
           logUnrecognizedAttempt(String(finger.fingerID), "fingerprint");
           flashLED(1, 400);
@@ -2263,13 +2476,9 @@ void printMenu() {
   espPrintln("    1-9-> T9 multi-tap text (mobile keyboard style)");
   espPrintln("=======================================================");
 
-  String statusShort = isOnline ? "ONLINE" : "OFFLINE";
-  String queueStr = (qCount > 0) ? "Queue:" + String(qCount) : "Queue: Clear";
-  String courseShort = currentCourse.substring(0, LCD_COLS);
-  lcdWrite(0, "Sentinel Swarm AMS");
-  lcdWrite(1, courseShort);
-  lcdWrite(2, String(currentMode == "ATTENDANCE_MODE" ? "ATTENDANCE" : "ENROLL") + " | " + statusShort);
-  lcdWrite(3, queueStr);
+  lcdQueueCache = qCount;
+  lcdQueueCheckedAt = millis();
+  lcdShowHome();
 }
 
 // ============================================================
@@ -2320,11 +2529,11 @@ void t9HandleKey(char k) {
 
   // Show live on LCD
   String preview = t9Buffer;
-  if (preview.length() > 19) preview = preview.substring(preview.length()-19);
-  lcdWrite(0, "Text input (T9):");
+  if (preview.length() > 15) preview = preview.substring(preview.length()-15);
+  lcdWrite(0, "Type course code");
   lcdWrite(1, preview + "_");
-  lcdWrite(2, String("Key:") + k + " Char:" + chosen);
-  lcdWrite(3, "* del  D=confirm");
+  lcdWrite(2, "Key " + String(k) + " = " + chosen);
+  lcdWrite(3, "* Del   D OK");
   espPrintln("[T9] Buffer: " + t9Buffer);
 }
 
@@ -2347,9 +2556,10 @@ void runRfidEnrollment() {
   espPrintln("Enter Student No (e.g. S/22/569) or 'cancel':");
 
   lcdClear();
-  lcdWrite(0, "RFID ENROLL");
-  lcdWrite(1, "Enter Student No:");
-  lcdWrite(3, "Type via serial");
+  lcdWrite(0, String(IC_CARD) + " Link a card");
+  lcdWrite(1, "Type student no.");
+  lcdWrite(2, "on serial port");
+  lcdWrite(3, "or 'cancel'");
 
   reclaimRstForRfid();  // Take D22 from I2C for MFRC522 (after LCD writes)
   // Wait for student number via serial
@@ -2362,8 +2572,7 @@ void runRfidEnrollment() {
       if (rfidEnrollStudent.equalsIgnoreCase("cancel")) {
         espPrintln("[RFID-ENROLL] Cancelled by user.");
         rfidEnrollMode = false;
-        lcdClear();
-        lcdWrite(0, "Enroll Cancelled");
+        lcdResult(IC_FAIL, "Cancelled", "", "", "", 1500);
         delay(1000);
         printMenu();
         return;
@@ -2373,8 +2582,7 @@ void runRfidEnrollment() {
     if (millis() - waitStart > 60000) {
       espPrintln("[RFID-ENROLL] Input timeout. Aborting.");
       rfidEnrollMode = false;
-      lcdClear();
-      lcdWrite(0, "Enroll Timeout");
+      lcdResult(IC_FAIL, "Timed out", "", "", "", 2000);
       delay(1000);
       printMenu();
       return;
@@ -2385,9 +2593,9 @@ void runRfidEnrollment() {
   espPrintln("[RFID-ENROLL] Student: " + rfidEnrollStudent);
   espPrintln("Now tap RFID card on reader...");
   lcdClear();
-  lcdWrite(0, "Tap RFID Card");
+  lcdWrite(0, String(IC_CARD) + " Tap the card");
   lcdWrite(1, "for " + rfidEnrollStudent);
-  lcdWrite(3, "A/* to cancel");
+  lcdWrite(3, "A or * to cancel");
 
   // Wait for RFID card — safely reclaim ONCE and poll continuously without thrashing reset
   reclaimRstForRfid();
@@ -2404,8 +2612,7 @@ void runRfidEnrollment() {
         restoreI2cForLcd();
         espPrintln("[RFID-ENROLL] Cancelled via keypad.");
         rfidEnrollMode = false;
-        lcdClear();
-        lcdWrite(0, "Enroll Cancelled");
+        lcdResult(IC_FAIL, "Cancelled", "", "", "", 1500);
         { unsigned long _t = millis(); while (millis() - _t < 1000) { webServer.handleClient(); delay(20); } }
         printMenu();
         return;
@@ -2418,8 +2625,7 @@ void runRfidEnrollment() {
         restoreI2cForLcd();
         espPrintln("[RFID-ENROLL] Cancelled.");
         rfidEnrollMode = false;
-        lcdClear();
-        lcdWrite(0, "Enroll Cancelled");
+        lcdResult(IC_FAIL, "Cancelled", "", "", "", 1500);
         { unsigned long _t = millis(); while (millis() - _t < 1000) { webServer.handleClient(); delay(20); } }
         printMenu();
         return;
@@ -2439,8 +2645,9 @@ void runRfidEnrollment() {
 
       espPrintln("[RFID-ENROLL] Card UID: " + uid);
       lcdClear();
-      lcdWrite(0, "Card Read:");
-      lcdWrite(1, uid);
+      lcdWrite(0, String(IC_CARD) + " Card " + uid);
+      lcdWrite(1, rfidEnrollStudent);
+      lcdWrite(2, lcdCenter("Linking..."));
 
       // Link to student on server
       if (isOnline && WiFi.status() == WL_CONNECTED) {
@@ -2459,15 +2666,15 @@ void runRfidEnrollment() {
           String resp = http.getString();
           resp.trim();
           espPrintln("[RFID-ENROLL] Server response: " + resp);
-          lcdWrite(2, "Linked!");
+          lcdResult(IC_OK, "Card linked", rfidEnrollStudent, "Card " + uid);
         } else {
           espPrintln("[RFID-ENROLL] Server error (HTTP " + String(code) + ")");
-          lcdWrite(2, "Server Error!");
+          lcdResult(IC_FAIL, "Not linked", "Server error.", "Use dashboard");
         }
         http.end();
       } else {
         espPrintln("[RFID-ENROLL] Offline. Remember to link UID " + uid + " to " + rfidEnrollStudent + " on dashboard.");
-        lcdWrite(2, "Offline - note UID");
+        lcdResult(IC_OFFLINE, "Not linked", "Offline. Card:", uid);
       }
 
       { unsigned long _t = millis(); while (millis() - _t < 2000) { webServer.handleClient(); delay(20); } }
@@ -2476,8 +2683,7 @@ void runRfidEnrollment() {
     if (millis() - waitStart > 30000) {
       restoreI2cForLcd();
       espPrintln("[RFID-ENROLL] No card detected. Aborting.");
-      lcdClear();
-      lcdWrite(0, "No Card Detected");
+      lcdResult(IC_FAIL, "No card", "No card was", "tapped in 30 s", "", 2000);
       { unsigned long _t = millis(); while (millis() - _t < 1500) { webServer.handleClient(); delay(20); } }
       break;
     }
@@ -2486,8 +2692,7 @@ void runRfidEnrollment() {
 
   rfidEnrollMode = false;
   restoreI2cForLcd();
-  lcdClear();
-  lcdWrite(0, "RFID Enroll Done");
+  lcdHomeAt = millis() + 1000;   // back to home after the result screen
   { unsigned long _t = millis(); while (millis() - _t < 1000) { webServer.handleClient(); delay(20); } }
   printMenu();
 }
@@ -2496,8 +2701,10 @@ void runRfidEnrollment() {
 void runRfidScanForWeb() {
   pendingRfidScan = false;
   lcdClear();
-  lcdWrite(0, "Tap RFID card...");
-  lcdWrite(1, "(30s timeout)");
+  lcdWrite(0, String(IC_CARD) + " Tap a card");
+  lcdWrite(1, "Requested by the");
+  lcdWrite(2, "web dashboard");
+  lcdWrite(3, "Waits 30 s");
   
   // Reclaim RST pin for RFID operations ONCE before entering the polling loop
   // This turns off I2C, initializes SPI, resets and turns on the MFRC522 antenna.
@@ -2522,7 +2729,7 @@ void runRfidScanForWeb() {
       restoreI2cForLcd();
       espPrintln("[RFID-WEB] Card UID: " + uid);
       lcdClear();
-      lcdWrite(0, "UID: " + uid);
+      lcdWrite(0, String(IC_CARD) + " Card " + uid);
       if (WiFi.status() == WL_CONNECTED && isOnline) {
         WiFiClient rClient;
         HTTPClient rHttp;
@@ -2531,15 +2738,15 @@ void runRfidScanForWeb() {
         int rCode = rHttp.GET();
         if (rCode == 200) {
           espPrintln("[RFID-WEB] UID pushed to server (HTTP " + String(rCode) + ")");
-          lcdWrite(1, "Sent OK!");
+          lcdResult(IC_OK, "Card read", "Card " + uid, "Sent to the web");
         } else {
           espPrintln("[RFID-WEB] Server push failed (HTTP " + String(rCode) + ")");
-          lcdWrite(1, "Push failed!");
+          lcdResult(IC_FAIL, "Not sent", "Card " + uid, "Server error");
         }
         rHttp.end();
       } else {
         espPrintln("[RFID-WEB] Offline, UID not sent.");
-        lcdWrite(1, "Offline — not sent");
+        lcdResult(IC_OFFLINE, "Not sent", "Card " + uid, "Node is offline");
       }
       { unsigned long _t = millis(); while (millis() - _t < 2000) { webServer.handleClient(); delay(20); } }
       printMenu();
@@ -2549,9 +2756,7 @@ void runRfidScanForWeb() {
   }
   restoreI2cForLcd();
   espPrintln("[RFID-WEB] No card tapped within 30s.");
-  lcdClear();
-  lcdWrite(0, "RFID scan");
-  lcdWrite(1, "timed out.");
+  lcdResult(IC_FAIL, "No card", "No card was", "tapped in 30 s", "", 2000);
   { unsigned long _t = millis(); while (millis() - _t < 1500) { webServer.handleClient(); delay(20); } }
   printMenu();
 }
@@ -2612,10 +2817,10 @@ void openCoursePicker() {
     t9LastKey = 0;
     t9TapCount = 0;
     lcdClear();
-    lcdWrite(0, "Type Course Code");
+    lcdWrite(0, "Type course code");
     lcdWrite(1, "_");
-    lcdWrite(2, "0-9=T9 *=del D=OK");
-    lcdWrite(3, "A=cancel");
+    lcdWrite(2, "0-9 Type  * Del");
+    lcdWrite(3, "D OK   A Cancel");
     courseMenuOpen = true;
     return;
   }
@@ -2630,10 +2835,10 @@ void openCoursePicker() {
     espPrintln("  [" + String(i) + "] " + courseList[i]);
   }
   lcdClear();
-  lcdWrite(0, "Select Course:");
-  lcdWrite(1, courseList[0]);
-  lcdWrite(2, "B=up C=dn D=OK");
-  lcdWrite(3, "*=cancel A=type");
+  lcdWrite(0, lcdLR("Course", "1/" + String(courseCount)));
+  lcdWrite(1, "> " + courseList[0]);
+  lcdWrite(2, "B Up C Dn A Type");
+  lcdWrite(3, "D OK   * Cancel");
 }
 
 void coursePickerKey(String key) {
@@ -2642,15 +2847,15 @@ void coursePickerKey(String key) {
   if (key == "B") {  // scroll up
     if (courseCount > 0) {
       courseMenuIdx = (courseMenuIdx - 1 + courseCount) % courseCount;
-      lcdWrite(1, courseList[courseMenuIdx]);
-      lcdWrite(0, String(courseMenuIdx+1) + "/" + String(courseCount) + " Course:");
+      lcdWrite(1, "> " + courseList[courseMenuIdx]);
+      lcdWrite(0, lcdLR("Course", String(courseMenuIdx+1) + "/" + String(courseCount)));
       espPrintln("[PICKER] -> " + courseList[courseMenuIdx]);
     }
   } else if (key == "C") {  // scroll down
     if (courseCount > 0) {
       courseMenuIdx = (courseMenuIdx + 1) % courseCount;
-      lcdWrite(1, courseList[courseMenuIdx]);
-      lcdWrite(0, String(courseMenuIdx+1) + "/" + String(courseCount) + " Course:");
+      lcdWrite(1, "> " + courseList[courseMenuIdx]);
+      lcdWrite(0, lcdLR("Course", String(courseMenuIdx+1) + "/" + String(courseCount)));
       espPrintln("[PICKER] -> " + courseList[courseMenuIdx]);
     }
   } else if (key == "D") {  // confirm
@@ -2674,10 +2879,10 @@ void coursePickerKey(String key) {
     espPrintln("[SESSION] Counters reset for new session.");
     espPrintln("[PICKER] Press A=Attendance  B=Enroll");
     lcdClear();
-    lcdWrite(0, chosen.substring(0, LCD_COLS));
-    lcdWrite(1, "A=Attendance");
-    lcdWrite(2, "B=Enroll");
-    lcdWrite(3, "*=cancel");
+    lcdWrite(0, String(IC_OK) + " " + chosen);
+    lcdWrite(1, "A Attendance");
+    lcdWrite(2, "B Enrol fingers");
+    lcdWrite(3, "* Cancel");
     awaitModeChoice = true;
   } else if (key == "*") {  // backspace / cancel
     if (t9Buffer.length() > 0) {
@@ -2691,8 +2896,7 @@ void coursePickerKey(String key) {
       courseMenuOpen = false;
       t9Buffer = "";
       espPrintln("[PICKER] Cancelled.");
-      lcdClear();
-      lcdWrite(0, "Cancelled.");
+      lcdResult(IC_FAIL, "Cancelled", "", "", "", 1200);
       delay(800);
       printMenu();
     }
@@ -2701,10 +2905,10 @@ void coursePickerKey(String key) {
     t9Buffer = "";
     t9LastKey = 0;
     lcdClear();
-    lcdWrite(0, "Type Course Code");
+    lcdWrite(0, "Type course code");
     lcdWrite(1, "_");
-    lcdWrite(2, "0-9=T9  *=del");
-    lcdWrite(3, "D=OK  *=cancel");
+    lcdWrite(2, "0-9 Type  * Del");
+    lcdWrite(3, "D OK");
     espPrintln("[PICKER] Switched to T9 manual entry.");
   } else {
     // Digit key — route to T9
@@ -2725,7 +2929,7 @@ void backupAllFpTemplatesToServer() {
 
   espPrintln("\n[FP-BACKUP] Starting template backup to server...");
   lcdClear();
-  lcdWrite(0, "FP Backup...");
+  lcdWrite(0, String(IC_FINGER) + " Backing up");
 
   finger.getTemplateCount();
   uint16_t total = finger.templateCount;
@@ -2817,14 +3021,13 @@ void backupAllFpTemplatesToServer() {
       failed++;
       espPrintln("[FP-BACKUP] Slot " + String(slot) + " FAILED: " + resp);
     }
-    lcdWrite(1, "Slot " + String(slot) + "/127");
-    lcdWrite(2, String(saved) + " saved " + String(failed) + " fail");
+    lcdWrite(1, lcdLR("Slot " + String(slot), "of 127"));
+    lcdWrite(2, lcdLR("Saved " + String(saved), "Failed " + String(failed)));
     webServer.handleClient();
     delay(50);
   }
   espPrintln("[FP-BACKUP] Done. " + String(saved) + " saved, " + String(failed) + " failed.");
-  lcdWrite(0, "Backup Done!");
-  lcdWrite(1, String(saved) + " templates saved");
+  lcdResult(failed ? IC_FAIL : IC_OK, "Backup done", lcdLR("Saved", String(saved)), lcdLR("Failed", String(failed)), "", 0);
   delay(2000);
   printMenu();
 #else
@@ -2839,7 +3042,7 @@ void restoreFpTemplatesFromServer() {
 
   espPrintln("\n[FP-RESTORE] Fetching slot list from server...");
   lcdClear();
-  lcdWrite(0, "FP Restore...");
+  lcdWrite(0, String(IC_FINGER) + " Restoring");
 
   WiFiClient client;
   HTTPClient http;
@@ -2960,13 +3163,12 @@ void restoreFpTemplatesFromServer() {
       espPrintln("[FP-RESTORE] Slot " + String(slot) + " store FAILED.");
     }
     lcdWrite(1, "Slot " + String(slot));
-    lcdWrite(2, String(restored) + " OK " + String(failed) + " fail");
+    lcdWrite(2, lcdLR("Loaded " + String(restored), "Failed " + String(failed)));
     webServer.handleClient();
     delay(50);
   }
   espPrintln("[FP-RESTORE] Done. " + String(restored) + " restored, " + String(failed) + " failed.");
-  lcdWrite(0, "Restore Done!");
-  lcdWrite(1, String(restored) + " slots loaded");
+  lcdResult(failed ? IC_FAIL : IC_OK, "Restore done", lcdLR("Loaded", String(restored)), lcdLR("Failed", String(failed)), "", 0);
   delay(2000);
   printMenu();
 #else
@@ -3024,12 +3226,7 @@ void askCourseAndStartAttendance() {
   espPrintln("[MODE] >> Background Attendance Scanning STARTED.");
   espPrintln("[MODE] >> Course: " + currentCourse);
   espPrintln("[MODE] >> Place finger or scan RFID to mark attendance.");
-  lcdClear();
-  lcdWrite(0, "ATTENDANCE SCAN");
-  lcdWrite(1, currentCourse.substring(0, LCD_COLS));
-  lcdWrite(2, isOnline ? "ONLINE" : "OFFLINE");
-  lcdWrite(3, "Ready for scan...");
-  printMenu();
+  printMenu();   // draws the home screen
 }
 
 void manualCourseChange() {
@@ -3096,7 +3293,7 @@ void deleteFingerprintSlot() {
 
 void wipeEntireDatabase() {
   espPrintln("\n=============================================");
-  espPrintln("    ⚠️  CRITICAL WIPE SENSOR DATABASE ⚠️    ");
+  espPrintln("    WARNING: CRITICAL WIPE OF SENSOR DATABASE    ");
   espPrintln("=============================================");
   espPrintln("This deletes all stored biometrics templates!");
   espPrintln("Type 'WIPE' to confirm or 'cancel' to exit:");
@@ -3425,7 +3622,10 @@ void handleDashboardCommand() {
 
   // 14. GETLCD
   if (cmd == "GETLCD") {
+    // Icons are sent as ~1..~7 so the dashboard can draw them ('~' never
+    // reaches the LCD: lcdClean() replaces it).
     String resp = lcdLine[0] + "|" + lcdLine[1] + "|" + lcdLine[2] + "|" + lcdLine[3];
+    for (char ic = 1; ic <= 7; ic++) resp.replace(String(ic), "~" + String((int)ic));
     webServer.send(200, "text/plain", resp);
     return;
   }
@@ -3879,7 +4079,7 @@ void setup() {
   }
 
   if (!fpOK) {
-    espPrintln("[SENSOR] ⚠ FM10A NOT DETECTED");
+    espPrintln("[SENSOR] WARNING: FM10A NOT DETECTED");
     espPrintln("[SENSOR] If it works alone but not with all components connected:");
     espPrintln("[SENSOR] → 3.3V rail overloaded. Use external 3.3V supply.");
     espPrintln("[SENSOR] → Verify wiring: VCC=3.3V, GND=GND, RX→D17, TX→D16, T-out→D35");
@@ -3925,7 +4125,7 @@ void setup() {
   mfrc522.PCD_AntennaOn();
   byte rfidVer = mfrc522.PCD_ReadRegister(MFRC522::VersionReg);
   if (rfidVer == 0x00 || rfidVer == 0xFF) {
-    espPrintln("[SENSOR] ⚠ MFRC522 NOT DETECTED on SPI bus!");
+    espPrintln("[SENSOR] WARNING: MFRC522 NOT DETECTED on SPI bus!");
   } else {
     char vbuf[48]; snprintf(vbuf, sizeof(vbuf), "[SENSOR] MFRC522 detected (firmware v0x%02X)", rfidVer);
     espPrintln(vbuf);
@@ -3980,7 +4180,7 @@ void setup() {
       mySerial.end();
     }
     if (!fpOK) {
-      espPrintln("[SENSOR] ⚠ FM10A still not detected after rail stabilization.");
+      espPrintln("[SENSOR] WARNING: FM10A still not detected after rail stabilization.");
       espPrintln("[SENSOR] → External 3.3V regulator likely required for reliable operation.");
     }
   }
@@ -3996,7 +4196,7 @@ void setup() {
     if (Wire.endTransmission() == 0) { lcdAddr = addrs[i]; break; }
   }
   if (lcdAddr == 0) {
-    espPrintln("[LCD] ⚠ No I2C LCD found. Checked: 0x27,0x3F,0x3E,0x23,0x21,0x25,0x26,0x20");
+    espPrintln("[LCD] WARNING: No I2C LCD found. Checked: 0x27,0x3F,0x3E,0x23,0x21,0x25,0x26,0x20");
     espPrintln("[LCD] Verify SDA/D21 and SCL/D22 wiring, or run I2C scanner to find the address.");
   } else {
     char buf[40]; snprintf(buf, sizeof(buf), "[LCD] Found display at 0x%02X", lcdAddr);
@@ -4005,6 +4205,11 @@ void setup() {
     lcdPtr->init();
     lcdPtr->backlight();
     lcdOK = true;
+    lcdInitIcons();
+    lcdClear();
+    lcdWrite(0, lcdCenter("SENTINEL SWARM"));
+    lcdWrite(1, lcdCenter("Attendance node"));
+    lcdWrite(3, lcdCenter("Starting..."));
     espPrintln("[LCD] Display initialized (" + String(LCD_COLS) + "x" + String(LCD_ROWS) + ") successfully.");
   }
 #endif
@@ -4032,9 +4237,7 @@ void setup() {
 
   // Show PIN lock screen on boot
   if (lcdOK && systemLocked) {
-    lcdClear();
-    lcdWrite(0, "== LOCKED ==");
-    lcdWrite(1, "Enter PIN:");
+    lcdShowLocked();
     espPrintln("\n========================================");
     espPrintln("  SYSTEM LOCKED - Enter PIN to unlock   ");
     espPrintln("  Enter 123 then press # or D");
@@ -4046,6 +4249,9 @@ void setup() {
 // MAIN SYSTEM LOOP
 // ============================================================
 void loop() {
+  // LCD: timed screens return home; clock and status stay current.
+  lcdTick();
+
   // 0. Physical 4×4 keypad scan — first, before HTTP/web processing
   #ifdef USE_KEYPAD
   {
@@ -4088,32 +4294,26 @@ void loop() {
       if (pinInput.length() > 1) {
         if (pinInput == SYSTEM_PIN || pinInput == SYSTEM_PIN + "#" || pinInput == SYSTEM_PIN + "D") {
           systemLocked = false; pinBuffer = "";
-          lcdClear(); lcdWrite(0, "== UNLOCKED =="); lcdWrite(1, "System Ready");
+          lcdResult(IC_OK, "Unlocked", lcdCenter("PIN accepted"), "", "", 0);
           espPrintln("\n[PIN] Correct! System unlocked.");
-          delay(1000); lcdClear(); lcdWrite(0, "ATTENDANCE SCAN");
-          lcdWrite(1, currentCourse.substring(0, LCD_COLS));
-          lcdWrite(2, isOnline ? "ONLINE" : "OFFLINE");
-          lcdWrite(3, "Keys: A=Course"); printMenu();
+          delay(1000); printMenu();
         } else {
-          espPrintln("[PIN] Wrong PIN!"); lcdWrite(1, "Wrong PIN!"); pinBuffer = ""; delay(1200); lcdWrite(1, "Enter PIN:");
+          espPrintln("[PIN] Wrong PIN!"); lcdWrite(1, "PIN: wrong"); pinBuffer = ""; delay(1200); lcdShowLocked();
         }
       }
       else if (pinInput.length() == 1 && pinInput.charAt(0) >= '0' && pinInput.charAt(0) <= '9') {
-        if (pinBuffer.length() < 10) { pinBuffer += pinInput; String stars = ""; for (int _i = 0; _i < pinBuffer.length(); _i++) stars += "*"; lcdWrite(1, "PIN:" + stars); espPrintln("[PIN] Buffer: " + pinBuffer); }
+        if (pinBuffer.length() < 10) { pinBuffer += pinInput; String stars = ""; for (int _i = 0; _i < pinBuffer.length(); _i++) stars += "*"; lcdWrite(1, "PIN: " + stars); espPrintln("[PIN] Buffer: " + pinBuffer); }
       }
       else if (pinInput == "*" || pinInput == "C" || pinInput == "c") {
-        pinBuffer = ""; lcdWrite(1, "PIN cleared"); espPrintln("[PIN] Cleared");
+        pinBuffer = ""; lcdWrite(1, "PIN: "); espPrintln("[PIN] Cleared");
       }
       else if (pinInput == "#" || pinInput == "D") {
         if (pinBuffer == SYSTEM_PIN) {
           systemLocked = false; pinBuffer = "";
-          lcdClear(); lcdWrite(0, "== UNLOCKED =="); lcdWrite(1, "System Ready");
+          lcdResult(IC_OK, "Unlocked", lcdCenter("PIN accepted"), "", "", 0);
           espPrintln("\n[PIN] Correct! System unlocked.");
-          delay(1000); lcdClear(); lcdWrite(0, "ATTENDANCE SCAN");
-          lcdWrite(1, currentCourse.substring(0, LCD_COLS));
-          lcdWrite(2, isOnline ? "ONLINE" : "OFFLINE");
-          lcdWrite(3, "Keys: A=Course"); printMenu();
-        } else { espPrintln("[PIN] Wrong PIN!"); lcdWrite(1, "Wrong PIN!"); pinBuffer = ""; delay(1200); lcdWrite(1, "Enter PIN:"); }
+          delay(1000); printMenu();
+        } else { espPrintln("[PIN] Wrong PIN!"); lcdWrite(1, "PIN: wrong"); pinBuffer = ""; delay(1200); lcdShowLocked(); }
       }
     }
 
@@ -4134,11 +4334,8 @@ void loop() {
         if (checkLocalAdminRFID(uid)) {
           espPrintln("\n[ADMIN] Admin RFID unlock: " + uid);
           systemLocked = false; pinBuffer = "";
-          lcdClear(); lcdWrite(0, "== UNLOCKED =="); lcdWrite(1, "Admin RFID");
-          delay(1000); lcdClear(); lcdWrite(0, "ATTENDANCE SCAN");
-          lcdWrite(1, currentCourse.substring(0, LCD_COLS));
-          lcdWrite(2, isOnline ? "ONLINE" : "OFFLINE");
-          lcdWrite(3, "Keys: A=Course"); printMenu();
+          lcdResult(IC_OK, "Unlocked", lcdCenter("Admin card"), "", "", 0);
+          delay(1000); printMenu();
           delay(20); return;
         } else {
           espPrintln("[LOCK] Non-admin card rejected.");
@@ -4159,11 +4356,8 @@ void loop() {
             if (checkLocalAdminFingerprint(slotStr)) {
               espPrintln("\n[ADMIN] Admin FP unlock: Slot #" + slotStr);
               systemLocked = false; pinBuffer = "";
-              lcdClear(); lcdWrite(0, "== UNLOCKED =="); lcdWrite(1, "Admin FP");
-              delay(1000); lcdClear(); lcdWrite(0, "ATTENDANCE SCAN");
-              lcdWrite(1, currentCourse.substring(0, LCD_COLS));
-              lcdWrite(2, isOnline ? "ONLINE" : "OFFLINE");
-              lcdWrite(3, "Keys: A=Course"); printMenu();
+              lcdResult(IC_OK, "Unlocked", lcdCenter("Admin finger"), "", "", 0);
+              delay(1000); printMenu();
               delay(20); return;
             }
           }
@@ -4356,12 +4550,7 @@ void loop() {
         awaitModeChoice = false;
         currentMode = "ATTENDANCE_MODE";
         espPrintln("[MODE] Attendance mode started.");
-        lcdClear();
-        lcdWrite(0, "ATTENDANCE SCAN");
-        lcdWrite(1, currentCourse.substring(0, LCD_COLS));
-        lcdWrite(2, isOnline ? "ONLINE" : "OFFLINE");
-        lcdWrite(3, "A=Course");
-        printMenu();
+        printMenu();   // draws the home screen
       } else if (key == "B") {
         awaitModeChoice = false;
         currentMode = "ENROLL_MODE";
@@ -4372,8 +4561,7 @@ void loop() {
       } else if (key == "*") {
         awaitModeChoice = false;
         espPrintln("[PICKER] Mode selection cancelled.");
-        lcdClear();
-        lcdWrite(0, "Cancelled.");
+        lcdResult(IC_FAIL, "Cancelled", "", "", "", 1200);
         delay(600);
         printMenu();
       }
@@ -4398,12 +4586,11 @@ void loop() {
       if (t9Buffer.length() > 0) {
         t9Buffer = t9Buffer.substring(0, t9Buffer.length()-1);
         String preview = t9Buffer.length() > 0 ? t9Buffer : "_";
-        lcdWrite(0, "T9 Input:");
+        lcdWrite(0, "Type course code");
         lcdWrite(1, preview);
         espPrintln("[T9] Del. Buffer: '" + t9Buffer + "'");
       } else {
-        lcdClear();
-        lcdWrite(0, "[*] Back");
+        lcdShowHome();
       }
     }
     // ── D → Confirm T9 buffer as course if not empty ──────────────────
@@ -4414,45 +4601,33 @@ void loop() {
         t9LastKey = 0;
         currentMode = "ATTENDANCE_MODE";
         espPrintln("[COURSE] T9 confirmed: " + currentCourse);
-        lcdClear();
-        lcdWrite(0, "ATTENDANCE SCAN");
-        lcdWrite(1, currentCourse.substring(0, LCD_COLS));
-        lcdWrite(2, isOnline ? "ONLINE" : "OFFLINE");
-        lcdWrite(3, "Ready to scan...");
         flashLED(2, 100);
         printMenu();
       } else {
-        lcdClear();
-        lcdWrite(0, "[D] Confirm");
-        lcdWrite(1, currentCourse);
+        lcdShowHome();
       }
     }
     // ── B → Show session stats on LCD (Feature 5) ────────────────────
     else if (key == "B") {
-      lcdClear();
-      lcdWrite(0, "SESSION STATS");
-      lcdWrite(1, "Scanned: " + String(sessionScanned));
-      lcdWrite(2, "Denied:  " + String(sessionDenied));
-      lcdWrite(3, "Offline: " + String(sessionOffline));
+      lcdScreen("Session " + (lcdNoCourse() ? String("") : currentCourse),
+                lcdLR(String(IC_OK) + " Marked", String(sessionScanned)),
+                lcdLR(String(IC_FAIL) + " Not found", String(sessionDenied)),
+                lcdLR(String(IC_OFFLINE) + " Offline", String(sessionOffline)), 6000);
       espPrintln("[KEYPAD] B - Session stats: " + String(sessionScanned) + " scanned, " + String(sessionDenied) + " denied, " + String(sessionOffline) + " offline");
     } else if (key == "C") {
-      lcdClear();
-      lcdWrite(0, isOnline ? "ONLINE" : "OFFLINE");
-      lcdWrite(1, "IP:" + WiFi.localIP().toString());
-      lcdWrite(2, "RSSI:" + String(WiFi.RSSI()) + "dBm");
-      lcdWrite(3, "Heap:" + String(ESP.getFreeHeap()/1024) + "KB free");
+      lcdScreen(String(isOnline ? IC_WIFI : IC_OFFLINE) + " " + (isOnline ? "Online" : "Offline"),
+                WiFi.localIP().toString(),
+                lcdLR("Signal", String(WiFi.RSSI()) + " dBm"),
+                lcdLR("Memory", String(ESP.getFreeHeap() / 1024) + " KB"), 6000);
     }
     // ── # → force sync ───────────────────────────────────────────────
     else if (key == "#") {
       espPrintln("[KEYPAD] # pressed — forcing offline sync.");
       syncOfflineQueue();
-      lcdClear();
-      lcdWrite(0, "[#] Force Sync");
-      lcdWrite(1, isOnline ? "Syncing..." : "OFFLINE!");
+      lcdQueueCheckedAt = 0;   // re-count the queue on the home screen
+      lcdResult(isOnline ? IC_OK : IC_OFFLINE, "Sync", isOnline ? "Queue sent" : "Offline, kept", "", "", 2000);
     } else {
-      lcdClear();
-      lcdWrite(0, "Key: " + key);
-      lcdWrite(1, currentCourse.substring(0, LCD_COLS));
+      lcdShowHome();
     }
   }
 
@@ -4546,7 +4721,7 @@ void loop() {
       static unsigned long lastSensorWarn = 0;
       if (millis() - lastSensorWarn > 10000) {
         lastSensorWarn = millis();
-        espPrintln("[ATTEND] ⚠ Both sensors disabled. FP=" + String(fpOK?"OK":"FAIL") + " RFID=" + String(enableRfid?"ON":"OFF"));
+        espPrintln("[ATTEND] WARNING: Both sensors disabled. FP=" + String(fpOK?"OK":"FAIL") + " RFID=" + String(enableRfid?"ON":"OFF"));
         espPrintln("[ATTEND] Enable RFID: SETCONFIG ENABLE_RFID=1  |  Fix FM10A: external 3.3V supply");
       }
     }

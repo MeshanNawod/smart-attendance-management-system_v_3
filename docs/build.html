@@ -239,6 +239,9 @@ SECRET_KEY=same-value-as-SS_HEARTBEAT_SECRET-on-the-server</code></pre>
       <li><h4>Enrol a student</h4><p>Press <kbd>E</kbd> in the Serial Monitor (or start enrol mode from the dashboard) and place the same finger twice. Press <kbd>I</kbd> to link an RFID card. Then link the fingerprint slot to the student in the dashboard.</p></li>
       <li><h4>Take attendance</h4><p>Start a lecture from the dashboard, or press <kbd>A</kbd> on the keypad and pick the course with <kbd>B</kbd>/<kbd>C</kbd>, confirming with <kbd>D</kbd>. Scans appear in the live log; if Wi-Fi drops, they queue on the node and sync later.</p></li>
     </ol>
+    <h3>What the display shows</h3>
+    <p>Every screen uses the same four rows: a title or status bar, the message, a detail line, and the keys you can press. The home screen shows the course, the time, the connection, how many students are marked and how many scans are waiting to sync. After a scan the student's name and number appear with the result, and the display returns home after 3 seconds. On the keypad, <kbd>A</kbd> picks the course, <kbd>B</kbd> shows session counts and <kbd>C</kbd> shows network details.</p>
+    <figure class="figure" data-full="images/lcd-screens.png"><img src="images/lcd-screens.png" alt="The ESP32 node's LCD screens: start-up, locked, home, reading a finger, present, already marked, not enrolled, no lecture, not recognised, unknown card, saved offline, course picker, enrolment, enrolled, session counts and network details"><figcaption>All screens of the 16×4 display</figcaption></figure>
     <h3>Serial Monitor commands</h3>
     <div class="grid2">
       <table>
@@ -269,6 +272,8 @@ SECRET_KEY=same-value-as-SS_HEARTBEAT_SECRET-on-the-server</code></pre>
     <table>
       <tr><th>Problem</th><th>Check</th></tr>
       <tr><td>LCD backlight on, no text</td><td>Turn the contrast trimmer. Check SDA = D21 and SCL = D22. The firmware tries addresses 0x27, 0x3F, 0x3E, 0x23, 0x21, 0x25, 0x26 and 0x20 and prints which one it found.</td></tr>
+      <tr><td>Bottom two LCD rows start four characters to the right</td><td>Some 16×4 modules address rows 3 and 4 differently. Add <code>LCD_LAYOUT=1604</code> to <code>config.txt</code> on the SD card.</td></tr>
+      <tr><td>"Sketch too big" when uploading</td><td>The firmware uses about 96% of the default 1.3 MB app space. In Arduino IDE choose <b>Tools → Partition Scheme → Huge APP (3MB No OTA/1MB SPIFFS)</b>; the node's commands do not need firmware OTA. Changing the scheme clears the node's internal storage, so sync the offline queue first. Or turn off a feature you don't use with its <code>USE_</code> line (for example <code>USE_HW084</code>).</td></tr>
       <tr><td>Fingerprint sensor not found</td><td>TX and RX are crossed on purpose: sensor TX → D16, sensor RX → D17. Check the MOSFET: with D5 HIGH the sensor's light should come on. The firmware tries 57600, 9600, 19200, 115200, 4800 and 38400 baud.</td></tr>
       <tr><td>Finger not detected until pressed hard</td><td>Check the T-out wire to D35.</td></tr>
       <tr><td>SD card fails to mount</td><td>FAT32 format, CS on D4, and the module on the right supply (3.3 V unless it has its own regulator).</td></tr>

@@ -66,6 +66,7 @@ things that were broken now work.
 **Clean-up**
 
 - Emoji replaced with Bootstrap Icons in the dashboards, docs site and README.
+- New ESP32 display: one layout for every screen, icons, a live home screen, and result screens with the student's name (see [LCD screens](#lcd-screens)). The firmware also compiles again: the fingerprint sensor objects were declared after the code that used them.
 - Removed unused duplicate folders (`includes/dashboard/cards`, `js/admin`, `js/attendance`).
 - Runtime files (`devices_registry.json`, RFID buffer, the ESP32 `config.txt` with Wi-Fi details) are no longer tracked; see `esp32_firmware/config.example.txt`.
 
@@ -219,6 +220,17 @@ The ESP32 firmware (`esp32_firmware/esp32_firmware.ino`) supports:
 - WiFi connectivity with hardware key authentication
 - ESP-NOW mesh for offline communication
 - Heartbeat sync every 30 seconds
+
+### LCD screens
+
+Every screen follows the same layout on the 16x4 display: a title or status bar, the message, a detail line, and the keys you can press. Seven custom characters act as icons (present, failed, online, offline, fingerprint, card, locked), and the dashboard's LCD mirror shows them as the same icons.
+
+- The home screen shows the course, the clock, the connection, how many students were marked and how many scans are waiting to sync. The clock and status update every second.
+- After a scan, the student's name and number appear with the result, then the display returns home by itself after 3 seconds.
+- Press B for session counts and C for network details.
+- If the bottom two rows start four characters to the right, add `LCD_LAYOUT=1604` to `config.txt`.
+
+![LCD screens](docs/images/lcd-screens.png)
 
 ### OTA Commands
 | Command | Description |
