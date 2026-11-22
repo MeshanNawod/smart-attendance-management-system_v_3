@@ -37,6 +37,17 @@ Take the full guided tour on the **[project website](https://meshannawod.github.
 
 <sub>Screenshots use demo data; student and lecturer names are made up.</sub>
 
+## QR attendance v2
+
+🔳 **[Try to cheat it](https://meshannawod.github.io/smart-attendance-management-system_v_3/qr.html)**: an interactive model of the rotating QR rules, with each trick (photo sent to a friend, borrowed phone, skipped code, ended lecture) and the check that stops it.
+
+- A new random code every **5 seconds**; a student must scan **two consecutive codes**
+- Codes belong to the **running lecture** and stop working when it ends
+- **One phone, one student, per lecture**; blocked attempts are **flagged** on the lecturer's screen
+- Fixed: students on the same Wi-Fi were blocked after the first, a false "Database error" after check-in, scans completing with no attendance, and admins unable to use QR
+
+<img src="docs/images/qr-lecturer.png" alt="Lecturer QR screen with Completed, First scan and Flagged counters" width="900">
+
 ## Build the ESP32 node
 
 ⚡ **[Interactive wiring](https://meshannawod.github.io/smart-attendance-management-system_v_3/wiring.html)**: hover any wire to light up the whole connection, for the ESP32 node, the Raspberry Pi node and the whole system.

@@ -726,16 +726,22 @@ setInterval(updateTeacherClock, 1000);
                         <div id="qr-session-stats" class="d-none">
                             <h6 class="small fw-bold text-muted mb-3"><i class="bi bi-bar-chart-fill me-1 text-success"></i>Live Attendance Count</h6>
                             <div class="row text-center g-2">
-                                <div class="col-6">
+                                <div class="col-4">
                                     <div class="p-3 bg-light rounded-3 border">
                                         <h3 class="fw-bold text-success mb-0" id="qr-stat-completed">0</h3>
                                         <small class="text-muted small">Completed Scans</small>
                                     </div>
                                 </div>
-                                <div class="col-6">
+                                <div class="col-4">
                                     <div class="p-3 bg-light rounded-3 border">
                                         <h3 class="fw-bold text-warning mb-0" id="qr-stat-pending">0</h3>
                                         <small class="text-muted small">First Scan Recorded</small>
+                                    </div>
+                                </div>
+                                <div class="col-4">
+                                    <div class="p-3 bg-light rounded-3 border" title="Attempts to mark a second student from the same phone">
+                                        <h3 class="fw-bold text-danger mb-0" id="qr-stat-flagged">0</h3>
+                                        <small class="text-muted small">Flagged</small>
                                     </div>
                                 </div>
                             </div>
@@ -1795,6 +1801,13 @@ function fetchAndRotateQr() {
                         if (pSeq) pSeq.textContent = '#' + qrSessionSlot;
                     }
                 }
+            } else {
+                // e.g. no lecture running: stop and explain instead of showing a blank code
+                const msg = data.message || 'Could not get a QR code.';
+                stopQrSession();
+                const ph = document.getElementById('qr-canvas-placeholder');
+                if (ph) ph.querySelector('small').textContent = msg;
+                alert(msg);
             }
         })
         .catch(err => {
@@ -1811,6 +1824,8 @@ function fetchQrSessionStats() {
             if (data.status === 'ok') {
                 document.getElementById('qr-stat-completed').textContent = data.completed;
                 document.getElementById('qr-stat-pending').textContent = data.pending;
+                const flaggedEl = document.getElementById('qr-stat-flagged');
+                if (flaggedEl) flaggedEl.textContent = data.flagged || 0;
             }
         })
         .catch(err => console.error('Error fetching session stats:', err));

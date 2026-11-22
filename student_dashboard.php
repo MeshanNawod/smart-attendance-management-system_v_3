@@ -1121,12 +1121,29 @@ function showFeedback(type, message, details = '') {
     `;
 }
 
+// Anonymous ID for this browser, so one phone can mark only one student per lecture.
+function getQrDeviceId() {
+    try {
+        let id = localStorage.getItem('ss_qr_device');
+        if (!id) {
+            id = (window.crypto && crypto.randomUUID)
+                ? crypto.randomUUID()
+                : Date.now().toString(36) + '-' + Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+            localStorage.setItem('ss_qr_device', id);
+        }
+        return id;
+    } catch (e) {
+        return '';
+    }
+}
+
 function submitQrScan(qrData) {
     showFeedback('info', 'Processing scanned QR token...', 'Verifying attendance sequence securely...');
     
     const fd = new FormData();
     fd.append('action', 'scan_qr');
     fd.append('qr_data', qrData);
+    fd.append('device_id', getQrDeviceId());
     
     fetch('/csc2052/api/qr_attendance.php', {
         method: 'POST',
