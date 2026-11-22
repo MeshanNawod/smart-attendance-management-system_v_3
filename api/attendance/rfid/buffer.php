@@ -4,14 +4,14 @@ require_once __DIR__ . '/../../../includes/config/app.php';
 header('Content-Type: application/json; charset=utf-8');
 
 $buffer_file = __DIR__ . '/../../../sys_latest_rfid.txt';
+require_once __DIR__ . '/../../../includes/auth/access.php';
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'consume') {
-    $sessionPath = __DIR__ . '/../../../sessions';
-    if (is_dir($sessionPath)) session_save_path($sessionPath);
-    if (session_status() === PHP_SESSION_NONE) session_start();
-    $valid = isset($_SESSION['user_logged_in']) && $_SESSION['user_logged_in'] === true;
+    // v4: only staff screens may take the last scanned card.
+    $valid = in_array(quietSessionRole(), ['admin', 'teacher'], true);
     if (!$valid) {
-        echo json_encode(['status' => 'error', 'message' => 'Session expired. Relogin and try again.']);
+        http_response_code(quietSessionRole() === null ? 401 : 403);
+        echo json_encode(['status' => 'error', 'message' => quietSessionRole() === null ? 'Session expired. Log in again.' : 'Access denied.']);
         exit;
     }
 
@@ -31,9 +31,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'consume
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'status') {
-    $sessionPath = __DIR__ . '/../../../sessions';
-    if (is_dir($sessionPath)) session_save_path($sessionPath);
-    if (session_status() === PHP_SESSION_NONE) session_start();
+    $role = quietSessionRole();
+    if (!isHardwareRequest() && !in_array($role, ['admin', 'teacher'], true)) accessDenied();
     $bufferExists = file_exists($buffer_file);
     $bufferContent = '';
     $bufferAge = -1;
@@ -46,14 +45,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'status'
         'buffer_content' => $bufferContent,
         'buffer_age_sec' => $bufferAge,
         'buffer_writable' => is_writable(dirname($buffer_file)),
-        'session_valid' => isset($_SESSION['user_logged_in']) && $_SESSION['user_logged_in'] === true,
+        'session_valid' => $role !== null,
     ]);
     exit;
 }
 
-$hw_key = $_SERVER['HTTP_X_HARDWARE_KEY'] ?? ($_GET['hardware_key'] ?? ($_POST['hardware_key'] ?? ''));
-
-if (!hash_equals(HARDWARE_API_KEY, $hw_key)) {
+// Writing a UID: the ESP32 (hardware key) or an admin's "test UID" button.
+if (!isHardwareRequest() && quietSessionRole() !== 'admin') {
     http_response_code(401);
     echo json_encode(['status' => 'error', 'message' => 'Unauthorized.']);
     exit;

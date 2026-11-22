@@ -661,7 +661,7 @@ function renderStars(containerId, targetType, targetId, readonly, currentRating)
   let html = '<div class="star-rating' + (readonly ? ' star-rating-readonly' : '') + '" data-target-type="' + targetType + '" data-target-id="' + targetId + '">';
   for (let i = 1; i <= 5; i++) {
     const active = currentRating >= i ? 'active' : '';
-    html += '<span class="star ' + active + '" data-value="' + i + '" onclick="' + (readonly ? '' : 'submitRating(\'' + targetType + '\',\'' + targetId + '\',' + i + ')') + '" onmouseenter="hoverStar(this)" onmouseleave="unhoverStar(\'' + containerId + '\',' + (currentRating || 0) + ')">★</span>';
+    html += '<span class="star ' + active + '" data-value="' + i + '" onclick="' + (readonly ? '' : 'submitRating(\'' + targetType + '\',\'' + targetId + '\',' + i + ')') + '" onmouseenter="hoverStar(this)" onmouseleave="unhoverStar(\'' + containerId + '\',' + (currentRating || 0) + ')"><i class="bi bi-star-fill"></i></span>';
   }
   html += '</div>';
   container.innerHTML = html;
@@ -728,11 +728,11 @@ function loadRatingSummary(targetType, targetId) {
       const total = data.total_ratings || 0;
       const my = data.my_rating;
       let html = '<div class="d-flex align-items-center gap-2">';
-      html += '<span class="star-display">' + '★'.repeat(Math.round(avg)) + '☆'.repeat(5 - Math.round(avg)) + '</span>';
+      html += '<span class="star-display">' + '<i class="bi bi-star-fill"></i>'.repeat(Math.round(avg)) + '<i class="bi bi-star"></i>'.repeat(5 - Math.round(avg)) + '</span>';
       html += '<span class="fw-bold">' + avg + '</span>';
       html += '<span class="text-muted small">(' + total + ')</span>';
       if (my) {
-        html += '<span class="badge bg-warning text-dark ms-2">Your: ' + my + '★</span>';
+        html += '<span class="badge bg-warning text-dark ms-2">Your: ' + my + ' <i class="bi bi-star-fill"></i></span>';
       }
       html += '</div>';
       // Render clickable stars for interactive rating
@@ -781,7 +781,7 @@ function renderCommentThread(comment, targetType, targetId) {
   html += '<div><span class="comment-author">' + esc(comment.author_name) + '</span>';
   if (comment.user_role === 'teacher') html += ' <span class="badge bg-primary" style="font-size:0.6rem;">Teacher</span>';
   if (comment.user_role === 'admin') html += ' <span class="badge bg-danger" style="font-size:0.6rem;">Admin</span>';
-  if (isPinned) html += ' <span class="badge bg-warning text-dark" style="font-size:0.6rem;">📌 Pinned</span>';
+  if (isPinned) html += ' <span class="badge bg-warning text-dark" style="font-size:0.6rem;"><i class="bi bi-pin-angle-fill me-1"></i>Pinned</span>';
   html += '</div>';
   html += '<span class="comment-date">' + (comment.created_at ? new Date(comment.created_at.replace(' ', 'T')).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '') + '</span>';
   html += '</div>';

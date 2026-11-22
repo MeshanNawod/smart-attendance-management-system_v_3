@@ -37,9 +37,41 @@ Take the full guided tour on the **[project website](https://meshannawod.github.
 
 <sub>Screenshots use demo data; student and lecturer names are made up.</sub>
 
+## What's new in v4
+
+v4 is a bug-fix and hardening release of the v3 system. Nothing about how the
+dashboards look or work changes for a lecturer or a student, except that some
+things that were broken now work.
+
+**Fixed**
+
+- Raspberry Pi face attendance was never saved: the server redirected the Pi to the login page. The Pi now sends the hardware key and the server finds the running lecture for that student.
+- ESP32 log messages to `system_logs.php` were redirected to the login page in the same way.
+- The ESP32 command proxy rejected every LAN device and every dashboard call, so device status, Wi-Fi scan, LCD preview and template push from the dashboard did not work.
+- The RFID desk on the admin dashboard could not mark attendance (it called a lecturer-only path).
+- "Recent comments" on the admin dashboard was always empty.
+- A lecturer's "add students to course" list returned a database error.
+- Voice settings and device PIN cards failed on installs that skipped migrations 007 and 008; the tables are now created on first use.
+- "Send command to Pi" from the dashboard always said there were no commands.
+- A name with an apostrophe (O'Brien) broke the edit and enrol buttons.
+- Mobile users were logged out as a "security violation" when their IP changed.
+
+**Security**
+
+- Students could call admin actions (delete students, change settings, read the device PIN, clear logs). Every API now checks the caller's role.
+- The hardware key was in the public JavaScript; it is now only shown to admins in the SD config generator.
+- Stored XSS through student, lecturer, course and device names.
+- Hardware Nodes, Students Base and Lectures pages are admin-only.
+
+**Clean-up**
+
+- Emoji replaced with Bootstrap Icons in the dashboards, docs site and README.
+- Removed unused duplicate folders (`includes/dashboard/cards`, `js/admin`, `js/attendance`).
+- Runtime files (`devices_registry.json`, RFID buffer, the ESP32 `config.txt` with Wi-Fi details) are no longer tracked; see `esp32_firmware/config.example.txt`.
+
 ## QR attendance v2
 
-🔳 **[Try to cheat it](https://meshannawod.github.io/smart-attendance-management-system_v_3/qr.html)**: an interactive model of the rotating QR rules, with each trick (photo sent to a friend, borrowed phone, skipped code, ended lecture) and the check that stops it.
+<img src="docs/images/icons/qr-code.svg" width="16" height="16" alt="QR"> **[Try to cheat it](https://meshannawod.github.io/smart-attendance-management-system_v_3/qr.html)**: an interactive model of the rotating QR rules, with each trick (photo sent to a friend, borrowed phone, skipped code, ended lecture) and the check that stops it.
 
 - A new random code every **5 seconds**; a student must scan **two consecutive codes**
 - Codes belong to the **running lecture** and stop working when it ends
@@ -50,7 +82,7 @@ Take the full guided tour on the **[project website](https://meshannawod.github.
 
 ## Build the ESP32 node
 
-⚡ **[Interactive wiring](https://meshannawod.github.io/smart-attendance-management-system_v_3/wiring.html)**: hover any wire to light up the whole connection, for the ESP32 node, the Raspberry Pi node and the whole system.
+<img src="docs/images/icons/lightning-charge-fill.svg" width="16" height="16" alt="Wiring"> **[Interactive wiring](https://meshannawod.github.io/smart-attendance-management-system_v_3/wiring.html)**: hover any wire to light up the whole connection, for the ESP32 node, the Raspberry Pi node and the whole system.
 
 Full step-by-step guide: **[ESP32 build guide](https://meshannawod.github.io/smart-attendance-management-system_v_3/build.html)** (parts list, pin table, power, assembly with test sketches, flashing, `config.txt`, troubleshooting).
 
@@ -275,14 +307,14 @@ csc2052/
 
 ## Security
 
-- All API endpoints require authentication (session token or hardware key)
-- CSRF protection on mutating operations
-- Hardware API key validated on every device request
+- Every API action declares which roles may call it (`includes/auth/access.php`); students and lecturers get `403` on admin actions
+- Actions that change data only accept `POST`, so the CSRF check always applies
+- Lecturers can only act on courses they teach (attendance, lectures, reports)
+- The hardware key opens only the actions the ESP32 and Raspberry Pi use, and it is never sent to browsers; set your own with the `SS_HARDWARE_API_KEY` environment variable
+- The ESP32 command proxy only talks to devices in the registry, never follows redirects, and needs an admin session with the CSRF token
+- Names (students, lecturers, courses, devices) are cleaned on save and escaped when shown
 - No database error messages leaked to clients (all logged server-side)
-- SSRF protection on OTA proxy and SSE monitor (IP validation + private range rejection)
-- XSS prevention via `json_encode()` for dynamic script content
-- Device registry names sanitized to `[a-zA-Z0-9_\- ]`
-- Session fingerprint includes IP + User-Agent
+- Session bound to the browser (User-Agent), so phones can switch between Wi-Fi and mobile data without being logged out
 - Permissions-Policy: microphone restricted to self-origin
 
 ---

@@ -100,7 +100,7 @@ try {
                     <div class="col-md-3">
                         <input type="text" id="filter-student"
                                class="form-control form-control-sm"
-                               placeholder="🔍 Search student..." data-i18n-placeholder="search_student"
+                               placeholder="Search student..." data-i18n-placeholder="search_student"
                                oninput="fetchLogs()">
                     </div>
                     <div class="col-md-2">
@@ -706,7 +706,7 @@ window.adminVoiceCardToggle = function() {
                         if (err.message && err.message.indexOf('context') !== -1) {
                             msg = 'HTTPS required. Access via <b>https://</b> or <b>http://localhost</b>.';
                         } else {
-                            msg = 'Microphone blocked. Click the <b>🔒 lock icon</b> in the address bar → <b>Site settings</b> → set Microphone to <b>Allow</b>, then refresh.';
+                            msg = 'Microphone blocked. Click the <b><i class="bi bi-lock-fill"></i> lock icon</b> in the address bar → <b>Site settings</b> → set Microphone to <b>Allow</b>, then refresh.';
                         }
                     } else if (err.name === 'NotFoundError') {
                         msg = 'No microphone found. Connect a mic and try again.';
@@ -731,7 +731,7 @@ function loadVoiceCardStudents() {
             el.innerHTML = '<option value="">Quick-pick student...</option>';
             if (d.students) {
                 d.students.forEach(function(s) {
-                    el.innerHTML += '<option value="' + s.student_no + '">' + s.student_no + ' — ' + s.student_name + (s.voice_sample ? ' 🎤' : '') + '</option>';
+                    el.innerHTML += '<option value="' + s.student_no + '">' + s.student_no + ' — ' + s.student_name + (s.voice_sample ? ' (voice enrolled)' : '') + '</option>';
                 });
             }
         })
@@ -963,7 +963,7 @@ function pollRfidCard() {
 // Test RFID buffer by pushing a dummy UID
 window.testRfidBuffer = function() {
     var testUid = 'TEST' + Date.now().toString(36).toUpperCase().slice(-4);
-    fetch('/csc2052/api/rfid_scanned.php?uid=' + testUid + '&hardware_key=ss_hw_api_key_2052')
+    fetch('/csc2052/api/rfid_scanned.php?uid=' + testUid)
         .then(function(r) { return r.json(); })
         .then(function(d) {
             var statusEl = document.getElementById('rfid-session-status');
@@ -988,7 +988,7 @@ window.testRfidBuffer = function() {
 
 function markRfidAttendance(uid, callback) {
     // First lookup UID → student number
-    fetch('/csc2052/api/esp_courses.php?action=lookup_rfid&uid=' + uid + '&hardware_key=ss_hw_api_key_2052')
+    fetch('/csc2052/api/esp_courses.php?action=lookup_rfid&uid=' + uid)
         .then(function(r) { return r.text(); })
         .then(function(resp) {
             resp = resp.trim();

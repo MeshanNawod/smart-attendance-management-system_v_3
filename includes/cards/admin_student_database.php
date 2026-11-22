@@ -7,7 +7,7 @@
         <div class="d-flex align-items-center gap-2">
             <label class="form-label small text-muted mb-0 fw-bold"><i class="bi bi-cpu me-1"></i>Target Device:</label>
             <select id="students-device-select" class="form-select form-select-sm" style="min-width:180px;max-width:260px;" onchange="onStudentsDeviceChange(this.value)">
-                <option value="">⚠️ Select device first…</option>
+                <option value="">Select device first…</option>
             </select>
             <span id="students-device-status" class="badge bg-secondary">None</span>
         </div>
@@ -257,11 +257,11 @@
                                     </td>
                                     <td class="text-end pe-3">
                                         <div class="btn-group shadow-sm">
-                                            <button onclick="startWebFaceEnrollment('<?php echo htmlspecialchars($st['student_no'], ENT_QUOTES); ?>','<?php echo htmlspecialchars($st['student_name'], ENT_QUOTES); ?>',7)" class="btn btn-sm btn-light border text-success" title="Web Face Enroll"><i class="bi bi-camera-video"></i></button>
-                                            <button onclick="editStudentMap('<?php echo htmlspecialchars($st['student_no'], ENT_QUOTES); ?>','<?php echo htmlspecialchars($st['student_name'], ENT_QUOTES); ?>','<?php echo htmlspecialchars($st['fingerprint_id'], ENT_QUOTES); ?>','<?php echo htmlspecialchars($st['rfid_uid'], ENT_QUOTES); ?>','<?php echo htmlspecialchars($st['face_id'], ENT_QUOTES); ?>')" class="btn btn-sm btn-light border text-info" title="Edit Student Details"><i class="bi bi-pencil-square"></i></button>
-                                            <button onclick="if(requireDeviceForOTA()) pushTemplateToDevice('<?php echo htmlspecialchars($st['student_no'], ENT_QUOTES); ?>',<?php echo ($st['fingerprint_id'] ? (int)$st['fingerprint_id'] : 0); ?>)" class="btn btn-sm btn-light border text-primary" title="Push Finger to ESP (requires device selection)" <?php echo empty($st['fingerprint_id']) ? 'disabled' : ''; ?>><i class="bi bi-cloud-arrow-up"></i></button>
+                                            <button onclick="startWebFaceEnrollment(<?php echo jsArg($st['student_no']); ?>,<?php echo jsArg($st['student_name']); ?>,7)" class="btn btn-sm btn-light border text-success" title="Web Face Enroll"><i class="bi bi-camera-video"></i></button>
+                                            <button onclick="editStudentMap(<?php echo jsArg($st['student_no']); ?>,<?php echo jsArg($st['student_name']); ?>,<?php echo jsArg($st['fingerprint_id']); ?>,<?php echo jsArg($st['rfid_uid']); ?>,<?php echo jsArg($st['face_id']); ?>)" class="btn btn-sm btn-light border text-info" title="Edit Student Details"><i class="bi bi-pencil-square"></i></button>
+                                            <button onclick="if(requireDeviceForOTA()) pushTemplateToDevice(<?php echo jsArg($st['student_no']); ?>,<?php echo ($st['fingerprint_id'] ? (int)$st['fingerprint_id'] : 0); ?>)" class="btn btn-sm btn-light border text-primary" title="Push Finger to ESP (requires device selection)" <?php echo empty($st['fingerprint_id']) ? 'disabled' : ''; ?>><i class="bi bi-cloud-arrow-up"></i></button>
                                             <a href="download_template.php?student_no=<?php echo urlencode($st['student_no']); ?>" class="btn btn-sm btn-light border text-success" title="Download Fingerprint" <?php echo empty($st['fingerprint_id']) ? 'style="pointer-events: none; opacity: 0.5;"' : ''; ?>><i class="bi bi-download"></i></a>
-                                            <button onclick="deleteStudentMap('<?php echo htmlspecialchars($st['student_no'], ENT_QUOTES); ?>',<?php echo (int)($st['fingerprint_id'] ?? 0); ?>)" class="btn btn-sm btn-light border text-danger" title="Delete Match"><i class="bi bi-trash"></i></button>
+                                            <button onclick="deleteStudentMap(<?php echo jsArg($st['student_no']); ?>,<?php echo (int)($st['fingerprint_id'] ?? 0); ?>)" class="btn btn-sm btn-light border text-danger" title="Delete Match"><i class="bi bi-trash"></i></button>
                                         </div>
                                     </td>
                                 </tr>

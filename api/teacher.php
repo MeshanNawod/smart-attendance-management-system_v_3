@@ -8,8 +8,27 @@ require_once '../includes/auth.php';
 require_once '../includes/db.php';
 require_once '../includes/helpers.php';
 require_once __DIR__ . '/../includes/attendance_helper.php';
+require_once __DIR__ . '/../includes/auth/access.php';
 
 requireCsrfIfMutating();
+
+// ─── Access policy (v4) ──────────────────────────────────────────────
+// Actions that check their own role keep doing so; this map closes the
+// actions that previously had no role check at all.
+$__teacherAction = $_POST['action'] ?? $_GET['action'] ?? '';
+$__teacherPolicy = [
+    'get_course_teachers' => ['roles' => ['admin']],
+    'get_teacher_courses' => ['roles' => ['admin']],
+    'today_count'         => ['roles' => ['teacher']],
+    'teacher_logs'        => ['roles' => ['teacher']],
+    'absent_students'     => ['roles' => ['teacher']],
+    'start_course'        => ['roles' => ['teacher'], 'post' => true],
+    'mark_attendance'     => ['roles' => ['admin', 'teacher'], 'post' => true],
+    'send_absent_email'   => ['roles' => ['teacher'], 'post' => true],
+];
+if (isset($__teacherPolicy[$__teacherAction])) {
+    enforceActionPolicy($__teacherAction, $__teacherPolicy);
+}
 
 header('Content-Type: application/json; charset=utf-8');
 
@@ -252,7 +271,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
             $stmt->execute([$teacherId]);
             $courses = $stmt->fetchAll(PDO::FETCH_COLUMN);
             if (empty($courses)) { 
-                error_log("[Teacher API] teacher_logs: No courses for teacher $teacherId");
                 apiResponse('success', 'No courses assigned.', ['logs' => []]); 
                 exit; 
             }
@@ -280,14 +298,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET') {
                     LEFT JOIN students s ON a.student_no = s.student_no
                     WHERE $where ORDER BY a.timestamp DESC LIMIT 100";
             
-            error_log("[Teacher API] teacher_logs SQL: $sql");
-            error_log("[Teacher API] teacher_logs params: " . json_encode($params));
             
             $stmt2 = $pdo->prepare($sql);
             $stmt2->execute($params);
             $logs = $stmt2->fetchAll(PDO::FETCH_ASSOC);
             
-            error_log("[Teacher API] teacher_logs: Found " . count($logs) . " logs");
             
             echo json_encode(['status' => 'success', 'message' => '', 'logs' => $logs]);
         } catch (PDOException $e) { 
@@ -491,11 +506,12 @@ if ($action === 'start_course') {
 
 // ─── Teacher Self-Service: Mark Attendance ──────────────────────────
 if ($action === 'mark_attendance') {
-    $teacherId = $_SESSION['teacher_id'] ?? null;
     $studentNo = strtoupper(trim($_POST['student_no'] ?? ''));
     $courseCode = strtoupper(trim($_POST['course_code'] ?? ''));
-    if (!$teacherId || !$studentNo) { echo json_encode(['status' => 'error', 'message' => 'Student number required.']); exit; }
+    if (!$studentNo) { echo json_encode(['status' => 'error', 'message' => 'Student number required.']); exit; }
     if (!$courseCode) { echo json_encode(['status' => 'error', 'message' => 'Course code required.']); exit; }
+    // Admins (RFID desk on index.php) may mark any course; teachers only their own.
+    requireCourseAccess($pdo, $courseCode);
     try {
         $stmt = $pdo->prepare("SELECT student_no FROM students WHERE student_no = ?");
         $stmt->execute([$studentNo]);
@@ -614,10 +630,10 @@ if ($action === 'remove_teacher') {
 // ─── Add Teacher ──────────────────────────────────────────────────────
 if ($action === 'add_teacher') {
     requireRole('admin');
-    $name = trim($_POST['teacher_name'] ?? '');
+    $name = cleanDisplayName($_POST['teacher_name'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $password = trim($_POST['password'] ?? '');
-    $department = trim($_POST['department'] ?? '');
+    $department = cleanDisplayName($_POST['department'] ?? '');
 
     if (empty($name) || empty($email) || empty($password)) {
         echo json_encode(['status' => 'error', 'message' => 'Name, email, and password required.']);
@@ -651,8 +667,8 @@ if ($action === 'add_teacher') {
 if ($action === 'update_teacher') {
     requireRole('admin');
     $teacherId = (int)($_POST['teacher_id'] ?? 0);
-    $name = trim($_POST['teacher_name'] ?? '');
-    $department = trim($_POST['department'] ?? '');
+    $name = cleanDisplayName($_POST['teacher_name'] ?? '');
+    $department = cleanDisplayName($_POST['department'] ?? '');
 
     if ($teacherId <= 0 || empty($name)) {
         echo json_encode(['status' => 'error', 'message' => 'Teacher ID and name required.']);
@@ -697,8 +713,8 @@ if ($action === 'update_my_profile') {
     $teacherId = $_SESSION['teacher_id'] ?? null;
     if (!$teacherId) { echo json_encode(['status' => 'error', 'message' => 'Not a teacher.']); exit; }
 
-    $name = trim($_POST['teacher_name'] ?? '');
-    $department = trim($_POST['department'] ?? '');
+    $name = cleanDisplayName($_POST['teacher_name'] ?? '');
+    $department = cleanDisplayName($_POST['department'] ?? '');
     $phone = trim($_POST['phone'] ?? '');
     $email = trim($_POST['email'] ?? '');
     $newPassword = trim($_POST['new_password'] ?? '');
@@ -835,6 +851,8 @@ if ($action === 'end_course_session') {
     if (empty($courseCode)) {
         echo json_encode(['status' => 'error', 'message' => 'Course required.']); exit;
     }
+    // v4: lecturers may only end lectures of their own courses.
+    requireCourseAccess($pdo, $courseCode);
 
     try {
         ensureLectureSessionsTable($pdo);

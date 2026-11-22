@@ -4,6 +4,10 @@ require_once __DIR__ . '/../includes/db.php';
 
 $action = $_GET['action'] ?? '';
 
+// v4: analytics are for admins and lecturers only.
+require_once __DIR__ . '/../includes/auth/access.php';
+enforceActionPolicy($action, [], ['roles' => ['admin', 'teacher']]);
+
 if ($action === 'daily_trend') {
     $days = min((int)($_GET['days'] ?? 7), 90);
     $stmt = $pdo->prepare("

@@ -50,6 +50,7 @@ $avatarSrc = $profilePhoto
 <html lang="en">
 <head>
     <meta name="csrf-token" content="<?php echo h($_SESSION['csrf_token']); ?>">
+    <meta name="user-role" content="<?php echo htmlspecialchars($_SESSION['user_role'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Student Portal — Sentinel Swarm</title>
@@ -703,7 +704,7 @@ function loadHistory() {
             const d = ts.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
             const t = ts.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
             const mb = (log.modality === 'fingerprint') ? 'bg-success' : (log.modality === 'rfid') ? 'bg-info' : (log.modality === 'face') ? 'bg-warning text-dark' : 'bg-secondary';
-            const stars = log.rating ? '★'.repeat(log.rating) + '☆'.repeat(5 - log.rating) : '';
+            const stars = log.rating ? '<i class="bi bi-star-fill"></i>'.repeat(log.rating) + '<i class="bi bi-star"></i>'.repeat(5 - log.rating) : '';
             const aid = log.id;
             h += '<tr><td class="ps-3"><span class="badge bg-dark">' + esc(log.course_code) + '</span> <span class="small text-muted">' + esc(log.course_name || '') + '</span></td><td class="small">' + d + '</td><td class="small">' + t + '</td><td><span class="badge ' + mb + ' badge-pill">' + esc(log.modality || 'manual') + '</span></td>' +
                 '<td class="small" style="cursor:pointer;white-space:nowrap;" onclick="rateAttendance(' + aid + ', this)">' +
@@ -1116,8 +1117,8 @@ function showFeedback(type, message, details = '') {
     box.className = `py-3 px-3 rounded text-center small ${classText} success-checkmark-bounce`;
     box.innerHTML = `
         <i class="bi bi-${icon} fs-2 d-block mb-2"></i>
-        <p class="mb-0 fw-semibold">${message}</p>
-        ${details ? `<p class="mb-0 mt-1 opacity-75" style="font-size: 0.75rem;">${details}</p>` : ''}
+        <p class="mb-0 fw-semibold">${escapeHtml(message)}</p>
+        ${details ? `<p class="mb-0 mt-1 opacity-75" style="font-size: 0.75rem;">${escapeHtml(details)}</p>` : ''}
     `;
 }
 
@@ -1193,7 +1194,7 @@ function handleScanApiResponse(data) {
         if (progressLine) progressLine.style.width = '100%';
         
         showFeedback('success', 
-            '🎉 Attendance Recorded Successfully!', 
+            'Attendance recorded successfully', 
             `Verified verification chain: ${data.pair}. Thank you, ${data.student_name}!`
         );
         

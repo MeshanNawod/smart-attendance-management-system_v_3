@@ -6,6 +6,7 @@
 <title>Interactive wiring · Sentinel Swarm</title>
 <meta name="description" content="Interactive wiring diagrams for the Sentinel Swarm ESP32 node, Raspberry Pi camera node and the whole system. Hover any wire to see where it goes.">
 <link rel="icon" href="images/favicon.svg">
+<link rel="stylesheet" href="css/vendor/bootstrap-icons.css">
 <style>
   :root { --maroon:#9b1c1c; --ink:#161a22; --muted:#5d6573; --line:#e6e8ee; --bg:#f4f5f8; font-family:"Segoe UI",system-ui,-apple-system,sans-serif; }
   * { box-sizing:border-box; }
@@ -109,9 +110,9 @@
     <h1>Interactive wiring</h1>
     <p>Hover over any wire, pin or part. The whole connection lights up, a signal runs along it, and the panel shows where it goes and the line of firmware that sets it up.</p>
     <div class="tabs" role="tablist">
-      <button class="tab" data-p="esp" aria-selected="true">🖐️ ESP32 node</button>
-      <button class="tab" data-p="rpi" aria-selected="false">📷 Raspberry Pi node</button>
-      <button class="tab" data-p="sys" aria-selected="false">🌐 Whole system</button>
+      <button class="tab" data-p="esp" aria-selected="true"><i class="bi bi-cpu" aria-hidden="true"></i> ESP32 node</button>
+      <button class="tab" data-p="rpi" aria-selected="false"><i class="bi bi-camera-video" aria-hidden="true"></i> Raspberry Pi node</button>
+      <button class="tab" data-p="sys" aria-selected="false"><i class="bi bi-diagram-3" aria-hidden="true"></i> Whole system</button>
     </div>
   </div>
 </header>
@@ -562,30 +563,30 @@
 <text x="976" y="450" font-size="12" font-weight="400" text-anchor="start" fill="#334155">• heartbeat every 30 s</text>
 <text x="976" y="470" font-size="12" font-weight="400" text-anchor="start" fill="#334155">• polls ota.php every 10 s</text></svg></div></div>
     <div class="panel" id="p-sys"><div class="zoomwrap"><svg id="d-sys" class="dia" viewBox="0 0 1240 600" role="img" aria-label="Whole system data flow" font-family="Segoe UI, system-ui, sans-serif"><g class="comp" data-comp="s-esp"><rect class="body" x="40" y="40" width="290" height="150" rx="14" fill="#fff" stroke="#1d6fe0" stroke-width="2"/><rect x="40" y="40" width="8" height="150" rx="4" fill="#1d6fe0"/>
-<text x="62" y="72" font-size="16" font-weight="700" text-anchor="start" fill="#161a22">🖐️  ESP32 nodes ×N</text>
+<text x="62" y="72" font-size="16" font-weight="700" text-anchor="start" fill="#161a22">ESP32 nodes ×N</text>
 <text x="62" y="96" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">fingerprint · RFID · keypad · LCD</text>
 <text x="62" y="115" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">offline queue on SD / flash</text>
 <text x="62" y="134" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">web server on port 80 (/cmd)</text>
 </g>
 <g class="comp" data-comp="s-rpi"><rect class="body" x="40" y="240" width="290" height="150" rx="14" fill="#fff" stroke="#138a52" stroke-width="2"/><rect x="40" y="240" width="8" height="150" rx="4" fill="#138a52"/>
-<text x="62" y="272" font-size="16" font-weight="700" text-anchor="start" fill="#161a22">📷  Raspberry Pi node</text>
+<text x="62" y="272" font-size="16" font-weight="700" text-anchor="start" fill="#161a22">Raspberry Pi node</text>
 <text x="62" y="296" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">camera face recognition</text>
 <text x="62" y="315" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">Flask app on port 5000</text>
 <text x="62" y="334" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">MJPEG stream</text>
 </g>
 <g class="comp" data-comp="s-web"><rect class="body" x="40" y="440" width="290" height="140" rx="14" fill="#fff" stroke="#b45309" stroke-width="2"/><rect x="40" y="440" width="8" height="140" rx="4" fill="#b45309"/>
-<text x="62" y="472" font-size="16" font-weight="700" text-anchor="start" fill="#161a22">💻  Browsers</text>
+<text x="62" y="472" font-size="16" font-weight="700" text-anchor="start" fill="#161a22">Browsers</text>
 <text x="62" y="496" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">admin · lecturer · student</text>
 <text x="62" y="515" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">webcam face, voice, QR, manual</text>
 <text x="62" y="534" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">React / Tauri desktop app</text>
 </g>
 <g class="comp" data-comp="s-net"><rect class="body" x="470" y="240" width="170" height="150" rx="14" fill="#fff" stroke="#0f766e" stroke-width="2"/><rect x="470" y="240" width="8" height="150" rx="4" fill="#0f766e"/>
-<text x="492" y="272" font-size="16" font-weight="700" text-anchor="start" fill="#161a22">📶  Wi-Fi / LAN</text>
+<text x="492" y="272" font-size="16" font-weight="700" text-anchor="start" fill="#161a22">Wi-Fi / LAN</text>
 <text x="492" y="296" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">router or campus</text>
 <text x="492" y="315" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">network</text>
 </g>
 <g class="comp" data-comp="s-php"><rect class="body" x="790" y="150" width="220" height="200" rx="14" fill="#fff" stroke="#9b1c1c" stroke-width="2"/><rect x="790" y="150" width="8" height="200" rx="4" fill="#9b1c1c"/>
-<text x="812" y="182" font-size="16" font-weight="700" text-anchor="start" fill="#161a22">🖥️  PHP server</text>
+<text x="812" y="182" font-size="16" font-weight="700" text-anchor="start" fill="#161a22">PHP server</text>
 <text x="812" y="206" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">Apache + PHP 8</text>
 <text x="812" y="225" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">/csc2052/api/…</text>
 <text x="812" y="244" font-size="12.5" font-weight="400" text-anchor="start" fill="#5d6573">31 endpoints</text>
@@ -594,7 +595,7 @@
 </g>
 <g class="comp" data-comp="s-db">
 <path class="body" d="M1060 420 a75 18 0 0 0 150 0 a75 18 0 0 0 -150 0 v110 a75 18 0 0 0 150 0 v-110" fill="#fff" stroke="#4479A1" stroke-width="2"/>
-<text x="1135" y="470" font-size="16" font-weight="700" text-anchor="middle" fill="#161a22">🗄️ MySQL</text>
+<text x="1135" y="470" font-size="16" font-weight="700" text-anchor="middle" fill="#161a22">MySQL</text>
 <text x="1135" y="494" font-size="12.5" font-weight="400" text-anchor="middle" fill="#5d6573">21 tables</text>
 <text x="1135" y="512" font-size="12.5" font-weight="400" text-anchor="middle" fill="#5d6573">attendance_logs …</text>
 </g>

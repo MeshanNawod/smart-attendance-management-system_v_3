@@ -24,7 +24,9 @@ if (isset($_SESSION['role_locked']) && isset($_SESSION['user_role']) && $_SESSIO
     exit;
 }
 
-$fingerprint = md5(($_SERVER['HTTP_USER_AGENT'] ?? '') . ($_SERVER['REMOTE_ADDR'] ?? ''));
+// v4: bind the session to the browser only. Including the IP address logged
+// students out whenever their phone moved between Wi-Fi and mobile data.
+$fingerprint = hash('sha256', 'ua:' . ($_SERVER['HTTP_USER_AGENT'] ?? ''));
 if (isset($_SESSION['fingerprint']) && $_SESSION['fingerprint'] !== $fingerprint) {
     session_unset();
     session_destroy();
@@ -133,3 +135,18 @@ if (isset($_SESSION['last_activity']) && (time() - $_SESSION['last_activity']) >
     exit;
 }
 $_SESSION['last_activity'] = time();
+
+/**
+ * Print a PHP value as a JavaScript string literal inside an HTML attribute,
+ * e.g. onclick="editStudent(<?php echo jsArg($name); ?>)".
+ * htmlspecialchars() alone is not enough there: the browser decodes &#039;
+ * back to ' before the JavaScript runs, so a name like O'Brien broke the
+ * button (and a crafted name could run script).
+ */
+if (!function_exists('jsArg')) {
+    function jsArg($value): string {
+        $json = json_encode((string)($value ?? ''), JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP | JSON_UNESCAPED_UNICODE);
+        return htmlspecialchars($json, ENT_QUOTES, 'UTF-8');
+    }
+}
+

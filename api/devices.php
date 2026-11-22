@@ -12,6 +12,17 @@ header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 
 $action = $_REQUEST['action'] ?? 'list';
+
+// v4: device management is admin-only; changes must be POST.
+require_once __DIR__ . '/../includes/auth/access.php';
+enforceActionPolicy($action, [
+    'list'     => ['roles' => ['admin']],
+    'block'    => ['roles' => ['admin'], 'post' => true],
+    'unblock'  => ['roles' => ['admin'], 'post' => true],
+    'rename'   => ['roles' => ['admin'], 'post' => true],
+    'forget'   => ['roles' => ['admin'], 'post' => true],
+    'register' => ['roles' => ['admin'], 'post' => true],
+]);
 $registry_file = __DIR__ . '/../devices_registry.json';
 
 function loadRegistry($file) {
@@ -83,7 +94,7 @@ if ($action === 'unblock') {
 // ─── RENAME: Give a device a friendly name ───────────────────────
 if ($action === 'rename') {
     $ip   = trim($_POST['ip'] ?? '');
-    $name = trim($_POST['name'] ?? '');
+    $name = cleanDisplayName($_POST['name'] ?? '', 40);
     if (!$ip || !filter_var($ip, FILTER_VALIDATE_IP) || !$name) { echo json_encode(['status' => 'error', 'message' => 'Valid IP and name required']); exit; }
 
     $registry = loadRegistry($registry_file);
@@ -115,7 +126,7 @@ if ($action === 'forget') {
 // ─── REGISTER: Manually add a new device ─────────────────────────
 if ($action === 'register') {
     $ip   = trim($_POST['ip'] ?? '');
-    $name = trim($_POST['name'] ?? '');
+    $name = cleanDisplayName($_POST['name'] ?? '', 40);
     $type = trim($_POST['type'] ?? 'esp32');
     if (!$ip || !filter_var($ip, FILTER_VALIDATE_IP) || !$name) { echo json_encode(['status' => 'error', 'message' => 'Valid IP and name required']); exit; }
 

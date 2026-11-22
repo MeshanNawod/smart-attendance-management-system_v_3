@@ -11,6 +11,15 @@ header('Content-Type: application/json; charset=utf-8');
 
 $action = $_POST['action'] ?? ($_GET['action'] ?? '');
 
+// v4: only admins and lecturers (for their own courses) may record manually.
+require_once __DIR__ . '/../../../includes/auth/access.php';
+enforceActionPolicy($action, [
+    'manual_attendance' => ['roles' => ['admin', 'teacher'], 'post' => true],
+    'mark_attendance'   => ['roles' => ['admin', 'teacher'], 'post' => true],
+]);
+$__course = strtoupper(trim($_POST['course_code'] ?? ''));
+if ($__course !== '') requireCourseAccess($pdo, $__course);
+
 switch ($action) {
 
     case 'manual_attendance':
@@ -18,6 +27,8 @@ switch ($action) {
         $course_code = substr(preg_replace('/[^a-zA-Z0-9_\- ]/', '', trim($_POST['course_code'] ?? '')), 0, 30);
         $timestamp   = trim($_POST['timestamp'] ?? '');
         $modality    = trim($_POST['modality'] ?? 'manual');
+        $allowedModalities = ['manual', 'rpi_face', 'web_face', 'fingerprint', 'rfid', 'voice', 'qr'];
+        if (!in_array($modality, $allowedModalities, true)) $modality = 'manual';
 
         if (empty($stu_no)) {
             respond('error', 'Student number is required.', 422);

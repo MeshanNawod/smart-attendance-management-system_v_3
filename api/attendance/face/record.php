@@ -7,6 +7,9 @@ $buffer_file = __DIR__ . '/../../../sys_latest_face.txt';
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'consume') {
     require __DIR__ . '/../../../includes/auth/session.php';
+    require_once __DIR__ . '/../../../includes/auth/access.php';
+    // v4: only staff screens may take the last recognised face.
+    if (!in_array($_SESSION['user_role'] ?? '', ['admin', 'teacher'], true)) accessDenied();
 
     if (!file_exists($buffer_file)) {
         echo json_encode(['status' => 'empty']);

@@ -38,7 +38,7 @@ window.loadVoiceStudents = function () {
 
             if (d.students && d.students.length > 0) {
                 d.students.forEach(function (s) {
-                    var hasVoice = s.voice_sample ? ' 🎤' : '';
+                    var hasVoice = s.voice_sample ? ' (voice enrolled)' : '';
                     var item = document.createElement('div');
                     item.className = 'searchable-dropdown-item';
                     item.setAttribute('data-value', s.student_no);

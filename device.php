@@ -73,7 +73,7 @@ try {
                                     <select id="action-target-device" class="form-select form-select-sm border-primary d-none" onchange="onEspTargetChange()">
                                         <option value="">Select ESP32 Node...</option>
                                         <?php foreach($discovered_devices as $dev): if($dev['type']==='esp32'): ?>
-                                        <option value="<?php echo htmlspecialchars($dev['ip']);?>" data-name="<?php echo htmlspecialchars($dev['name']);?>"><?php echo htmlspecialchars($dev['name']);?> (<?php echo $dev['ip'];?>)<?php echo $dev['online']?' ✅':' ⚫';?></option>
+                                        <option value="<?php echo htmlspecialchars($dev['ip']);?>" data-name="<?php echo htmlspecialchars($dev['name']);?>"><?php echo htmlspecialchars($dev['name']);?> (<?php echo $dev['ip'];?>)<?php echo $dev['online']?' (online)':' (offline)';?></option>
                                         <?php endif; endforeach; ?>
                                     </select>
                                     <div id="esp-target-list" class="searchable-dropdown d-none"></div>
@@ -162,7 +162,7 @@ try {
                         </div>
                         <div class="mb-2">
                             <label class="form-label small fw-bold mb-0">Hardware Key <span class="badge bg-secondary">API auth</span></label>
-                            <input type="text" id="sd-hw-key" class="form-control form-control-sm font-monospace" value="ss_hw_api_key_2052">
+                            <input type="text" id="sd-hw-key" class="form-control form-control-sm font-monospace" value="<?php echo htmlspecialchars(HARDWARE_API_KEY, ENT_QUOTES, 'UTF-8'); ?>">
                             <small class="text-muted">Used for API authentication. Must match config.php.</small>
                         </div>
                         <div class="mb-2">
@@ -388,7 +388,7 @@ function toggleCmdRef() {
                             <select id="twin-device-select" class="form-select form-select-sm border-info d-none" onchange="switchTwinDevice()">
                                 <option value="">Select a device...</option>
                                 <?php foreach($discovered_devices as $dev): ?>
-                                <option value="<?php echo htmlspecialchars($dev['ip']);?>" data-name="<?php echo htmlspecialchars($dev['name']);?>"><?php echo htmlspecialchars($dev['name']);?> (<?php echo $dev['ip'];?>)<?php echo $dev['online']?' ✅':' ⚫';?></option>
+                                <option value="<?php echo htmlspecialchars($dev['ip']);?>" data-name="<?php echo htmlspecialchars($dev['name']);?>"><?php echo htmlspecialchars($dev['name']);?> (<?php echo $dev['ip'];?>)<?php echo $dev['online']?' (online)':' (offline)';?></option>
                                 <?php endforeach; ?>
                             </select>
                             <div id="twin-device-list" class="searchable-dropdown d-none"></div>
@@ -734,7 +734,7 @@ function toggleCmdRef() {
                                 <tr>
                                     <td class="fw-bold small"><?php echo htmlspecialchars($dev); ?></td>
                                     <td class="small"><?php foreach ($crs as $c): ?><span class="badge bg-info text-dark me-1 mb-1"><?php echo htmlspecialchars($c); ?></span><?php endforeach; ?></td>
-                                    <td class="text-end"><?php foreach ($crs as $c): ?><button class="btn btn-xs btn-outline-danger py-0 px-1 mb-1" onclick="removeDeviceCourse('<?php echo htmlspecialchars($dev); ?>','<?php echo htmlspecialchars($c); ?>')"><i class="bi bi-x"></i></button><?php endforeach; ?></td>
+                                    <td class="text-end"><?php foreach ($crs as $c): ?><button class="btn btn-xs btn-outline-danger py-0 px-1 mb-1" onclick="removeDeviceCourse(<?php echo jsArg($dev); ?>,<?php echo jsArg($c); ?>)"><i class="bi bi-x"></i></button><?php endforeach; ?></td>
                                 </tr><?php endforeach; ?>
                             </tbody>
                         </table>
@@ -1310,7 +1310,7 @@ window.refreshDeviceList = async function() {
                     const icon = dev.type === 'rpi' ? '<i class="bi bi-server text-danger me-1"></i>' : '<i class="bi bi-cpu text-primary me-1"></i>';
                     const badge = dev.online ? '<span class="badge bg-success">Online</span>' : '<span class="badge bg-secondary">Offline</span>';
                     const blockBtn = dev.blocked ? `<button class="btn btn-xs btn-outline-success py-0 px-1" onclick="deviceAction('unblock','${dev.ip}')">Unblock</button>` : `<button class="btn btn-xs btn-outline-danger py-0 px-1" onclick="deviceAction('block','${dev.ip}')">Block</button>`;
-                    h += `<tr><td>${icon}<strong>${dev.name}</strong></td><td><code>${dev.ip}</code></td><td>${badge}</td><td class="d-flex gap-1">${blockBtn} <button class="btn btn-xs btn-outline-secondary py-0 px-1" onclick="renameDevice('${dev.ip}','${dev.name.replace(/'/g, "\\'")}')"><i class="bi bi-pencil"></i></button> <button class="btn btn-xs btn-outline-dark py-0 px-1" onclick="deviceAction('forget','${dev.ip}')"><i class="bi bi-trash"></i></button></td></tr>`;
+                    h += `<tr><td>${icon}<strong>${escapeHtml(dev.name)}</strong></td><td><code>${escapeHtml(dev.ip)}</code></td><td>${badge}</td><td class="d-flex gap-1">${blockBtn} <button class="btn btn-xs btn-outline-secondary py-0 px-1" onclick="renameDevice('${dev.ip}','${dev.name.replace(/'/g, "\\'")}')"><i class="bi bi-pencil"></i></button> <button class="btn btn-xs btn-outline-dark py-0 px-1" onclick="deviceAction('forget','${dev.ip}')"><i class="bi bi-trash"></i></button></td></tr>`;
                 });
                 h += '</tbody></table>';
                 table.innerHTML = h;
@@ -1324,7 +1324,7 @@ window.refreshDeviceList = async function() {
             devices.filter(d => d.type === 'esp32' && !d.blocked).forEach(dev => {
                 const o = document.createElement('option');
                 o.value = dev.ip; o.dataset.name = dev.name;
-                o.textContent = `${dev.name} (${dev.ip})${dev.online ? ' ✅' : ' ⚫'}`;
+                o.textContent = `${dev.name} (${dev.ip})${dev.online ? ' (online)' : ' (offline)'}`;
                 espSel.appendChild(o);
             });
             if (cur) espSel.value = cur;
@@ -1337,7 +1337,7 @@ window.refreshDeviceList = async function() {
             devices.filter(d => !d.blocked).forEach(dev => {
                 const o = document.createElement('option');
                 o.value = dev.ip; o.dataset.name = dev.name;
-                o.textContent = `${dev.name} (${dev.ip})${dev.online ? ' ✅' : ' ⚫'}`;
+                o.textContent = `${dev.name} (${dev.ip})${dev.online ? ' (online)' : ' (offline)'}`;
                 twinSel.appendChild(o);
             });
             if (cur) twinSel.value = cur;
@@ -1352,7 +1352,7 @@ window.refreshDeviceList = async function() {
             devices.filter(d => d.type === 'esp32' && !d.blocked).forEach(dev => {
                 const o = document.createElement('option');
                 o.value = dev.ip;
-                o.textContent = `${dev.name} (${dev.ip})${dev.online ? ' ✅' : ' ⚫'}`;
+                o.textContent = `${dev.name} (${dev.ip})${dev.online ? ' (online)' : ' (offline)'}`;
                 serialSel.appendChild(o);
             });
             if (cur) serialSel.value = cur;
@@ -1462,8 +1462,8 @@ window.triggerRpiOta = async function() {
     try {
         const res = await fetch('api/ota.php?action=poll&device=rpi');
         const data = await res.json();
-        if (data.status === 'success' && data.commands) {
-            await fetch(`http://${ip}:5000/api/ota`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data.commands) });
+        if (data.status === 'success' && data.command) {
+            await fetch(`http://${ip}:5000/api/ota`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ command: data.command }) });
             showToast('Commands sent to Pi.', 'success');
         } else showToast('No pending commands.', 'info');
     } catch(e) { showToast('Could not reach Pi.', 'danger'); }
@@ -1530,7 +1530,7 @@ window.startRpiAttendance = async function() {
                 if (!mute && !globalMute && data.student_name && 'speechSynthesis' in window) {
                     window.speechSynthesis.speak(new SpeechSynthesisUtterance(auto ? data.student_name + ' marked present' : data.student_name + ' detected'));
                 }
-                document.getElementById('rpi-attendance-status').innerHTML = `<span class="text-success fw-bold">${data.student_name || data.student_no} ${auto ? '<span class="badge bg-success">Marked</span>' : ''}</span>`;
+                document.getElementById('rpi-attendance-status').innerHTML = `<span class="text-success fw-bold">${escapeHtml(data.student_name || data.student_no)} ${auto ? '<span class="badge bg-success">Marked</span>' : ''}</span>`;
             } else {
                 document.getElementById('rpi-attendance-status').innerHTML = '<span class="text-muted"><i class="bi bi-camera-video me-1"></i>Scanning...</span>';
             }

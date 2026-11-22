@@ -14,6 +14,15 @@ header('X-Content-Type-Options: nosniff');
 $method = $_SERVER['REQUEST_METHOD'];
 $action = $_REQUEST['action'] ?? '';
 
+// v4: teachers can read schedules; only admins change them.
+require_once __DIR__ . '/../includes/auth/access.php';
+$__read = ['roles' => ['admin', 'teacher']];
+$__write = ['roles' => ['admin'], 'post' => true];
+enforceActionPolicy($action === '' ? 'list' : $action, [
+    'list' => $__read, 'now' => $__read, 'auto_start_check' => $__read, 'ended_schedules' => $__read,
+    'save' => $__write, 'delete' => $__write, 'update_course_settings' => $__write,
+]);
+
 // ─── GET: List all schedules ────────────────────────────────────────
 if ($method === 'GET' && ($action === 'list' || $action === '')) {
     try {

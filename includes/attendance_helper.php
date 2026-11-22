@@ -1,2 +1,2 @@
 <?php
-require __DIR__ . '/attendance/helper.php';
+require_once __DIR__ . '/attendance/helper.php';

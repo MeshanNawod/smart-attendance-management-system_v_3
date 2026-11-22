@@ -26,12 +26,12 @@ This guide assumes you know NOTHING about Raspberry Pi. Follow it step by step.
    - Click **CHOOSE DEVICE** → Raspberry Pi 3
    - Click **CHOOSE OS** → Raspberry Pi OS (64-bit) WITH desktop (recommended)
    - Click **CHOOSE STORAGE** → select your SD card
-   - Click the **gear icon** (⚙) to pre-configure:
-     - ☑ Set hostname: `attendance-pi`
-     - ☑ Enable SSH: `Use password authentication`
-     - ☑ Set username & password: `pi` / `raspberry`
-     - ☑ Configure Wi-Fi: enter your Wi-Fi name & password
-     - ☑ Set locale: your timezone
+   - Click the **gear icon** (the settings cog) to pre-configure:
+     - [x] Set hostname: `attendance-pi`
+     - [x] Enable SSH: `Use password authentication`
+     - [x] Set username & password: `pi` / `raspberry`
+     - [x] Configure Wi-Fi: enter your Wi-Fi name & password
+     - [x] Set locale: your timezone
    - Click **SAVE**, then **WRITE**
 5. Wait for it to finish, then remove the SD card
 

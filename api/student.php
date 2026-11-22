@@ -10,18 +10,76 @@
  *  - Hardware API key (X-Hardware-Key header) for hardware-originated calls.
  */
 require_once '../includes/config.php';
+require_once __DIR__ . '/../includes/auth/access.php';
 
 // ─── Authentication ───────────────────────────────────────────────
 $hw_key = $_SERVER['HTTP_X_HARDWARE_KEY'] ?? ($_POST['hardware_key'] ?? ($_GET['hardware_key'] ?? ''));
 $is_hardware_call = !empty($hw_key) && hash_equals(HARDWARE_API_KEY, $hw_key);
 
-if (!$is_hardware_call) {
+$requestedAction = preg_replace('/:\d+$/', '', (string) ($_REQUEST['action'] ?? ''));
+
+if ($is_hardware_call) {
+    // The hardware key only opens the actions the ESP32 and Raspberry Pi actually use.
+    $hardwareActions = ['get_next_slot', 'link_student', 'link_rfid', 'manual_attendance', 'get_device_courses'];
+    if (!in_array($requestedAction, $hardwareActions, true)) {
+        http_response_code(403);
+        header('Content-Type: application/json; charset=utf-8');
+        echo json_encode(['status' => 'error', 'message' => 'Action not allowed for hardware.']);
+        exit;
+    }
+} else {
     require '../includes/auth.php';
+    require_once '../includes/auth/access.php';
     requireCsrfIfMutating();
+
+    $A  = ['roles' => ['admin']];
+    $AP = ['roles' => ['admin'], 'post' => true];
+    $AT = ['roles' => ['admin', 'teacher']];
+    $ATP = ['roles' => ['admin', 'teacher'], 'post' => true];
+    $SP = ['roles' => ['student'], 'post' => true];
+    enforceActionPolicy($requestedAction, [
+        // read
+        'get_next_slot'          => $A,
+        'get_all_courses'        => $AT,
+        'get_all_students'       => $AT,
+        'get_email_config'       => $A,
+        'get_email_logs'         => $AT,
+        'get_absent_students'    => $AT,
+        'get_all_descriptors'    => $AT,
+        'search_student'         => $AT,
+        'get_student_courses'    => $AT,
+        'get_device_courses'     => $A,
+        'get_my_profile'         => ['roles' => ['student']],
+        'get_my_attendance'      => ['roles' => ['student']],
+        'get_my_courses'         => ['roles' => ['student', 'teacher', 'admin']],
+        // change (admin)
+        'link_student'           => $AP, 'link_rfid' => $AP, 'link_face' => $AP, 'link_web_face' => $AP,
+        'link_admin'             => $AP, 'link_admin_rfid' => $AP, 'link_admin_face' => $AP, 'link_admin_web_face' => $AP,
+        'add_name'               => $AP, 'update_student' => $AP, 'upload_csv' => $AP,
+        'delete_student'         => $AP, 'bulk_delete_students' => $AP,
+        'add_course'             => $AP, 'delete_course' => $AP, 'bulk_enroll_course_csv' => $AP,
+        'save_email_config'      => $AP, 'send_custom_email' => $AP,
+        'assign_course_to_device'   => $AP, 'remove_course_from_device' => $AP,
+        // change (admin or the course's lecturer)
+        'manual_attendance'      => $ATP,
+        'enroll_student_course'  => $ATP,
+        'unenroll_student_course'=> $ATP,
+        'send_absent_report_email' => $ATP,
+        // change (student, own data)
+        'update_my_profile'      => $SP,
+        'upload_my_photo'        => $SP,
+        'rate_attendance'        => $SP,
+    ]);
+    // A lecturer may only change enrolment and attendance in courses they teach.
+    if (($_SESSION['user_role'] ?? '') === 'teacher'
+        && in_array($requestedAction, ['manual_attendance', 'enroll_student_course', 'unenroll_student_course', 'send_absent_report_email'], true)) {
+        require_once '../includes/db.php';
+        requireCourseAccess($pdo, strtoupper(trim((string) ($_POST['course_code'] ?? ''))));
+    }
 }
 
-require '../includes/db.php';
-require '../includes/helpers.php';
+require_once '../includes/db.php';
+require_once '../includes/helpers.php';
 
 // ─── Utility: Safe JSON response ─────────────────────────────────
 function respond(string $status, string $message, int $http_code = 200): void {
@@ -114,7 +172,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'GET' && ($_GET['action'] ?? '') === 'get_all
             $params[] = $courseCode;
         }
 
-        $stmt = $pdo->prepare("SELECT student_no, student_name, fingerprint_id, fp_template_hex FROM students WHERE $where ORDER BY student_no ASC LIMIT 100");
+        $stmt = $pdo->prepare("SELECT student_no, student_name, fingerprint_id, fp_template_hex FROM students s WHERE $where ORDER BY s.student_no ASC LIMIT 100");
         $stmt->execute($params);
         echo json_encode(['status' => 'success', 'students' => $stmt->fetchAll(PDO::FETCH_ASSOC)]);
     } catch (PDOException $e) {
@@ -232,10 +290,11 @@ $action = preg_replace('/:\d+$/','',$rawAction);
 
 // ─── Helpers ──────────────────────────────────────────────────────
 function sanitizeStudentNo(string $val): string {
-    return substr(trim($val), 0, 50);
+    // Student numbers look like S/22/112 — keep only those characters.
+    return substr(preg_replace('/[^A-Za-z0-9\/_.\- ]/', '', trim($val)), 0, 50);
 }
 function sanitizeName(string $val): string {
-    return substr(trim($val), 0, 100);
+    return cleanDisplayName($val, 100);
 }
 function validateFingerId(int $id): bool {
     return $id >= 1 && $id <= 127;
@@ -754,10 +813,26 @@ if ($action === 'manual_attendance') {
     $course_code = substr(preg_replace('/[^a-zA-Z0-9_\- ]/', '', trim($_POST['course_code'] ?? '')), 0, 30);
     $timestamp   = trim($_POST['timestamp'] ?? '');
 
-    $modality    = trim($_POST['modality'] ?? 'manual');
+    $modality    = strtolower(trim($_POST['modality'] ?? 'manual'));
+    if (!in_array($modality, ['manual', 'rpi_face', 'web_face', 'fingerprint', 'rfid', 'voice', 'qr'], true)) {
+        $modality = 'manual';
+    }
+    $deviceName  = $is_hardware_call ? ($modality === 'rpi_face' ? 'RPI_CAMERA' : 'HARDWARE_NODE') : 'WEB_DASHBOARD';
 
     if (empty($stu_no)) {
         respond('error', 'Student number is required.', 422);
+    }
+
+    // The Raspberry Pi camera doesn't know the course: use the student's lecture that is running now.
+    if (empty($course_code) && $is_hardware_call) {
+        $find = $pdo->prepare("SELECT ls.course_code FROM lecture_sessions ls
+                               JOIN student_courses sc ON sc.course_code = ls.course_code AND sc.student_no = ?
+                               WHERE ls.is_active = 1 ORDER BY ls.started_at DESC LIMIT 1");
+        $find->execute([$stu_no]);
+        $course_code = (string) ($find->fetchColumn() ?: '');
+        if ($course_code === '') {
+            respond('error', 'No running lecture for this student.', 403);
+        }
     }
 
     if (empty($course_code)) {
@@ -772,7 +847,7 @@ if ($action === 'manual_attendance') {
     }
 
     try {
-        $result = recordLectureAttendance($pdo, $stu_no, $course_code, 'WEB_DASHBOARD', $modality, $timestamp);
+        $result = recordLectureAttendance($pdo, $stu_no, $course_code, $deviceName, $modality, $timestamp);
 
         if ($result['status'] === 'not_enrolled') {
             respond('error', 'Student not enrolled in this course.', 403);
@@ -848,7 +923,7 @@ if ($action === 'search_student') {
 // ─── add_course ────────────────────────────────────────────────────
 if ($action === 'add_course') {
     $code = strtoupper(trim($_POST['course_code'] ?? ''));
-    $name = trim($_POST['course_name'] ?? '');
+    $name = cleanDisplayName($_POST['course_name'] ?? '', 150);
 
     if (empty($code)) {
         respond('error', 'Course code is required.', 422);
@@ -1267,7 +1342,7 @@ if ($action === 'send_absent_report_email') {
                 $html .= "</tbody></table>";
             } else {
                 $html .= "<div style='padding: 24px; text-align: center; color: #ffd30a; font-weight: bold; font-size: 16px;'>
-                    ✓ All enrolled students were present!
+                    All enrolled students were present.
                 </div>";
             }
 
@@ -1522,7 +1597,7 @@ if ($action === 'update_my_profile') {
     if (empty($studentNo)) {
         echo json_encode(['status' => 'error', 'message' => 'No student number.']); exit;
     }
-    $name = trim($_POST['student_name'] ?? '');
+    $name = sanitizeName($_POST['student_name'] ?? '');
     $newPassword = trim($_POST['new_password'] ?? '');
     $currentPassword = trim($_POST['current_password'] ?? '');
 

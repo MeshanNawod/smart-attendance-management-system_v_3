@@ -39,7 +39,7 @@
                                     <?php foreach ($courses as $c): ?>
                                     <li class="list-group-item d-flex justify-content-between align-items-center py-1">
                                         <span><strong><?php echo htmlspecialchars($c['course_code']); ?></strong><?php if (!empty($c['course_name'])): ?> - <span class="text-muted"><?php echo htmlspecialchars($c['course_name']); ?></span><?php endif; ?></span>
-                                        <button class="btn btn-xs btn-outline-danger py-0 px-1" onclick="deleteCourse('<?php echo htmlspecialchars($c['course_code']); ?>')"><i class="bi bi-x-lg"></i></button>
+                                        <button class="btn btn-xs btn-outline-danger py-0 px-1" onclick="deleteCourse(<?php echo jsArg($c['course_code']); ?>)"><i class="bi bi-x-lg"></i></button>
                                     </li>
                                     <?php endforeach; ?>
                                 <?php else: ?>

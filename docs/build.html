@@ -6,6 +6,7 @@
 <title>Build the ESP32 node · Sentinel Swarm</title>
 <meta name="description" content="How to build the Sentinel Swarm ESP32 attendance node: parts list, wiring diagram, power diagram, step-by-step assembly, flashing the firmware and first run.">
 <link rel="icon" href="images/favicon.svg">
+<link rel="stylesheet" href="css/vendor/bootstrap-icons.css">
 <style>
   :root { --maroon:#9b1c1c; --ink:#161a22; --muted:#5d6573; --line:#e6e8ee; --bg:#f7f7f9; --card:#fff; font-family:"Segoe UI",system-ui,-apple-system,sans-serif; }
   * { box-sizing: border-box; }
@@ -175,11 +176,11 @@
     <p class="lead">The repository has a small test sketch for each part in <code>esp32_firmware/</code>. Add one module, run its test, and only then add the next. When something fails, you know exactly which wires to check.</p>
     <ol class="steps">
       <li><h4>Power and ESP32</h4><p>Set the converters (see Power). Fit the ESP32 on headers so it can be removed. Plug in USB, open the Serial Monitor at <b>115200</b> baud and upload any example sketch to check the board and driver.</p></li>
-      <li><h4>LCD</h4><p>Wire SDA → D21, SCL → D22, VCC → 5 V, GND. Upload <code>test_display/test_display.ino</code>.</p><p class="ok">✓ Text appears on all four lines. If the screen is blank or shows blocks, turn the contrast trimmer on the backpack.</p></li>
-      <li><h4>Keypad</h4><p>Rows to D13, D12, D14, D27 and columns to D26, D25, D33, D32. Upload <code>keypad_test/keypad_test.ino</code>.</p><p class="ok">✓ Every key prints the right character in the Serial Monitor.</p></li>
-      <li><h4>MicroSD card</h4><p>Format the card as FAT32. Wire CS → D4 and the SPI lines to D18, D19, D23. Upload <code>Test_sd/Test_sd.ino</code>.</p><p class="ok">✓ The sketch mounts the card and writes and reads a file.</p></li>
-      <li><h4>RFID reader</h4><p>Add SDA → D15 and RST → D22 (the SPI lines are already there). <b>3.3 V only.</b> Upload <code>Test_frid/Test_frid.ino</code>.</p><p class="ok">✓ The reader's firmware version prints, and tapping a card prints its UID.</p></li>
-      <li><h4>RTC (optional)</h4><p>SDA → D21, SCL → D22, 3.3 V. Upload <code>test_clock/test_clock.ino</code>.</p><p class="ok">✓ The date and time tick on the LCD every second.</p></li>
+      <li><h4>LCD</h4><p>Wire SDA → D21, SCL → D22, VCC → 5 V, GND. Upload <code>test_display/test_display.ino</code>.</p><p class="ok"><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Text appears on all four lines. If the screen is blank or shows blocks, turn the contrast trimmer on the backpack.</p></li>
+      <li><h4>Keypad</h4><p>Rows to D13, D12, D14, D27 and columns to D26, D25, D33, D32. Upload <code>keypad_test/keypad_test.ino</code>.</p><p class="ok"><i class="bi bi-check-circle-fill" aria-hidden="true"></i> Every key prints the right character in the Serial Monitor.</p></li>
+      <li><h4>MicroSD card</h4><p>Format the card as FAT32. Wire CS → D4 and the SPI lines to D18, D19, D23. Upload <code>Test_sd/Test_sd.ino</code>.</p><p class="ok"><i class="bi bi-check-circle-fill" aria-hidden="true"></i> The sketch mounts the card and writes and reads a file.</p></li>
+      <li><h4>RFID reader</h4><p>Add SDA → D15 and RST → D22 (the SPI lines are already there). <b>3.3 V only.</b> Upload <code>Test_frid/Test_frid.ino</code>.</p><p class="ok"><i class="bi bi-check-circle-fill" aria-hidden="true"></i> The reader's firmware version prints, and tapping a card prints its UID.</p></li>
+      <li><h4>RTC (optional)</h4><p>SDA → D21, SCL → D22, 3.3 V. Upload <code>test_clock/test_clock.ino</code>.</p><p class="ok"><i class="bi bi-check-circle-fill" aria-hidden="true"></i> The date and time tick on the LCD every second.</p></li>
       <li><h4>Fingerprint sensor and MOSFET</h4><p>Wire the MOSFET: gate to D5 through 220 Ω, a 10 kΩ resistor from gate to GND, source to GND, drain to the FM10A's GND wire. Then FM10A TX → D16, RX → D17, T-out → D35, VCC → 3.3 V.</p><p>The firmware turns the sensor on with D5 and power-cycles it if it ever hangs, so this step is worth doing even on the bench.</p></li>
       <li><h4>LED or buzzer</h4><p>Signal → D2, GND. It blinks or beeps on every scan.</p></li>
     </ol>

@@ -1012,12 +1012,18 @@ def _post_attendance(student_no):
             "student_no": student_no,
             "modality": "rpi_face",
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            # Without the key the server treats this as a browser and redirects to the login page,
+            # so no face attendance from the Pi was ever recorded. The server picks the course
+            # from the student's lecture that is running now.
+            "hardware_key": OTA_KEY or "",
         }).encode()
         url = f"{OTA_SERVER}/csc2052/api/student.php"
         req = urllib.request.Request(url, data=data, method="POST")
         with urllib.request.urlopen(req, timeout=8) as resp:
             body = resp.read().decode()
             log.info("Posted attendance for %s: %s", student_no, body[:100])
+            if not OTA_KEY:
+                log.warning("ota_api_key is not set in the config, so the server will refuse attendance posts.")
     except Exception as e:
         log.debug("Attendance post failed for %s: %s", student_no, e)
 

@@ -55,6 +55,9 @@ window.escapeHtml = function(unsafe) {
          .replace(/'/g, "&#039;");
 };
 
+// Short alias used by inline dashboard scripts that may run before ratings.js loads.
+if (typeof window.esc !== 'function') window.esc = function(t) { return t == null ? '' : window.escapeHtml(t); };
+
 window.toggleAiAssistant = function() {
     const panel = document.getElementById('ai-assistant-panel');
     if (!panel) return;
