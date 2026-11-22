@@ -1278,7 +1278,12 @@ document.addEventListener('click', function(e) {
 function switchTwinDevice() { currentEspIp = document.getElementById('twin-device-select')?.value || ''; for (let i = 0; i < 4; i++) document.getElementById(`lcd${i}`).textContent = 'Waiting for data... '; }
 function updateDigitalTwin(data) {
     const parts = data.split('|');
-    for (let i = 0; i < 4; i++) { const el = document.getElementById(`lcd${i}`); if (el) el.textContent = parts[i] || ''; }
+    for (let i = 0; i < 4; i++) {
+        const el = document.getElementById(`lcd${i}`);
+        if (!el) continue;
+        if (window.renderLcdLine) window.renderLcdLine(el, parts[i] || '');
+        else el.textContent = (parts[i] || '').replace(/~[1-7]/g, ' ');
+    }
 }
 function startLcdPolling() {
     if (lcdPollInterval) return;

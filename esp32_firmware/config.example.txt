@@ -20,6 +20,11 @@ SERVER_URL=http://192.168.1.10/csc2052
 # STATIC_SUBNET=255.255.255.0
 # STATIC_DNS=8.8.8.8
 
+# ── LCD (optional) ───────────────────────────────
+# Use LCD_LAYOUT=1604 if the bottom two rows of the display start four
+# characters to the right (some 16x4 modules address those rows differently).
+# LCD_LAYOUT=1604
+
 # ── Security Keys ────────────────────────────────────
 # HARDWARE_KEY must match SS_HARDWARE_API_KEY on the server
 # (Hardware Nodes → SD config generator shows the current value to admins).
