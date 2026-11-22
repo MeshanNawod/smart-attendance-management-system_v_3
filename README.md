@@ -347,4 +347,6 @@ csc2052/
 
 ## License
 
+This project is licensed under the GNU General Public License v2.0 or later (GPL-2.0-or-later). See [LICENSE](LICENSE).
+
 Academic project — University of Peradeniya
