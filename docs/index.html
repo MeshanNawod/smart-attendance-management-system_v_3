@@ -9,6 +9,7 @@
 <meta property="og:description" content="Seven ways to mark attendance, one live dashboard. ESP32 + Raspberry Pi + PHP/MySQL. Exhibited at Pera Nexus 2026.">
 <meta property="og:image" content="https://meshannawod.github.io/smart-attendance-management-system_v_3/images/admin-dashboard.png">
 <link rel="icon" href="images/favicon.svg">
+<link rel="stylesheet" href="css/vendor/bootstrap-icons.css">
 <style>
   :root {
     --maroon: #9b1c1c; --maroon-d: #6e1212; --gold: #f2b705; --blue: #1d6fe0; --green: #138a52; --purple: #6d3fd6;
@@ -61,7 +62,7 @@
   /* methods */
   .methods { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
   .method { background: var(--card); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; border-top: 4px solid var(--c, var(--maroon)); }
-  .method .ic { font-size: 28px; }
+  .method .ic { font-size: 28px; color: var(--c); line-height: 1; }
   .method h3 { margin: 10px 0 6px; font-size: 18px; }
   .method p { margin: 0; color: var(--muted); font-size: 14.5px; }
   .method small { display: inline-block; margin-top: 12px; font-size: 12px; font-weight: 600; color: var(--c, var(--maroon)); background: color-mix(in srgb, var(--c, var(--maroon)) 10%, white); padding: 3px 9px; border-radius: 999px; }
@@ -124,7 +125,7 @@
   .buildgrid .frame img { width: 100%; }
   .checks { list-style: none; padding: 0; margin: 0; }
   .checks li { padding: 9px 0 9px 30px; position: relative; border-bottom: 1px solid var(--line); font-size: 15px; }
-  .checks li::before { content: "✓"; position: absolute; left: 4px; color: var(--maroon); font-weight: 700; }
+  .checks li::before { content: "\f272"; font-family: "bootstrap-icons"; position: absolute; left: 4px; color: var(--maroon); font-weight: 700; }
   code { font-family: Consolas, monospace; font-size: .9em; background: #f1f2f5; padding: 1px 5px; border-radius: 4px; }
   .qrgrid { display:grid; grid-template-columns:1fr 1.15fr; gap:36px; align-items:center; }
   @media (max-width:900px) { .qrgrid { grid-template-columns:1fr; } }
@@ -160,7 +161,7 @@
 <header class="hero" id="top">
   <div class="wrap grid">
     <div>
-      <span class="pill">🏆 Exhibited at Pera Nexus 2026 · University of Peradeniya</span>
+      <span class="pill"><i class="bi bi-trophy-fill" aria-hidden="true"></i> Exhibited at Pera Nexus 2026 · University of Peradeniya</span>
       <h1>Attendance that <span>marks itself.</span></h1>
       <p>Sentinel Swarm replaces manual roll-call with smart nodes at the classroom door. Students check in with a fingerprint, RFID card, face, voice or QR code, and every check-in appears on a live dashboard for admins, lecturers and students.</p>
       <div class="btns">
@@ -188,13 +189,13 @@
     <h2>Seven ways to say “present”</h2>
     <p class="lead">Every method feeds the same attendance log, checked against the lecture that is running and the courses the student is enrolled in.</p>
     <div class="methods">
-      <div class="method" style="--c:#1d6fe0"><div class="ic">🖐️</div><h3>Fingerprint</h3><p>FM10A sensor on the ESP32 node. Enrol once and the template is shared with every sensor on campus.</p><small>ESP32 node</small></div>
-      <div class="method" style="--c:#6d3fd6"><div class="ic">💳</div><h3>RFID card</h3><p>Tap a student ID card on the MFRC522 reader for a check-in in under a second.</p><small>ESP32 node</small></div>
-      <div class="method" style="--c:#138a52"><div class="ic">📷</div><h3>Face at the entrance</h3><p>A Raspberry Pi camera recognises students as they walk in and posts attendance automatically.</p><small>Raspberry Pi</small></div>
-      <div class="method" style="--c:#c2410c"><div class="ic">🙂</div><h3>Face in the browser</h3><p>face-api.js runs in the lecturer's browser with a liveness check, using any webcam.</p><small>Web dashboard</small></div>
-      <div class="method" style="--c:#0f766e"><div class="ic">🎙️</div><h3>Voice</h3><p>Speaker verification by audio fingerprint: students say a phrase and are matched to their enrolled voice.</p><small>Web dashboard</small></div>
-      <a class="method" href="qr.html" style="--c:#b45309;text-decoration:none;color:inherit"><div class="ic">🔳</div><h3>Dynamic QR ↗</h3><p>A new code every 5 seconds and two scans in a row, so a photo sent to a friend is useless. <b style="color:#b45309">Try to cheat it →</b></p><small>Web dashboard</small></a>
-      <div class="method" style="--c:#9b1c1c"><div class="ic">✍️</div><h3>Manual</h3><p>Lecturers can mark a student present from any device when everything else fails.</p><small>Web dashboard</small></div>
+      <div class="method" style="--c:#1d6fe0"><div class="ic"><i class="bi bi-fingerprint" aria-hidden="true"></i></div><h3>Fingerprint</h3><p>FM10A sensor on the ESP32 node. Enrol once and the template is shared with every sensor on campus.</p><small>ESP32 node</small></div>
+      <div class="method" style="--c:#6d3fd6"><div class="ic"><i class="bi bi-credit-card-2-front" aria-hidden="true"></i></div><h3>RFID card</h3><p>Tap a student ID card on the MFRC522 reader for a check-in in under a second.</p><small>ESP32 node</small></div>
+      <div class="method" style="--c:#138a52"><div class="ic"><i class="bi bi-camera-video" aria-hidden="true"></i></div><h3>Face at the entrance</h3><p>A Raspberry Pi camera recognises students as they walk in and posts attendance automatically.</p><small>Raspberry Pi</small></div>
+      <div class="method" style="--c:#c2410c"><div class="ic"><i class="bi bi-person-bounding-box" aria-hidden="true"></i></div><h3>Face in the browser</h3><p>face-api.js runs in the lecturer's browser with a liveness check, using any webcam.</p><small>Web dashboard</small></div>
+      <div class="method" style="--c:#0f766e"><div class="ic"><i class="bi bi-mic-fill" aria-hidden="true"></i></div><h3>Voice</h3><p>Speaker verification by audio fingerprint: students say a phrase and are matched to their enrolled voice.</p><small>Web dashboard</small></div>
+      <a class="method" href="qr.html" style="--c:#b45309;text-decoration:none;color:inherit"><div class="ic"><i class="bi bi-qr-code" aria-hidden="true"></i></div><h3>Dynamic QR ↗</h3><p>A new code every 5 seconds and two scans in a row, so a photo sent to a friend is useless. <b style="color:#b45309">Try to cheat it →</b></p><small>Web dashboard</small></a>
+      <div class="method" style="--c:#9b1c1c"><div class="ic"><i class="bi bi-pencil-square" aria-hidden="true"></i></div><h3>Manual</h3><p>Lecturers can mark a student present from any device when everything else fails.</p><small>Web dashboard</small></div>
     </div>
   </div>
 </section>
@@ -247,10 +248,10 @@
         <rect class="bx" x="390" y="110" width="250" height="200" rx="14" style="stroke:#9b1c1c;stroke-width:2"/>
         <text class="h" x="415" y="145">PHP API</text>
         <text class="s" x="415" y="170">31 endpoints in api/</text>
-        <text class="s" x="415" y="194">✓ hardware key / login session</text>
-        <text class="s" x="415" y="216">✓ active lecture session?</text>
-        <text class="s" x="415" y="238">✓ student enrolled in course?</text>
-        <text class="s" x="415" y="260">✓ duplicate scan?</text>
+        <text class="s" x="415" y="194">· hardware key / login session</text>
+        <text class="s" x="415" y="216">· active lecture session?</text>
+        <text class="s" x="415" y="238">· student enrolled in course?</text>
+        <text class="s" x="415" y="260">· duplicate scan?</text>
         <text class="s" x="415" y="290">OTA command queue · heartbeats</text>
 
         <!-- right: DB -->
@@ -335,7 +336,7 @@
           <li><b>Flash and configure:</b> libraries, feature flags and <code>config.txt</code></li>
           <li><b>First run</b> and troubleshooting</li>
         </ul>
-        <div class="btns" style="margin:22px 0 0"><a class="btn" style="background:var(--maroon);color:#fff" href="wiring.html">⚡ Interactive wiring →</a><a class="btn" style="border:1px solid var(--maroon);color:var(--maroon)" href="build.html">Build guide</a><a class="btn" style="border:1px solid var(--line);color:var(--ink)" href="images/esp32-wiring.svg" download>Download diagram</a></div>
+        <div class="btns" style="margin:22px 0 0"><a class="btn" style="background:var(--maroon);color:#fff" href="wiring.html"><i class="bi bi-lightning-charge-fill" aria-hidden="true"></i> Interactive wiring →</a><a class="btn" style="border:1px solid var(--maroon);color:var(--maroon)" href="build.html">Build guide</a><a class="btn" style="border:1px solid var(--line);color:var(--ink)" href="images/esp32-wiring.svg" download>Download diagram</a></div>
       </div>
     </div>
   </div>

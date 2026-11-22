@@ -3,7 +3,7 @@
  * esp_courses.php — Lightweight ESP32 Hardware API
  * Endpoints designed for easy parsing on resource-constrained devices.
  *
- * Auth: hardware_key=ss_hw_api_key_2052 (GET param or X-Hardware-Key header)
+ * Auth: hardware key (hardware_key param or X-Hardware-Key header), or an admin session
  *
  * GET  ?action=list_courses            → plain text: CODE1,CODE2,CODE3
  * GET  ?action=get_course_name&code=X  → plain text: "CSC2052 - Intro to CS"
@@ -16,16 +16,26 @@
 require_once __DIR__ . '/../includes/db.php';
 
 // ── Auth ───────────────────────────────────────────────────────────────────
-$hw_key = $_SERVER['HTTP_X_HARDWARE_KEY'] ?? ($_GET['hardware_key'] ?? ($_POST['hardware_key'] ?? ''));
-$valid  = !empty($hw_key) && hash_equals(HARDWARE_API_KEY, $hw_key);
-
-if (!$valid) {
-    header('HTTP/1.1 401 Unauthorized');
-    echo 'ERR:UNAUTHORIZED';
-    exit;
+// v4: ESP32 nodes send the hardware key; admins can use the same actions
+// from the dashboard with their session (RFID desk, template backup).
+require_once __DIR__ . '/../includes/auth/access.php';
+if (!isHardwareRequest()) {
+    $__role = quietSessionRole();
+    if ($__role !== 'admin') {
+        http_response_code(401);
+        echo 'ERR:UNAUTHORIZED';
+        exit;
+    }
+    if (in_array(strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET'), ['POST', 'PUT', 'DELETE', 'PATCH'], true)) {
+        $__tok = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? ($_POST['csrf_token'] ?? '');
+        if (!$__tok || empty($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $__tok)) {
+            http_response_code(403);
+            echo 'ERR:CSRF';
+            exit;
+        }
+    }
 }
 
-header('Access-Control-Allow-Origin: *');
 header('Cache-Control: no-cache');
 
 $action = strtolower(trim($_GET['action'] ?? $_POST['action'] ?? ''));

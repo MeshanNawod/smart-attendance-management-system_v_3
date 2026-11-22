@@ -59,3 +59,7 @@ $RECYCLE.BIN/
 frontend/src-tauri/target/
 frontend/node_modules/
 frontend/dist/
+
+# v4: runtime buffers written by the API
+sys_latest_*.txt
+sys_ota_queue/

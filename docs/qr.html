@@ -8,6 +8,7 @@
 <meta property="og:title" content="Rotating QR attendance · Sentinel Swarm">
 <meta property="og:image" content="https://meshannawod.github.io/smart-attendance-management-system_v_3/images/qr-lecturer.png">
 <link rel="icon" href="images/favicon.svg">
+<link rel="stylesheet" href="css/vendor/bootstrap-icons.css">
 <style>
   :root { --maroon:#9b1c1c; --maroon-d:#6e1212; --gold:#f2b705; --ink:#161a22; --muted:#5d6573; --line:#e6e8ee; --bg:#f6f7f9; --card:#fff;
           --ok:#138a52; --warn:#b45309; --bad:#c81e1e; --blue:#1d6fe0; font-family:"Segoe UI",system-ui,-apple-system,sans-serif; }
@@ -151,7 +152,7 @@
 
   .tests { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:8px; }
   .tests div { background:#fff; border:1px solid var(--line); border-radius:10px; padding:8px 12px; font-size:13.5px; display:flex; gap:8px; align-items:baseline; }
-  .tests div::before { content:"✓"; color:var(--ok); font-weight:800; }
+  .tests div::before { content:"\f272"; font-family:"bootstrap-icons"; color:var(--ok); font-weight:800; }
   .limits { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
   @media (max-width:900px) { .limits { grid-template-columns:1fr; } }
   .limits div { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px; font-size:14.5px; }
@@ -189,7 +190,7 @@
 <header class="hero">
   <div class="wrap grid">
     <div>
-      <span class="pill">🔳 Anti-proxy QR attendance · v2</span>
+      <span class="pill"><i class="bi bi-qr-code" aria-hidden="true"></i> Anti-proxy QR attendance · v2</span>
       <h1>A QR code you <em>can't</em> send to a friend.</h1>
       <p>The lecturer's screen shows a new code every 5 seconds. A student must scan two codes in a row, during the lecture, from their own phone. A photo, an old code or a borrowed phone all fail.</p>
       <div class="facts">
@@ -218,7 +219,7 @@
 
     <div class="sim">
       <div class="card">
-        <h3>🖥️ Lecturer screen <small id="lectState">CSC2052 · lecture running</small></h3>
+        <h3><i class="bi bi-display" aria-hidden="true"></i> Lecturer screen <small id="lectState">CSC2052 · lecture running</small></h3>
         <div class="screen">
           <div class="qrwrap"><canvas id="lectCanvas"></canvas><div class="overlay" id="noLecture">No lecture is running for CSC2052.<br>Start the lecture first, then start the QR session.</div></div>
           <div class="bar"><span class="slotchip" id="lectSlot">#0</span><span id="lectCount">5.0s</span></div>
@@ -229,24 +230,24 @@
           <div><b id="stFlag" style="color:var(--bad)">0</b><span>Flagged</span></div>
         </div>
         <div class="lect-actions">
-          <button class="sbtn" id="btnLecture">⏹ End lecture</button>
+          <button class="sbtn" id="btnLecture"><i class="bi bi-stop-circle" aria-hidden="true"></i> End lecture</button>
           <button class="sbtn" id="btnReset">↺ Reset demo</button>
         </div>
       </div>
 
       <div class="card">
-        <h3>📱 Student phone</h3>
+        <h3><i class="bi bi-phone" aria-hidden="true"></i> Student phone</h3>
         <div class="phone"><div class="inner">
-          <div class="top"><b>Scan QR</b><span class="who" id="who">👤 You · your phone</span></div>
+          <div class="top"><b>Scan QR</b><span class="who" id="who">You · your phone</span></div>
           <div class="vf" id="vf"><canvas id="vfCanvas" width="240" height="240"></canvas><div class="laser"></div><div class="tag" id="vfTag">● Live camera</div></div>
           <div class="steps"><i id="s1">1</i><s id="sl"></s><i id="s2">2</i></div>
           <div class="msg" id="msg"><b>Ready</b>Point the camera at the lecturer's screen and scan.</div>
-          <button class="sbtn primary scanbtn" id="btnScan">📷 Scan the screen</button>
+          <button class="sbtn primary scanbtn" id="btnScan"><i class="bi bi-camera" aria-hidden="true"></i> Scan the screen</button>
         </div></div>
       </div>
 
       <div class="card checks-card">
-        <h3>🛡️ Server checks <small>in order</small></h3>
+        <h3><i class="bi bi-shield-check" aria-hidden="true"></i> Server checks <small>in order</small></h3>
         <ol class="checks" id="checks">
           <li><span class="n">1</span>It's a Sentinel Swarm attendance QR<code>invalid</code></li>
           <li><span class="n">2</span>Scanned within 10 s of appearing<code>expired</code></li>
@@ -261,12 +262,12 @@
     </div>
 
     <div class="scen" id="scen">
-      <button data-s="normal"><b>✅ Normal check-in</b><span>Scan, wait for the next code, scan again.</span></button>
-      <button data-s="photo"><b>📸 Photo sent to a friend</b><span>A friend at home scans a photo of the code.</span></button>
-      <button data-s="phone"><b>📱 Friend uses your phone</b><span>After you check in, a friend logs in on your phone.</span></button>
-      <button data-s="skip"><b>⏭️ Skip a code</b><span>Scan one code, then one 10 s later.</span></button>
-      <button data-s="ended"><b>🛑 After the lecture</b><span>Scan a code once the lecturer has ended the lecture.</span></button>
-      <button data-s="twice"><b>🔁 Check in twice</b><span>Scan again after attendance is recorded.</span></button>
+      <button data-s="normal"><b><i class="bi bi-check-circle" aria-hidden="true"></i> Normal check-in</b><span>Scan, wait for the next code, scan again.</span></button>
+      <button data-s="photo"><b><i class="bi bi-image" aria-hidden="true"></i> Photo sent to a friend</b><span>A friend at home scans a photo of the code.</span></button>
+      <button data-s="phone"><b><i class="bi bi-phone" aria-hidden="true"></i> Friend uses your phone</b><span>After you check in, a friend logs in on your phone.</span></button>
+      <button data-s="skip"><b><i class="bi bi-skip-forward" aria-hidden="true"></i> Skip a code</b><span>Scan one code, then one 10 s later.</span></button>
+      <button data-s="ended"><b><i class="bi bi-stop-circle" aria-hidden="true"></i> After the lecture</b><span>Scan a code once the lecturer has ended the lecture.</span></button>
+      <button data-s="twice"><b><i class="bi bi-arrow-repeat" aria-hidden="true"></i> Check in twice</b><span>Scan again after attendance is recorded.</span></button>
     </div>
     <div class="story" id="story"><p>Pick a scenario, or press “Scan the screen” on the phone yourself.</p></div>
   </div>
@@ -482,7 +483,7 @@ let user = YOU, device = "your-phone", photo = null, busy = false;
 let heroSlot = -1, heroTok = {}, lectSlot = -1;
 
 function liveData() { const s = slotAt(now()), t = tokenFor(s); return t ? `SS-QR|${COURSE}|${t}|${s}` : null; }
-function setWho() { $("who").textContent = `👤 ${user.name} · ${device === "your-phone" ? "your phone" : "friend's phone"}${photo ? " · 📸 photo" : ""}`; }
+function setWho() { $("who").textContent = `${user.name} · ${device === "your-phone" ? "your phone" : "friend's phone"}${photo ? " · photo" : ""}`; }
 
 function tick(t) {
   const n = now(), s = slotAt(n), left = (SLOT_MS - (n % SLOT_MS)) / 1000;
@@ -510,7 +511,7 @@ function stepper(stu) {
 }
 function showMsg(r) {
   const cls = { ok: "ok", half: "ok", warn: "warn", bad: "bad" }[r.kind] || "";
-  const title = r.kind === "ok" ? "🎉 Attendance recorded" : r.kind === "half" ? "✓ Scan 1 of 2" : r.status.replace(/_/g, " ");
+  const title = r.kind === "ok" ? "Attendance recorded" : r.kind === "half" ? "Scan 1 of 2 done" : r.status.replace(/_/g, " ");
   $("msg").className = "msg " + cls; $("msg").innerHTML = `<b>${title}</b>${r.message}`;
 }
 async function animateChecks(r) {
@@ -547,8 +548,8 @@ async function waitNextCode(label = "Waiting for the code to change…") {
   while (slotAt(now()) <= lastScanSlot) await sleep(100);
   await sleep(250);
 }
-async function fastForward(sec) { say(`⏩ ${sec} seconds later`, "ff"); offset += sec * 1000; await sleep(700); }
-function become(u, d, ph = null) { user = u; device = d; photo = ph; $("vf").classList.toggle("photo", !!ph); $("vfTag").textContent = ph ? "📸 Photo from WhatsApp" : "● Live camera"; setWho(); stepper(u); }
+async function fastForward(sec) { say(`${sec} seconds later`, "ff"); offset += sec * 1000; await sleep(700); }
+function become(u, d, ph = null) { user = u; device = d; photo = ph; $("vf").classList.toggle("photo", !!ph); $("vfTag").textContent = ph ? "Photo from WhatsApp" : "● Live camera"; setWho(); stepper(u); }
 function snapshot() {
   const c = document.createElement("canvas"); c.width = c.height = $("lectCanvas").width;
   c.getContext("2d").fillStyle = "#fff"; c.getContext("2d").fillRect(0, 0, c.width, c.height);
@@ -611,7 +612,7 @@ function toggleLecture(on) {
   if (on && !S.lecture.running) { resetServer(); lectSlot = -1; }
   else if (!on) S.lecture.running = false;
   $("noLecture").classList.toggle("show", !S.lecture.running);
-  $("btnLecture").textContent = S.lecture.running ? "⏹ End lecture" : "▶ Start lecture";
+  $("btnLecture").innerHTML = S.lecture.running ? '<i class="bi bi-stop-circle" aria-hidden="true"></i> End lecture' : '<i class="bi bi-play-circle" aria-hidden="true"></i> Start lecture';
   $("lectState").textContent = COURSE + (S.lecture.running ? " · lecture running" : " · no lecture");
   stats(); stepper(user);
 }
@@ -621,7 +622,7 @@ $("btnReset").onclick = () => { offset = 0; S.lecture.running = false; toggleLec
 /* timeline of slots */
 function buildTimeline() {
   const s0 = slotAt(Date.now()), tl = $("tl");
-  const labels = ["Too old: expired", "Scan 1 ✓", "Scan 2 ✓", "Not made yet", "Not made yet"];
+  const labels = ["Too old: expired", "Scan 1 done", "Scan 2 done", "Not made yet", "Not made yet"];
   const times = ["10 s ago", "5 s ago", "now", "in 5 s", "in 10 s"];
   tl.innerHTML = "";
   for (let i = 0; i < 5; i++) {

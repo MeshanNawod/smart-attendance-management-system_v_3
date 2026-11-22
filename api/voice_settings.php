@@ -2,7 +2,36 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/database/connection.php';
 requireCsrfIfMutating();
+
+// v4: role check (reads ['admin', 'teacher', 'student'], writes ['admin']).
+require_once __DIR__ . '/../includes/auth/access.php';
+if (!in_array($_SESSION['user_role'] ?? '', strtoupper($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'GET' ? ['admin', 'teacher', 'student'] : ['admin'], true)) {
+    accessDenied();
+}
 header('Content-Type: application/json; charset=utf-8');
+
+// v4: create the table on first use, so installs that skipped migration
+// 007_voice_settings.sql don't fail with a database error.
+try {
+    $pdo->exec(<<<'SQL'
+CREATE TABLE IF NOT EXISTS voice_settings (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    rate DECIMAL(3,1) NOT NULL DEFAULT 1.0,
+    pitch DECIMAL(3,1) NOT NULL DEFAULT 1.0,
+    voice_name VARCHAR(100) DEFAULT NULL,
+    announce_student_name TINYINT(1) DEFAULT 1,
+    announce_student_no TINYINT(1) DEFAULT 0,
+    announce_modality TINYINT(1) DEFAULT 1,
+    announce_course TINYINT(1) DEFAULT 0,
+    announce_timestamp TINYINT(1) DEFAULT 0,
+    announce_unknown_card TINYINT(1) DEFAULT 1,
+    logs_columns VARCHAR(255) DEFAULT 'student_no,student_name,modality,course_code,timestamp',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+SQL);
+} catch (PDOException $e) {
+    error_log('[voice_settings.php] table check: ' . $e->getMessage());
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'GET') {
     try {

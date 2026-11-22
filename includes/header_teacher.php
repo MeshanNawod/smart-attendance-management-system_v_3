@@ -48,3 +48,4 @@ $page = basename($_SERVER['PHP_SELF']);
 </div>
 <div class="container pb-5 mt-3">
 <meta name="csrf-token" content="<?php echo htmlspecialchars($_SESSION['csrf_token']??'', ENT_QUOTES, 'UTF-8'); ?>">
+<meta name="user-role" content="<?php echo htmlspecialchars($_SESSION['user_role'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">

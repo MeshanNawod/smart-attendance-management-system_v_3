@@ -29,6 +29,12 @@ if (file_exists($status_file_rpi)) {
 
 $page = basename($_SERVER['PHP_SELF']);
 $showHardware = isAdmin();
+
+// v4: admin-only pages (they only appear in the admin menu, but had no guard).
+if (in_array($page, ['device.php', 'students.php', 'lecture.php'], true) && !isAdmin()) {
+    header('Location: /csc2052/' . ($role === 'teacher' ? 'teacher_dashboard.php' : ($role === 'student' ? 'student_dashboard.php' : 'login.php')));
+    exit;
+}
 ?><!DOCTYPE html>
 <html lang="en">
 <head>
@@ -104,3 +110,4 @@ $showHardware = isAdmin();
 </div>
 <div class="container pb-5 mt-3">
 <meta name="csrf-token" content="<?php echo htmlspecialchars($_SESSION['csrf_token']??'', ENT_QUOTES, 'UTF-8'); ?>">
+<meta name="user-role" content="<?php echo htmlspecialchars($_SESSION['user_role'] ?? '', ENT_QUOTES, 'UTF-8'); ?>">

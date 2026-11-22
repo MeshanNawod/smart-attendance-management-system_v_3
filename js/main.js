@@ -57,6 +57,13 @@ window.showToast = function(message, type = 'info') {
 let _discoveredDevices = []; // cache of {ip, name, type, online, blocked}
 
 // Get CSRF token from meta tag
+// Role of the logged-in user (from <meta name="user-role">), used to skip
+// admin-only calls on the student and lecturer dashboards.
+function getUserRole() {
+    const meta = document.querySelector('meta[name="user-role"]');
+    return meta ? meta.content : '';
+}
+
 function getCsrfToken() {
     const meta = document.querySelector('meta[name="csrf-token"]');
     return meta ? meta.content : '';
@@ -71,11 +78,19 @@ function getCsrfToken() {
                 opts.body.append('csrf_token', getCsrfToken());
             }
         }
+        // Same-origin calls also carry the token as a header, so GET endpoints
+        // that act on devices (esp_ota_proxy.php) can check it too.
+        if (typeof url === 'string' && (!/^https?:\/\//i.test(url) || url.indexOf(location.origin) === 0)) {
+            opts = opts || {};
+            const headers = new Headers(opts.headers || {});
+            if (!headers.has('X-CSRF-Token')) headers.set('X-CSRF-Token', getCsrfToken());
+            opts.headers = headers;
+        }
         return origFetch.call(this, url, opts);
     };
 })();
 
-const OTA_API_KEY = 'ss_hw_api_key_2052';
+// v4: the hardware key is no longer shipped to browsers; ota.php accepts the admin session.
 
 function getEspIp() {
     const sel = document.getElementById('action-target-device');
@@ -258,7 +273,7 @@ window.requireDeviceForOTA = function() {
                    || (globalVal && globalVal !== '' && globalVal !== 'WEB_DASHBOARD' && globalVal !== '__loading__');
 
     if (!hasDevice) {
-        showToast('⚠️ Please select an active ESP32 hardware device first (in the "Target Device" selector above).', 'warning');
+        showToast('Please select an active ESP32 hardware device first (in the "Target Device" selector above).', 'warning');
         // Flash the warning alert
         const alertBanner = document.getElementById('students-device-required-alert');
         if (alertBanner) {
@@ -302,7 +317,7 @@ window.onStudentsDeviceChange = function(val) {
         }
         if (statusBadge) {
             statusBadge.className = 'badge bg-success';
-            statusBadge.textContent = val === 'WEB_DASHBOARD' ? 'Web Only' : 'Device Set ✓';
+            statusBadge.textContent = val === 'WEB_DASHBOARD' ? 'Web Only' : 'Device Set';
         }
         if (alertBanner) alertBanner.style.display = 'none';
     } else {
@@ -323,13 +338,13 @@ function populateStudentsDeviceSelector() {
     if (!sel) return;
 
     const currentVal = sel.value;
-    sel.innerHTML = '<option value="">⚠️ Select device first…</option>';
+    sel.innerHTML = '<option value="">Select device first…</option>';
 
     _discoveredDevices.forEach(dev => {
         if (dev.type === 'rpi' || dev.blocked) return;
         const opt = document.createElement('option');
         opt.value = dev.ip;
-        opt.textContent = `${dev.online ? '🟢' : '🔴'} ${dev.name} (${dev.ip})`;
+        opt.textContent = `${dev.online ? 'Online' : 'Offline'} - ${dev.name} (${dev.ip})`;
         sel.appendChild(opt);
     });
 
@@ -381,8 +396,12 @@ document.addEventListener('DOMContentLoaded', () => {
         window._bulkEnrollWrapped = true;
     }
 
-    loadCourseDatalist();
-    refreshAllCourseDropdowns();
+    if (getUserRole() === 'admin') {
+        loadCourseDatalist();
+    }
+    if (getUserRole() === 'admin' || getUserRole() === 'teacher') {
+        refreshAllCourseDropdowns();
+    }
 
     // Auto-discover hardware nodes immediately and every 10s
     if (document.getElementById('action-target-device') || document.getElementById('students-device-select')) {
@@ -474,7 +493,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
-    loadEmailConfig();
+    if (getUserRole() === 'admin') loadEmailConfig();
 
     // Load email logs if on lecture page
     if (document.getElementById('email-logs-container')) {
@@ -680,7 +699,6 @@ async function sendOtaCommand(command) {
             fd.append('action', 'send');
             fd.append('device', deviceName);
             fd.append('command', command);
-            fd.append('key', OTA_API_KEY);
             const response = await fetch('/csc2052/api/ota.php', { method: 'POST', body: fd });
             const data = await response.json();
             logToTerminal("[RX] " + (data.message || data.command || 'Queued'));
@@ -2023,7 +2041,7 @@ async function loadAdminRecentComments() {
     const container = document.getElementById('admin-recent-comments');
     if (!container) return;
     try {
-        const r = await fetch('/csc2052/api/ratings.php?action=get_comments&target_type=course&limit=20');
+        const r = await fetch('/csc2052/api/ratings.php?action=recent_comments&target_type=course&limit=20');
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const data = await r.json();
         const comments = data.comments || (Array.isArray(data) ? data : []);
@@ -2611,7 +2629,7 @@ window.openCustomEmailModal = function(source) {
     
     const recDiv = document.getElementById('custom-email-recipients');
     if (recipients.length > 0) {
-        recDiv.innerHTML = recipients.map(r => `<span class="badge bg-primary me-1 mb-1">${r.name} (${r.no})</span>`).join('');
+        recDiv.innerHTML = recipients.map(r => `<span class="badge bg-primary me-1 mb-1">${escapeHtml(r.name)} (${escapeHtml(r.no)})</span>`).join('');
         document.getElementById('custom-email-recipient').value = document.getElementById('default-recipient')?.value || '';
         
         if (source === 'analytics') {
@@ -2720,15 +2738,15 @@ window.loadEmailLogs = async function() {
             data.logs.forEach(log => {
                 const typeColors = { absent_report: 'warning', attendance_alert: 'danger', custom: 'info', absent_notice: 'secondary' };
                 const typeColor = typeColors[log.message_type] || 'secondary';
-                const studentInfo = (log.student_name && log.student_no) ? `${log.student_name}<br><small class="text-muted">${log.student_no}</small>` : (log.student_no || '—');
+                const studentInfo = (log.student_name && log.student_no) ? `${escapeHtml(log.student_name)}<br><small class="text-muted">${escapeHtml(log.student_no)}</small>` : escapeHtml(log.student_no || '—');
                 
                 html += `<tr>
                     <td class="text-muted small">${log.sent_at ? log.sent_at.substring(0, 16).replace('T', ' ') : ''}</td>
-                    <td><span class="badge bg-${typeColor}">${log.message_type || 'general'}</span></td>
-                    <td class="fw-semibold">${log.course_code || '—'}</td>
+                    <td><span class="badge bg-${typeColor}">${escapeHtml(log.message_type || 'general')}</span></td>
+                    <td class="fw-semibold">${escapeHtml(log.course_code || '—')}</td>
                     <td>${studentInfo}</td>
-                    <td><small>${log.recipient_email || ''}</small></td>
-                    <td class="text-truncate" style="max-width:200px;" title="${log.subject || ''}">${log.subject || '—'}</td>
+                    <td><small>${log.recipient_email ? escapeHtml(log.recipient_email) : ''}</small></td>
+                    <td class="text-truncate" style="max-width:200px;" title="${log.subject ? escapeHtml(log.subject) : ''}">${escapeHtml(log.subject || '—')}</td>
                 </tr>`;
             });
             
@@ -3209,14 +3227,14 @@ window.triggerRfidScan = function(inputId) {
                    : null;
 
     if (!targetIP) {
-        showToast('⚠️ Please select an active ESP32 hardware device first.', 'warning');
+        showToast('Please select an active ESP32 hardware device first.', 'warning');
         return;
     }
 
     input.value = '';
     input.placeholder = 'Scanning...';
     input.style.backgroundColor = '#fff3cd';
-    showToast('📱 Scan an RFID card on the hardware device...', 'info');
+    showToast('Scan an RFID card on the hardware device...', 'info');
 
     // Send SCAN_RFID command to device
     fetch(`/csc2052/api/esp_ota_proxy.php?ip=${encodeURIComponent(targetIP)}&command=${encodeURIComponent('SCAN_RFID')}`, { signal: AbortSignal.timeout(5000) })
@@ -3277,7 +3295,6 @@ window.sendOtaCommandRpi = async function(cmd) {
         fd.append('action', 'send');
         fd.append('device', deviceName);
         fd.append('command', cmd);
-        fd.append('key', 'ss_hw_api_key_2052');
         const res = await fetch('/csc2052/api/ota.php', { method: 'POST', body: fd });
         const data = await res.json();
         logToTerminalRpi('[RPi RX] ' + (data.message || data.command || 'Queued'));
@@ -3402,7 +3419,7 @@ window.downloadSdConfigFromForm = function() {
     const pass = document.getElementById('sd-wifi-pass')?.value?.trim() || '';
     const serverUrl = document.getElementById('sd-server-url')?.value?.trim() || 'http://10.0.0.5/csc2052';
     const method = document.getElementById('sd-enc-method')?.value || 'plaintext';
-    const hwKey = document.getElementById('sd-hw-key')?.value?.trim() || 'ss_hw_api_key_2052';
+    const hwKey = document.getElementById('sd-hw-key')?.value?.trim() || '';
     const token = document.getElementById('sd-enc-token')?.value?.trim() || '';
     if ((method === 'hmac' || method === 'aes') && !token) { alert('Enter a Secret Token for ' + method + ' mode.'); return; }
     // Extract IP from server URL
@@ -3447,7 +3464,7 @@ window.downloadSdConfig = function() {
     const method = prompt('Encryption Method (plaintext/hmac/aes):', 'hmac');
     if (!method) return;
     const token = prompt('Enter Secret Token (leave empty for legacy):', '');
-    const hwKey = 'ss_hw_api_key_2052';
+    const hwKey = document.getElementById('sd-hw-key')?.value?.trim() || '';
     let extraKeys = `HARDWARE_KEY=${hwKey}\n`;
     if (token) extraKeys += `SECRET_KEY=${token}\n`;
     const content = `# Sentinel Swarm ESP32 Config File\n# Place this file as config.txt on SD card root\nDEVICE_NAME=${name}\nWIFI_SSID=${ssid}\nWIFI_PASS=${pass}\nSERVER_URL=${serverUrl}\nENCRYPT_METHOD=${method}\n${extraKeys}`;
@@ -3826,11 +3843,11 @@ window.triggerRpiOta = async function() {
     try {
         const res = await fetch('/csc2052/api/ota.php?action=poll&device=rpi');
         const data = await res.json();
-        if (data.status === 'success' && data.commands) {
+        if (data.status === 'success' && data.command) {
             const postRes = await fetch(`/pi-api/api/ota`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(data.commands)
+                body: JSON.stringify({ command: data.command })
             });
             if (postRes.ok) showToast('Commands sent to Pi.', 'success');
             else showToast('Pi rejected commands.', 'warning');

@@ -121,7 +121,7 @@ function downloadSingleFpTpl(studentNo) {
 }
 
 function backupAllFpTpls() {
-    window.open('/csc2052/api/esp_courses.php?action=backup_all&hardware_key=ss_hw_api_key_2052', '_blank');
+    window.open('/csc2052/api/esp_courses.php?action=backup_all', '_blank');
 }
 
 function restoreFpTpls(input) {

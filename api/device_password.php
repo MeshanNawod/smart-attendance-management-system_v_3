@@ -5,7 +5,28 @@
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/database/connection.php';
 requireCsrfIfMutating();
+
+// v4: role check (admin only).
+require_once __DIR__ . '/../includes/auth/access.php';
+if (!in_array($_SESSION['user_role'] ?? '', ['admin'], true)) {
+    accessDenied();
+}
 header('Content-Type: application/json; charset=utf-8');
+
+// v4: create the table on first use, so installs that skipped migration
+// 008_device_password.sql don't fail with a database error.
+try {
+    $pdo->exec(<<<'SQL'
+CREATE TABLE IF NOT EXISTS device_password (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    device_id VARCHAR(50) NOT NULL UNIQUE,
+    system_pin VARCHAR(10) NOT NULL DEFAULT '123456',
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+SQL);
+} catch (PDOException $e) {
+    error_log('[device_password.php] table check: ' . $e->getMessage());
+}
 
 $device_id = trim($_GET['device_id'] ?? $_POST['device_id'] ?? 'DEFAULT');
 $device_id = substr(preg_replace('/[^a-zA-Z0-9_\-]/', '', $device_id), 0, 50);

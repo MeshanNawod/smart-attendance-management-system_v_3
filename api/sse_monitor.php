@@ -5,6 +5,9 @@
  * Streams ESP32 responses to the browser in real-time.
  */
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/auth/access.php';
+// v4: the live serial monitor is admin-only.
+if (($_SESSION['user_role'] ?? '') !== 'admin') accessDenied();
 
 set_time_limit(0);
 ignore_user_abort(true);

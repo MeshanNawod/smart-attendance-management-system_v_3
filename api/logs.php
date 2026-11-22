@@ -19,6 +19,10 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET' || !isset($_GET['action'])) {
 
 $action = $_GET['action'];
 
+// v4: attendance logs are for admins and lecturers only.
+require_once __DIR__ . '/../includes/auth/access.php';
+enforceActionPolicy($action, [], ['roles' => ['admin', 'teacher']]);
+
 // ─── Action: Fetch Logs ───────────────────────────────────────────
 if ($action === 'fetch_logs') {
     $search_student = trim($_GET['student_no']   ?? '');

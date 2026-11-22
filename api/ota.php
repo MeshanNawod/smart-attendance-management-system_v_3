@@ -13,12 +13,10 @@ require_once '../includes/db.php';
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 
-$hw_key = $_REQUEST['key'] ?? '';
-if (!hash_equals(HARDWARE_API_KEY, $hw_key)) {
-    http_response_code(403);
-    echo json_encode(['status' => 'error', 'message' => 'Unauthorized']);
-    exit;
-}
+// v4: devices use the hardware key; the admin dashboard uses its session
+// (the key is no longer embedded in public JavaScript).
+require_once __DIR__ . '/../includes/auth/access.php';
+requireHardwareOrRole('admin');
 
 $action = $_REQUEST['action'] ?? '';
 $device = trim($_REQUEST['device'] ?? '');
@@ -80,5 +78,5 @@ if ($action === 'clear') {
 }
 
 http_response_code(400);
-echo json_encode(['status' => 'error', 'message' => "Unknown action: {$action}"]);
+echo json_encode(['status' => 'error', 'message' => 'Unknown action.']);
 ?>

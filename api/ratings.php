@@ -123,6 +123,41 @@ case 'get_board': {
 // ────────────────────────────────────────────────────────────────────────────
 // GET: paginated comments for one target (threaded)
 // ────────────────────────────────────────────────────────────────────────────
+case 'recent_comments': {
+    // v4: newest comments across all targets, for the admin overview card.
+    if (!in_array($role, ['admin', 'teacher'], true)) {
+        http_response_code(403);
+        echo json_encode(['status'=>'error','message'=>'Access denied.']); exit;
+    }
+    $tt    = sanitizeTargetType($_GET['target_type'] ?? '');
+    $limit = min(max((int)($_GET['limit'] ?? 20), 1), 50);
+    try {
+        $where = 'fc.is_deleted=0';
+        $params = [];
+        if ($tt) { $where .= ' AND fc.target_type=?'; $params[] = $tt; }
+        if ($role === 'teacher') {
+            // Lecturers see comments on their own courses only.
+            $where .= " AND fc.target_type='course' AND fc.target_id IN (SELECT course_code FROM teacher_courses WHERE teacher_id=?)";
+            $params[] = (int)($_SESSION['teacher_id'] ?? 0);
+        }
+        $stmt = $pdo->prepare(
+            "SELECT fc.id, fc.target_type, fc.target_id, fc.body, fc.created_at, fc.user_role,
+                    CASE WHEN fc.user_role='student' THEN COALESCE(u.full_name, 'Student') ELSE COALESCE(u.full_name, u.username) END as author_name
+             FROM forum_comments fc
+             LEFT JOIN users u ON u.id = fc.user_id
+             WHERE $where
+             ORDER BY fc.created_at DESC
+             LIMIT " . (int)$limit
+        );
+        $stmt->execute($params);
+        echo json_encode(['status'=>'success','comments'=>$stmt->fetchAll()]);
+    } catch (PDOException $e) {
+        error_log('[Ratings] recent_comments: ' . $e->getMessage());
+        echo json_encode(['status'=>'error','message'=>'A database error occurred.']);
+    }
+    break;
+}
+
 case 'get_comments': {
     $tt     = sanitizeTargetType($_GET['target_type'] ?? '');
     $tid    = trim($_GET['target_id'] ?? '');

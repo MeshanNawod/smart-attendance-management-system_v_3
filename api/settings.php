@@ -9,6 +9,12 @@ require '../includes/db.php';
 
 requireCsrfIfMutating();
 
+// v4: role check (admin only).
+require_once __DIR__ . '/../includes/auth/access.php';
+if (!in_array($_SESSION['user_role'] ?? '', ['admin'], true)) {
+    accessDenied();
+}
+
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 

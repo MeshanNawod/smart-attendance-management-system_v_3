@@ -11,7 +11,19 @@
  */
 
 require_once __DIR__ . '/../includes/db.php';
-require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/config.php';
+require_once __DIR__ . '/../includes/auth/access.php';
+
+// v4: the ESP32 posts logs with the hardware key and has no session, so it
+// must not hit the login redirect in auth.php. Hardware may only insert.
+if (isHardwareRequest()) {
+    $__hwAction = strtolower(trim($_GET['action'] ?? $_POST['action'] ?? ''));
+    if ($__hwAction !== 'insert') accessDenied();
+    quietSessionRole();
+} else {
+    require_once __DIR__ . '/../includes/auth.php';
+    requireCsrfIfMutating();
+}
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
@@ -92,7 +104,7 @@ if ($action === 'insert') {
 // =====================================================================
 if ($action === 'fetch') {
     // Must be logged in admin/teacher
-    if (!isset($_SESSION['user_role']) || !in_array($_SESSION['user_role'], ['admin','teacher','student'])) {
+    if (!isset($_SESSION['user_role']) || !in_array($_SESSION['user_role'], ['admin','teacher'])) {
         http_response_code(401);
         echo json_encode(['status'=>'error','message'=>'Unauthorized']);
         exit;
@@ -154,7 +166,7 @@ if ($action === 'fetch') {
 // 3. FETCH DISTINCT TYPES / SOURCES
 // =====================================================================
 if ($action === 'fetch_types') {
-    if (!isset($_SESSION['user_role'])) {
+    if (!isset($_SESSION['user_role']) || !in_array($_SESSION['user_role'], ['admin','teacher'])) {
         http_response_code(401);
         echo json_encode(['status'=>'error','message'=>'Unauthorized']);
         exit;
@@ -236,7 +248,7 @@ if ($action === 'esp_sd_log') {
 // 5. CLEAR LOGS (admin only)
 // =====================================================================
 if ($action === 'clear') {
-    if (!isAdmin()) {
+    if (!isAdmin() || $_SERVER['REQUEST_METHOD'] !== 'POST') {
         http_response_code(403);
         echo json_encode(['status'=>'error','message'=>'Admin only']);
         exit;

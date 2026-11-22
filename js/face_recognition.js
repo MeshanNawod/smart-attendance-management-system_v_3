@@ -336,7 +336,7 @@ window.bulkEnrollFromImages = async function (fileInput) {
                 .withFaceLandmarks().withFaceDescriptor();
 
             if (!detection) {
-                log(`  ✗ No face found in ${file.name} — skipped.`);
+                log(`  [skip] No face found in ${file.name}.`);
                 failed++;
             } else {
                 const descriptor = Array.from(detection.descriptor);
@@ -349,15 +349,15 @@ window.bulkEnrollFromImages = async function (fileInput) {
                 const result = await res.json();
 
                 if (result.status === 'success') {
-                    log(`  ✔ ${studentNo} enrolled successfully.`);
+                    log(`  [ok] ${studentNo} enrolled successfully.`);
                     ok++;
                 } else {
-                    log(`  ✗ ${studentNo} DB error: ${result.message}`);
+                    log(`  [error] ${studentNo} database error: ${result.message}`);
                     failed++;
                 }
             }
         } catch (e) {
-            log(`  ✗ ${file.name} exception: ${e.message}`);
+            log(`  [error] ${file.name}: ${e.message}`);
             failed++;
         }
 
@@ -365,7 +365,7 @@ window.bulkEnrollFromImages = async function (fileInput) {
         if (progBar) progBar.style.width = Math.round((done / files.length) * 100) + '%';
     }
 
-    log(`\n✅ Done. Enrolled: ${ok} | Failed: ${failed}`);
+    log(`\nDone. Enrolled: ${ok} | Failed: ${failed}`);
     fileInput.value = '';
 };
 
@@ -545,10 +545,10 @@ function textureVariance(video, box) {
 
 // Pick a random unpredictable challenge each session
 const CHALLENGES = [
-    { id:'BLINK2',  label:'👁  Blink TWICE (Slowly)',      emoji:'👁',  voice:'Please blink twice, slowly.'    },
-    { id:'TURN_L',  label:'◀  Turn head LEFT',      emoji:'◀',  voice:'Turn your head left.'   },
-    { id:'TURN_R',  label:'▶  Turn head RIGHT',     emoji:'▶',  voice:'Turn your head right.'  },
-    { id:'NOD',     label:'▼  NOD your head down',  emoji:'▼',  voice:'Nod your head down.'    },
+    { id:'BLINK2',  label:'Blink TWICE (slowly)',  icon:'bi-eye',                 voice:'Please blink twice, slowly.' },
+    { id:'TURN_L',  label:'Turn head LEFT',        icon:'bi-arrow-left-circle',   voice:'Turn your head left.' },
+    { id:'TURN_R',  label:'Turn head RIGHT',       icon:'bi-arrow-right-circle',  voice:'Turn your head right.' },
+    { id:'NOD',     label:'Nod your head DOWN',    icon:'bi-arrow-down-circle',   voice:'Nod your head down.' },
 ];
 
 function pickChallenge() {
@@ -707,7 +707,7 @@ function startRecognitionLoop(video, overlay, statusText) {
                 ctx.strokeStyle = boxColor; ctx.lineWidth = 2;
                 ctx.strokeRect(box.x, box.y, box.width, box.height);
                 ctx.fillStyle = boxColor; ctx.font = '12px monospace';
-                const topLabel = live ? result.toString() : (challenge?.emoji + ' ' + chalHint);
+                const topLabel = live ? result.toString() : chalHint;
                 ctx.fillText(topLabel, box.x + 4, box.y - 5);
 
                 if (result.label === 'unknown') continue;
@@ -731,7 +731,7 @@ function startRecognitionLoop(video, overlay, statusText) {
                                     <div>
                                         <div class="fw-bold">${escapeHtml(studentName)} <small class="fw-normal">(${escapeHtml(studentNo)})</small></div>
                                         <div class="d-flex align-items-center gap-2 mt-1">
-                                            <span class="fs-5">${challenge.emoji}</span>
+                                            <span class="fs-5"><i class="bi ${challenge.icon}"></i></span>
                                             <span class="fw-bold text-dark" id="challenge-label">${challenge.label}</span>
                                         </div>
                                     </div>
@@ -754,7 +754,7 @@ function startRecognitionLoop(video, overlay, statusText) {
                     const bar = document.getElementById('challenge-bar');
                     if (bar) bar.style.width = chalPct + '%';
                     const lbl = document.getElementById('lbl-texture');
-                    if (lbl) lbl.textContent = texOk ? 'Texture: ✔ Real' : `Texture: ✗ Flat (σ=${texVar.toFixed(1)}) — show real face`;
+                    if (lbl) lbl.textContent = texOk ? 'Texture: real' : `Texture: flat (σ=${texVar.toFixed(1)}) — show real face`;
                 } else if (mode === 'attendance' && live) {
                     const isAuto = document.getElementById('web-attendance-auto')?.checked;
                     if (isAuto && !window.hasAutoMarked) {
@@ -765,7 +765,7 @@ function startRecognitionLoop(video, overlay, statusText) {
                             <div class="alert alert-success py-2 mb-0 shadow-sm d-flex justify-content-between align-items-center">
                                 <div>
                                     <span class="fw-bold d-block">${escapeHtml(studentName)}</span>
-                                    <small>${escapeHtml(studentNo)} <span class="badge bg-success ms-1">✔ Verified &amp; Marked</span></small>
+                                    <small>${escapeHtml(studentNo)} <span class="badge bg-success ms-1"><i class="bi bi-check-circle-fill me-1"></i>Verified &amp; Marked</span></small>
                                 </div>
                             </div>`;
                     } else if (!isAuto && !window.hasAutoMarked) {
@@ -775,7 +775,7 @@ function startRecognitionLoop(video, overlay, statusText) {
                             <div class="alert alert-success py-2 mb-0 shadow-sm d-flex justify-content-between align-items-center">
                                 <div class="text-start lh-sm">
                                     <span class="fw-bold d-block">${escapeHtml(studentName)}</span>
-                                    <small>${escapeHtml(studentNo)} <span class="badge bg-success ms-1">✔ Live</span></small>
+                                    <small>${escapeHtml(studentNo)} <span class="badge bg-success ms-1"><i class="bi bi-check-circle-fill me-1"></i>Live</span></small>
                                 </div>
                                 <button id="web-face-mark-btn-${studentNo}" class="btn btn-sm btn-success fw-bold px-3"
                                     onclick="markWebFaceAttendance('${studentNo}')">

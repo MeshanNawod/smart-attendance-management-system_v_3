@@ -755,7 +755,7 @@ function generateAssessmentReport(d) {
     const el = document.getElementById('analyzer-assessment-text');
     if (!el) return;
 
-    let text = `<b>Statistical Summary:</b> student <b>${d.student_name}</b> exhibits an attendance rate of <b>${d.student_rate}%</b> across <b>${d.total_sessions}</b> sessions in course <b>${d.total_sessions > 0 ? '' : ''}${advancedAnalyticsData.student_name ? '' : ''}</b>. `;
+    let text = `<b>Statistical Summary:</b> student <b>${escapeHtml(d.student_name)}</b> exhibits an attendance rate of <b>${d.student_rate}%</b> across <b>${d.total_sessions}</b> sessions in course <b>${d.total_sessions > 0 ? '' : ''}${advancedAnalyticsData.student_name ? '' : ''}</b>. `;
     
     // Performance vs Peers
     const diff = d.student_rate - d.class_mean;

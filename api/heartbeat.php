@@ -12,6 +12,8 @@ header('X-Content-Type-Options: nosniff');
 
 $device_type = strtolower(trim($_GET['device'] ?? 'esp32'));
 $device_name = trim($_GET['name'] ?? 'Unknown Node');
+// v4: device names are shown in the dashboard — keep them plain text.
+$device_name = substr(preg_replace('/[^A-Za-z0-9 _.\-]/', '', $device_name), 0, 40) ?: 'Unknown Node';
 $token       = $_GET['token']  ?? '';
 $method      = $_GET['method'] ?? 'plaintext';
 
