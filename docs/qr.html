@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rotating QR attendance · Sentinel Swarm</title>
+<meta name="description" content="How Sentinel Swarm's rotating QR attendance stops proxy attendance: a code that changes every 5 seconds, two consecutive scans, codes tied to the running lecture, and one phone per student. Try the attacks yourself.">
+<meta property="og:title" content="Rotating QR attendance · Sentinel Swarm">
+<meta property="og:image" content="https://meshannawod.github.io/smart-attendance-management-system_v_3/images/qr-lecturer.png">
+<link rel="icon" href="images/favicon.svg">
+<style>
+  :root { --maroon:#9b1c1c; --maroon-d:#6e1212; --gold:#f2b705; --ink:#161a22; --muted:#5d6573; --line:#e6e8ee; --bg:#f6f7f9; --card:#fff;
+          --ok:#138a52; --warn:#b45309; --bad:#c81e1e; --blue:#1d6fe0; font-family:"Segoe UI",system-ui,-apple-system,sans-serif; }
+  * { box-sizing:border-box; }
+  html { scroll-behavior:smooth; }
+  body { margin:0; color:var(--ink); background:var(--bg); line-height:1.55; }
+  a { color:var(--maroon); }
+  code { font-family:Consolas,"Cascadia Mono",monospace; font-size:.9em; background:#f1f2f5; border:1px solid var(--line); padding:1px 6px; border-radius:5px; }
+  .wrap { max-width:1180px; margin:0 auto; padding:0 24px; }
+  section { padding:64px 0; }
+  h2 { font-size:clamp(26px,3.2vw,34px); margin:0 0 8px; letter-spacing:-.01em; }
+  .eyebrow { text-transform:uppercase; letter-spacing:.12em; font-size:12px; font-weight:700; color:var(--maroon); margin-bottom:6px; }
+  .lead { color:var(--muted); font-size:17px; max-width:780px; margin:0 0 30px; }
+
+  nav { position:sticky; top:0; z-index:20; background:rgba(255,255,255,.93); backdrop-filter:blur(8px); border-bottom:1px solid var(--line); }
+  nav .wrap { display:flex; align-items:center; gap:20px; height:60px; }
+  nav .brand { display:flex; gap:10px; align-items:center; font-weight:700; color:var(--ink); text-decoration:none; }
+  nav .brand img { width:28px; }
+  nav .links { margin-left:auto; display:flex; gap:18px; font-size:14px; }
+  nav .links a { color:var(--muted); text-decoration:none; } nav .links a:hover, nav .links a.cur { color:var(--maroon); }
+  @media (max-width:860px) { nav .links { display:none; } }
+
+  /* hero */
+  .hero { background:radial-gradient(900px 420px at 90% -10%, #ffe08a55, transparent 60%), linear-gradient(160deg,#1e0707,#6e1212 58%,#9b1c1c); color:#fff; padding:64px 0 70px; overflow:hidden; }
+  .hero .grid { display:grid; grid-template-columns:1.15fr .85fr; gap:40px; align-items:center; }
+  @media (max-width:900px) { .hero .grid { grid-template-columns:1fr; } }
+  .hero h1 { font-size:clamp(34px,4.8vw,54px); line-height:1.05; margin:12px 0 16px; letter-spacing:-.02em; }
+  .hero h1 em { font-style:normal; color:var(--gold); }
+  .hero p { color:#f1dcdc; font-size:18px; max-width:600px; margin:0 0 22px; }
+  .pill { display:inline-flex; gap:8px; align-items:center; background:rgba(255,255,255,.12); border:1px solid rgba(255,255,255,.25); padding:6px 12px; border-radius:999px; font-size:13px; }
+  .facts { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; max-width:600px; }
+  .facts div { background:rgba(255,255,255,.08); border:1px solid rgba(255,255,255,.18); border-radius:12px; padding:12px 14px; }
+  .facts b { display:block; font-size:24px; color:var(--gold); line-height:1.1; }
+  .facts span { font-size:13px; color:#f1dcdc; }
+  .btns { display:flex; gap:10px; flex-wrap:wrap; margin-top:24px; }
+  .btn { display:inline-flex; align-items:center; gap:8px; padding:11px 18px; border-radius:10px; font-weight:600; text-decoration:none; font-size:15px; border:0; cursor:pointer; font-family:inherit; }
+  .btn.gold { background:var(--gold); color:#2a1a00; } .btn.ghost { border:1px solid rgba(255,255,255,.45); color:#fff; background:transparent; }
+  .heroqr { justify-self:center; background:#fff; border-radius:20px; padding:18px 18px 14px; box-shadow:0 30px 80px rgba(0,0,0,.45); width:min(360px,100%); position:relative; }
+  .heroqr canvas { width:100%; aspect-ratio:1; display:block; }
+  .heroqr .meta { display:flex; justify-content:space-between; align-items:center; margin-top:10px; font:13px Consolas,monospace; color:#334155; }
+  .slotchip { background:var(--blue); color:#fff; border-radius:999px; padding:3px 10px; font-weight:700; }
+  .ring { width:30px; height:30px; transform:rotate(-90deg); }
+  .ring circle { fill:none; stroke-width:4; }
+  .ring .bg { stroke:#e5e7eb; } .ring .fg { stroke:var(--maroon); stroke-linecap:round; transition:stroke-dashoffset .1s linear; }
+
+  /* simulator */
+  .sim { display:grid; grid-template-columns:1.05fr .8fr 1fr; gap:18px; align-items:start; }
+  @media (max-width:1080px) { .sim { grid-template-columns:1fr 1fr; } .checks-card { grid-column:1 / -1; } }
+  @media (max-width:700px) { .sim { grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:16px; padding:16px; box-shadow:0 10px 30px rgba(20,20,40,.06); }
+  .card h3 { margin:0 0 10px; font-size:15px; display:flex; align-items:center; gap:8px; }
+  .card h3 small { margin-left:auto; font-weight:500; color:var(--muted); font-size:12px; }
+  .screen { background:#0f172a; border-radius:12px; padding:12px; position:relative; }
+  .screen .qrwrap { background:#fff; border-radius:8px; padding:10px; position:relative; }
+  .screen canvas { width:100%; aspect-ratio:1; display:block; }
+  .screen .bar { display:flex; justify-content:space-between; align-items:center; color:#cbd5e1; font:12px Consolas,monospace; margin-top:8px; }
+  .overlay { position:absolute; inset:10px; border-radius:6px; background:rgba(255,255,255,.94); display:none; place-items:center; text-align:center; padding:20px; color:var(--bad); font-weight:600; }
+  .overlay.show { display:grid; animation:fade .3s; }
+  .stats { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; margin-top:12px; }
+  .stats div { border:1px solid var(--line); border-radius:10px; text-align:center; padding:8px 4px; background:#fafbfc; }
+  .stats b { display:block; font-size:22px; line-height:1.2; }
+  .stats span { font-size:11.5px; color:var(--muted); }
+  .stats .bump { animation:bump .6s; }
+  .lect-actions { display:flex; gap:8px; margin-top:10px; }
+  .sbtn { font:inherit; font-size:13px; font-weight:600; padding:8px 12px; border-radius:9px; border:1px solid var(--line); background:#fff; cursor:pointer; }
+  .sbtn:hover:not(:disabled) { border-color:var(--maroon); color:var(--maroon); }
+  .sbtn:disabled { opacity:.5; cursor:default; }
+  .sbtn.primary { background:var(--maroon); border-color:var(--maroon); color:#fff; } .sbtn.primary:hover:not(:disabled) { color:#fff; filter:brightness(1.1); }
+
+  .phone { width:100%; max-width:290px; margin:0 auto; background:#111827; border-radius:34px; padding:12px; box-shadow:0 18px 40px rgba(0,0,0,.25); }
+  .phone .inner { background:#f8fafc; border-radius:24px; overflow:hidden; }
+  .phone .top { background:linear-gradient(135deg,#1d4ed8,#3b82f6); color:#fff; padding:10px 14px 9px; font-size:12px; }
+  .phone .top b { display:block; font-size:14px; }
+  .who { display:inline-flex; gap:6px; align-items:center; background:rgba(255,255,255,.18); border-radius:999px; padding:2px 9px; margin-top:4px; font-size:11.5px; }
+  .vf { position:relative; margin:10px; border-radius:12px; overflow:hidden; background:#0b1020; aspect-ratio:1; }
+  .vf canvas { width:100%; height:100%; display:block; opacity:.92; }
+  .vf .laser { position:absolute; left:8%; right:8%; height:2px; background:#22c55e; box-shadow:0 0 10px #22c55e; top:15%; animation:laser 2.2s ease-in-out infinite; }
+  .vf .tag { position:absolute; top:8px; left:8px; background:rgba(0,0,0,.6); color:#fff; font-size:11px; padding:2px 8px; border-radius:999px; }
+  .vf.photo canvas { filter:sepia(.35) saturate(.7) contrast(.95); }
+  .vf.photo .laser { display:none; }
+  .steps { display:flex; align-items:center; justify-content:center; gap:0; padding:2px 16px 6px; }
+  .steps i { width:30px; height:30px; border-radius:50%; border:2px solid #cbd5e1; display:grid; place-items:center; font-style:normal; font-weight:700; font-size:13px; color:#64748b; background:#fff; transition:.3s; }
+  .steps i.on { border-color:var(--ok); background:var(--ok); color:#fff; transform:scale(1.08); }
+  .steps i.wait { border-color:var(--gold); color:#92400e; animation:pulse 1.2s infinite; }
+  .steps s { flex:1; height:3px; background:#e2e8f0; max-width:70px; text-decoration:none; position:relative; overflow:hidden; }
+  .steps s.on::after { content:""; position:absolute; inset:0; background:var(--ok); animation:grow .5s forwards; transform-origin:left; }
+  .msg { margin:6px 10px 10px; border-radius:12px; padding:10px 12px; font-size:12.5px; min-height:62px; border:1px solid var(--line); background:#fff; transition:.25s; }
+  .msg b { display:block; font-size:12px; letter-spacing:.04em; text-transform:uppercase; margin-bottom:2px; }
+  .msg.ok { background:#ecfdf5; border-color:#86efac; color:#065f46; }
+  .msg.warn { background:#fffbeb; border-color:#fcd34d; color:#78350f; }
+  .msg.bad { background:#fef2f2; border-color:#fca5a5; color:#7f1d1d; animation:shake .4s; }
+  .phone .scanbtn { display:block; width:calc(100% - 20px); margin:0 10px 12px; }
+
+  .checks { list-style:none; margin:0; padding:0; counter-reset:c; }
+  .checks li { display:grid; grid-template-columns:26px 1fr auto; gap:8px; align-items:center; padding:7px 8px; border-radius:9px; font-size:13.5px; transition:background .25s; }
+  .checks li .n { width:22px; height:22px; border-radius:50%; display:grid; place-items:center; font-size:11px; font-weight:700; background:#eef0f4; color:#64748b; transition:.25s; }
+  .checks li code { font-size:11px; opacity:.0; transition:.25s; }
+  .checks li.pass { background:#f0fdf4; } .checks li.pass .n { background:var(--ok); color:#fff; }
+  .checks li.fail { background:#fef2f2; } .checks li.fail .n { background:var(--bad); color:#fff; } .checks li.fail code { opacity:1; color:var(--bad); border-color:#fca5a5; }
+  .checks li.warn { background:#fffbeb; } .checks li.warn .n { background:var(--gold); color:#3b2700; } .checks li.warn code { opacity:1; color:#92400e; border-color:#fcd34d; }
+  .checks li.done code { opacity:1; color:var(--ok); border-color:#86efac; }
+  .checks li.skip { opacity:.45; }
+
+  .scen { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px; margin-top:18px; }
+  .scen button { text-align:left; font:inherit; background:#fff; border:1px solid var(--line); border-radius:12px; padding:12px 14px; cursor:pointer; transition:.2s; }
+  .scen button:hover:not(:disabled) { border-color:var(--maroon); transform:translateY(-2px); box-shadow:0 8px 20px rgba(20,20,40,.08); }
+  .scen button:disabled { opacity:.5; cursor:default; }
+  .scen button b { display:block; font-size:14.5px; margin-bottom:2px; }
+  .scen button span { font-size:12.5px; color:var(--muted); }
+  .scen button.run { border-color:var(--maroon); background:#fff7f7; }
+  .story { margin-top:14px; background:#111827; color:#e5e7eb; border-radius:12px; padding:12px 16px; font:13px Consolas,monospace; min-height:48px; }
+  .story p { margin:3px 0; animation:fade .3s; } .story .ok { color:#86efac; } .story .bad { color:#fca5a5; } .story .warn { color:#fcd34d; } .story .ff { color:#93c5fd; }
+
+  /* timeline */
+  .tl { display:grid; grid-template-columns:repeat(5,1fr); gap:8px; position:relative; margin-top:10px; }
+  .slot { background:#fff; border:1px solid var(--line); border-radius:12px; padding:12px; text-align:center; position:relative; }
+  .slot small { color:var(--muted); font-size:12px; display:block; } .slot b { font-family:Consolas,monospace; font-size:14px; }
+  .slot .mini { width:54px; height:54px; margin:8px auto 6px; display:block; image-rendering:pixelated; }
+  .slot.s1 { border-color:var(--ok); box-shadow:0 0 0 3px #bbf7d0; } .slot.s2 { border-color:var(--ok); box-shadow:0 0 0 3px #bbf7d0; }
+  .slot .lab { font-size:12px; font-weight:700; color:var(--ok); min-height:18px; }
+  .slot.x .lab { color:var(--bad); }
+  .tlnote { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin-top:22px; }
+  @media (max-width:800px) { .tl { grid-template-columns:repeat(3,1fr); } .tl .slot:nth-child(n+4) { display:none; } .tlnote { grid-template-columns:1fr; } }
+  .tlnote div { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px; font-size:14.5px; }
+  .tlnote b { display:block; margin-bottom:4px; }
+
+  /* upgrade */
+  .up { display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+  @media (max-width:820px) { .up { grid-template-columns:1fr; } }
+  .up .item { background:#fff; border:1px solid var(--line); border-radius:14px; padding:16px 18px; border-left:5px solid var(--c,var(--maroon)); }
+  .up .item .k { font-size:11.5px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:var(--c,var(--maroon)); }
+  .up .item h4 { margin:4px 0 8px; font-size:16.5px; }
+  .ba { display:grid; grid-template-columns:auto 1fr; gap:4px 10px; font-size:14px; }
+  .ba .b { color:var(--bad); font-weight:700; } .ba .a { color:var(--ok); font-weight:700; }
+  .shots { display:grid; grid-template-columns:1.6fr 1fr; gap:16px; margin-top:26px; align-items:start; }
+  @media (max-width:900px) { .shots { grid-template-columns:1fr; } }
+  figure { margin:0; background:#fff; border:1px solid var(--line); border-radius:14px; padding:10px; cursor:zoom-in; }
+  figure img { width:100%; display:block; border-radius:8px; }
+  figcaption { font-size:13px; color:var(--muted); padding:8px 4px 2px; }
+  .phones2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+
+  .tests { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:8px; }
+  .tests div { background:#fff; border:1px solid var(--line); border-radius:10px; padding:8px 12px; font-size:13.5px; display:flex; gap:8px; align-items:baseline; }
+  .tests div::before { content:"✓"; color:var(--ok); font-weight:800; }
+  .limits { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+  @media (max-width:900px) { .limits { grid-template-columns:1fr; } }
+  .limits div { background:#fff; border:1px solid var(--line); border-radius:12px; padding:16px; font-size:14.5px; }
+  .limits b { display:block; margin-bottom:4px; }
+  table { width:100%; border-collapse:collapse; background:#fff; border:1px solid var(--line); border-radius:12px; overflow:hidden; font-size:14px; }
+  th, td { text-align:left; padding:10px 12px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { background:#f6f7fa; font-size:12px; text-transform:uppercase; letter-spacing:.05em; color:var(--muted); }
+  tr:last-child td { border-bottom:0; }
+  footer { background:#1b0707; color:#d8c9c9; padding:34px 0; font-size:14px; }
+  footer a { color:#fff; } footer .wrap { display:flex; justify-content:space-between; flex-wrap:wrap; gap:14px; }
+  dialog { border:0; padding:0; background:transparent; max-width:96vw; } dialog::backdrop { background:rgba(10,10,15,.86); }
+  dialog img { max-width:96vw; max-height:92vh; border-radius:8px; display:block; }
+
+  @keyframes laser { 0%,100% { top:12%; } 50% { top:86%; } }
+  @keyframes pulse { 50% { box-shadow:0 0 0 6px rgba(242,183,5,.25); } }
+  @keyframes grow { from { transform:scaleX(0); } to { transform:scaleX(1); } }
+  @keyframes shake { 20%,60% { transform:translateX(-4px); } 40%,80% { transform:translateX(4px); } }
+  @keyframes bump { 30% { transform:scale(1.18); background:#fee2e2; } }
+  @keyframes fade { from { opacity:0; transform:translateY(4px); } to { opacity:1; transform:none; } }
+  @media (prefers-reduced-motion: reduce) { *,*::before,*::after { animation:none !important; transition:none !important; } }
+</style>
+</head>
+<body>
+<nav><div class="wrap">
+  <a class="brand" href="index.html"><img src="images/logo.svg" alt="">Sentinel Swarm</a>
+  <div class="links">
+    <a href="index.html">Project</a>
+    <a href="qr.html" class="cur">QR attendance</a>
+    <a href="wiring.html">Interactive wiring</a>
+    <a href="build.html">Build guide</a>
+    <a href="https://github.com/MeshanNawod/smart-attendance-management-system_v_3">GitHub ↗</a>
+  </div>
+</div></nav>
+
+<header class="hero">
+  <div class="wrap grid">
+    <div>
+      <span class="pill">🔳 Anti-proxy QR attendance · v2</span>
+      <h1>A QR code you <em>can't</em> send to a friend.</h1>
+      <p>The lecturer's screen shows a new code every 5 seconds. A student must scan two codes in a row, during the lecture, from their own phone. A photo, an old code or a borrowed phone all fail.</p>
+      <div class="facts">
+        <div><b>5 s</b><span>each code lives</span></div>
+        <div><b>2</b><span>consecutive scans</span></div>
+        <div><b>1</b><span>phone per student, per lecture</span></div>
+      </div>
+      <div class="btns">
+        <a class="btn gold" href="#try">▶ Try to cheat it</a>
+        <a class="btn ghost" href="#upgrade">What's new in v2</a>
+      </div>
+    </div>
+    <div class="heroqr" aria-label="Live demo QR code that changes every 5 seconds">
+      <canvas id="heroCanvas"></canvas>
+      <div class="meta"><span class="slotchip" id="heroSlot">#0</span><span>demo code · changes in</span>
+        <svg class="ring" viewBox="0 0 36 36"><circle class="bg" cx="18" cy="18" r="15"/><circle class="fg" id="heroRing" cx="18" cy="18" r="15" stroke-dasharray="94.25" stroke-dashoffset="0"/></svg></div>
+    </div>
+  </div>
+</header>
+
+<section id="try">
+  <div class="wrap">
+    <div class="eyebrow">Interactive</div>
+    <h2>Try to cheat it</h2>
+    <p class="lead">This is a working model of the server rules in <code>api/attendance/qr/record.php</code>, with the same checks in the same order and the same messages. Scan normally, or pick a trick below and watch which check stops it.</p>
+
+    <div class="sim">
+      <div class="card">
+        <h3>🖥️ Lecturer screen <small id="lectState">CSC2052 · lecture running</small></h3>
+        <div class="screen">
+          <div class="qrwrap"><canvas id="lectCanvas"></canvas><div class="overlay" id="noLecture">No lecture is running for CSC2052.<br>Start the lecture first, then start the QR session.</div></div>
+          <div class="bar"><span class="slotchip" id="lectSlot">#0</span><span id="lectCount">5.0s</span></div>
+        </div>
+        <div class="stats">
+          <div><b id="stDone" style="color:var(--ok)">0</b><span>Completed</span></div>
+          <div><b id="stPend" style="color:var(--warn)">0</b><span>First scan</span></div>
+          <div><b id="stFlag" style="color:var(--bad)">0</b><span>Flagged</span></div>
+        </div>
+        <div class="lect-actions">
+          <button class="sbtn" id="btnLecture">⏹ End lecture</button>
+          <button class="sbtn" id="btnReset">↺ Reset demo</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3>📱 Student phone</h3>
+        <div class="phone"><div class="inner">
+          <div class="top"><b>Scan QR</b><span class="who" id="who">👤 You · your phone</span></div>
+          <div class="vf" id="vf"><canvas id="vfCanvas" width="240" height="240"></canvas><div class="laser"></div><div class="tag" id="vfTag">● Live camera</div></div>
+          <div class="steps"><i id="s1">1</i><s id="sl"></s><i id="s2">2</i></div>
+          <div class="msg" id="msg"><b>Ready</b>Point the camera at the lecturer's screen and scan.</div>
+          <button class="sbtn primary scanbtn" id="btnScan">📷 Scan the screen</button>
+        </div></div>
+      </div>
+
+      <div class="card checks-card">
+        <h3>🛡️ Server checks <small>in order</small></h3>
+        <ol class="checks" id="checks">
+          <li><span class="n">1</span>It's a Sentinel Swarm attendance QR<code>invalid</code></li>
+          <li><span class="n">2</span>Scanned within 10 s of appearing<code>expired</code></li>
+          <li><span class="n">3</span>The lecture is running<code>no_session</code></li>
+          <li><span class="n">4</span>The code belongs to this lecture<code>invalid</code></li>
+          <li><span class="n">5</span>Not already marked present<code>already_marked</code></li>
+          <li><span class="n">6</span>Enrolled in the course<code>not_enrolled</code></li>
+          <li><span class="n">7</span>This phone hasn't marked another student<code>device_conflict</code></li>
+          <li><span class="n">8</span>Second scan is the very next code<code id="seqCode">first_scan</code></li>
+        </ol>
+      </div>
+    </div>
+
+    <div class="scen" id="scen">
+      <button data-s="normal"><b>✅ Normal check-in</b><span>Scan, wait for the next code, scan again.</span></button>
+      <button data-s="photo"><b>📸 Photo sent to a friend</b><span>A friend at home scans a photo of the code.</span></button>
+      <button data-s="phone"><b>📱 Friend uses your phone</b><span>After you check in, a friend logs in on your phone.</span></button>
+      <button data-s="skip"><b>⏭️ Skip a code</b><span>Scan one code, then one 10 s later.</span></button>
+      <button data-s="ended"><b>🛑 After the lecture</b><span>Scan a code once the lecturer has ended the lecture.</span></button>
+      <button data-s="twice"><b>🔁 Check in twice</b><span>Scan again after attendance is recorded.</span></button>
+    </div>
+    <div class="story" id="story"><p>Pick a scenario, or press “Scan the screen” on the phone yourself.</p></div>
+  </div>
+</section>
+
+<section style="background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <div class="wrap">
+    <div class="eyebrow">How it works</div>
+    <h2>Two codes in a row, ten seconds to scan each</h2>
+    <p class="lead">Time is cut into 5-second <b>slots</b>. Each slot gets a fresh random 128-bit token, stored on the server for the running lecture. The code on screen is just <code>SS-QR|course|token|slot</code>.</p>
+    <div class="tl" id="tl"></div>
+    <div class="tlnote">
+      <div><b>Why two scans?</b>One code can be photographed and forwarded. Two <i>consecutive</i> codes can only be captured by someone watching the live screen, so the second scan proves the student is in the room.</div>
+      <div><b>Why a 10-second window?</b>A code is accepted while it is current and for one slot after, so slow phones and networks are fine. Anything older is <code>expired</code>.</div>
+      <div><b>What does the server keep?</b>The tokens for the last 5 minutes, each scan attempt, and an anonymous hash of the phone's ID. Nothing from the camera leaves the phone except the decoded text.</div>
+    </div>
+  </div>
+</section>
+
+<section id="upgrade">
+  <div class="wrap">
+    <div class="eyebrow">Upgrade</div>
+    <h2>What's new in v2</h2>
+    <p class="lead">The rotating, two-scan design stayed. Testing the real system against a copy of its database found four bugs; they are fixed, and three upgrades close the remaining gaps.</p>
+    <div class="up">
+      <div class="item" style="--c:var(--bad)"><div class="k">Bug fix · biggest</div><h4>Students on the same Wi-Fi were blocked</h4>
+        <div class="ba"><span class="b">Before</span><span>The “one device” check compared IP addresses. On campus Wi-Fi everyone shares one public IP, so after the first student, everyone else got “Another account has already completed QR attendance from this device”.</span>
+        <span class="a">Now</span><span>Each phone has its own anonymous ID, so a whole class on one network can check in.</span></div></div>
+      <div class="item" style="--c:var(--bad)"><div class="k">Bug fix</div><h4>“Database error” after a successful check-in</h4>
+        <div class="ba"><span class="b">Before</span><span>Attendance was saved inside a database transaction, but a table check inside it quietly ended the transaction, so the final step failed and the student saw an error.</span>
+        <span class="a">Now</span><span>Attendance is recorded first, then the scan is closed. Students see “Attendance recorded!”.</span></div></div>
+      <div class="item" style="--c:var(--bad)"><div class="k">Bug fix</div><h4>Scans could finish with no attendance</h4>
+        <div class="ba"><span class="b">Before</span><span>With no lecture running, the scan was still marked complete, for the same reason.</span>
+        <span class="a">Now</span><span>A scan is only completed once attendance is really saved.</span></div></div>
+      <div class="item" style="--c:var(--bad)"><div class="k">Bug fix</div><h4>Admins couldn't use QR</h4>
+        <div class="ba"><span class="b">Before</span><span>The QR API read the wrong session key, so it never recognised an admin.</span>
+        <span class="a">Now</span><span>Admins can show a code and see the live counts for any course.</span></div></div>
+      <div class="item" style="--c:var(--blue)"><div class="k">Upgrade</div><h4>Codes belong to the running lecture</h4>
+        <div class="ba"><span class="b">Before</span><span>Codes were tied to a course and a day.</span>
+        <span class="a">Now</span><span>Each code belongs to one lecture session. Codes stop working when the lecture ends, and two lectures of the same course on one day are kept apart. The lecturer gets a clear message if they start QR before the lecture.</span></div></div>
+      <div class="item" style="--c:var(--blue)"><div class="k">Upgrade</div><h4>One phone, one student, per lecture</h4>
+        <div class="ba"><span class="b">Before</span><span>A friend could log in to an absent student's account on their own phone and scan twice.</span>
+        <span class="a">Now</span><span>A phone that has already marked one student can't mark another in the same lecture: <code>device_conflict</code>.</span></div></div>
+      <div class="item" style="--c:var(--blue)"><div class="k">Upgrade</div><h4>Flagged attempts for the lecturer</h4>
+        <div class="ba"><span class="b">Before</span><span>Blocked attempts left no trace.</span>
+        <span class="a">Now</span><span>Each blocked attempt is logged in <code>qr_flags</code> and counted live on the lecturer's screen.</span></div></div>
+    </div>
+
+    <div class="shots">
+      <figure data-full="images/qr-lecturer.png"><img src="images/qr-lecturer.png" alt="Lecturer QR screen with Completed, First scan and Flagged counters"><figcaption>Lecturer screen in the real system: the morphing code, and the new <b>Flagged</b> counter after a friend tried a borrowed phone.</figcaption></figure>
+      <div>
+        <div class="phones2">
+          <figure data-full="images/qr-student-success.png"><img src="images/qr-student-success.png" alt="Student phone: attendance recorded"><figcaption>Two scans: recorded.</figcaption></figure>
+          <figure data-full="images/qr-student-blocked.png"><img src="images/qr-student-blocked.png" alt="Student phone: device conflict"><figcaption>Borrowed phone: blocked.</figcaption></figure>
+        </div>
+        <figure data-full="images/qr-no-lecture.png" style="margin-top:12px"><img src="images/qr-no-lecture.png" alt="Message: no lecture is running"><figcaption>Starting QR before the lecture now explains what to do.</figcaption></figure>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section style="background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <div class="wrap">
+    <div class="eyebrow">Tested</div>
+    <h2>Tested on the real system</h2>
+    <p class="lead">19 scenario tests against the real PHP API and a copy of the database (with made-up names), all passing, plus a run through the real lecturer and student pages in a browser.</p>
+    <div class="tests">
+      <div>No lecture: lecturer gets a clear message</div><div>Two scans record attendance once</div>
+      <div>Second student on the same Wi-Fi succeeds</div><div>Scanning again → already marked</div>
+      <div>Friend on a used phone → blocked and flagged</div><div>Lecturer sees 2 completed, 1 flagged</div>
+      <div>Photo scanned twice → same code</div><div>Photo 10 s later → expired</div>
+      <div>Skipped a code → starts again</div><div>Made-up token → rejected</div>
+      <div>After the lecture ends → rejected</div><div>Code from an earlier lecture → rejected</div>
+      <div>Second lecture the same day → works</div><div>Admin can show the code</div>
+      <div>Admin can see the counts</div><div>Students can't fetch the code from the API</div>
+      <div>Older pages without a phone ID still work</div><div>Restarting a lecture within 5 s works</div>
+      <div>No errors on the lecturer or student page</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Honest limits</div>
+    <h2>What it doesn't stop</h2>
+    <p class="lead">QR is the quick, no-hardware method. For high-stakes attendance, pair it with fingerprint or face.</p>
+    <div class="limits">
+      <div><b>Two phones in the room</b>A student who is present can scan with their own phone and a second phone logged in as a friend. Fingerprint, RFID or face stop that.</div>
+      <div><b>Clearing the browser</b>The phone ID lives in the browser. Clearing its data or using a private window gives a new ID; the student still has to be watching the live screen.</div>
+      <div><b>A live video call</b>Someone in the room could stream the screen to a friend. The 10-second window and the lecturer's counts make this hard to hide, but not impossible.</div>
+    </div>
+    <h3 style="margin:34px 0 10px">For developers: what changed</h3>
+    <table>
+      <tr><th>File</th><th>Change</th></tr>
+      <tr><td><code>api/attendance/qr/record.php</code></td><td>Lecture-bound tokens, device check, flags, admin role fix, attendance recorded without the broken transaction</td></tr>
+      <tr><td><code>student_dashboard.php</code></td><td>Sends an anonymous per-browser <code>device_id</code> with each scan</td></tr>
+      <tr><td><code>teacher_dashboard.php</code></td><td>“Flagged” counter; clear message when no lecture is running</td></tr>
+      <tr><td><code>sql/migrations/009_qr_upgrade.sql</code></td><td><code>session_id</code> and <code>device_hash</code> columns, <code>qr_flags</code> table (also applied automatically on first use)</td></tr>
+    </table>
+  </div>
+</section>
+
+<footer><div class="wrap">
+  <div><b>Sentinel Swarm</b> · Faculty of Science, University of Peradeniya</div>
+  <div><a href="index.html">Project</a> · <a href="wiring.html">Interactive wiring</a> · <a href="build.html">Build guide</a> · <a href="https://github.com/MeshanNawod/smart-attendance-management-system_v_3">Source</a></div>
+</div></footer>
+
+<dialog id="lb"><img id="lbimg" alt=""></dialog>
+
+<script src="js/qrcode.js"></script>
+<script>
+"use strict";
+const SLOT_MS = 5000, COURSE = "CSC2052";
+let offset = 0;                                   // "fast-forward" for scenarios
+const now = () => Date.now() + offset;
+const slotAt = t => Math.floor(t / SLOT_MS);
+const hex = n => Array.from(crypto.getRandomValues(new Uint8Array(n)), b => b.toString(16).padStart(2, "0")).join("");
+
+function matrixFor(text) {
+  const q = qrcode(0, "M"); q.addData(text); q.make();
+  const n = q.getModuleCount(), m = [];
+  for (let r = 0; r < n; r++) { const row = []; for (let c = 0; c < n; c++) row.push(q.isDark(r, c)); m.push(row); }
+  return m;
+}
+
+/* ── Morphing dot QR, like the lecturer's real screen ─────────────────── */
+class Morph {
+  constructor(canvas, color = "#0f172a") {
+    this.cv = canvas; this.ctx = canvas.getContext("2d"); this.color = color;
+    this.parts = []; this.n = 29; this.t0 = 0; this.resize();
+    addEventListener("resize", () => this.resize());
+  }
+  resize() {
+    const d = devicePixelRatio || 1, w = this.cv.clientWidth || 300;
+    this.cv.width = this.cv.height = Math.round(w * d); this.px = this.cv.width;
+  }
+  set(m) {
+    this.n = m.length; const targets = [];
+    m.forEach((row, r) => row.forEach((on, c) => on && targets.push({ r, c })));
+    this.parts.forEach(p => { p.sr = p.r; p.sc = p.c; p.ss = p.s; });
+    const alive = this.parts.filter(p => !p.dying), grid = new Map(), used = new Set(), next = [];
+    alive.forEach((p, i) => { const k = Math.round(p.tr) * 1000 + Math.round(p.tc); (grid.get(k) || grid.set(k, []).get(k)).push(i); });
+    for (const t of targets) {
+      let best = -1, bd = 1e9;
+      for (let d = 0; d <= 3 && best < 0; d++)
+        for (let dr = -d; dr <= d; dr++) for (let dc = -d; dc <= d; dc++) {
+          if (Math.max(Math.abs(dr), Math.abs(dc)) !== d) continue;
+          for (const i of grid.get((t.r + dr) * 1000 + t.c + dc) || []) {
+            if (used.has(i)) continue; const dist = dr * dr + dc * dc;
+            if (dist < bd) { bd = dist; best = i; }
+          }
+        }
+      if (best >= 0) { used.add(best); const p = alive[best]; p.tr = t.r; p.tc = t.c; p.ts = 1; next.push(p); }
+      else next.push({ r: t.r, c: t.c, sr: t.r, sc: t.c, tr: t.r, tc: t.c, s: 0, ss: 0, ts: 1 });
+    }
+    alive.forEach((p, i) => { if (!used.has(i)) { p.ts = 0; p.tr = p.r; p.tc = p.c; p.dying = true; next.push(p); } });
+    this.parts = next; this.t0 = performance.now();
+  }
+  draw(t) {
+    const k = Math.min((t - this.t0) / 800, 1), e = k < .5 ? 4 * k * k * k : 1 - Math.pow(-2 * k + 2, 3) / 2;
+    const ctx = this.ctx, q = 2, cell = this.px / (this.n + q * 2);
+    ctx.clearRect(0, 0, this.px, this.px); ctx.fillStyle = this.color;
+    for (const p of this.parts) {
+      p.r = p.sr + (p.tr - p.sr) * e; p.c = p.sc + (p.tc - p.sc) * e; p.s = p.ss + (p.ts - p.ss) * e;
+      if (p.s <= 0.01) continue;
+      ctx.globalAlpha = Math.min(1, p.s * 1.2); ctx.beginPath();
+      ctx.arc((p.c + q + .5) * cell, (p.r + q + .5) * cell, cell * .5 * p.s, 0, 7); ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+    if (k >= 1 && this.parts.some(p => p.dying)) this.parts = this.parts.filter(p => !p.dying);
+  }
+}
+
+/* ── Simulated server (mirrors record.php) ────────────────────────────── */
+const S = {};
+function resetServer() {
+  S.lecture = { id: (S.lecture?.id || 0) + 1, running: true };
+  S.tokens = new Map(); S.attempts = new Map(); S.deviceUsed = new Map(); S.flags = 0;
+}
+function tokenFor(slot) {
+  if (!S.lecture.running) return null;
+  const k = S.lecture.id + ":" + slot;
+  if (!S.tokens.has(k)) S.tokens.set(k, hex(16));
+  return S.tokens.get(k);
+}
+const R = (at, status, message, kind) => ({ at, status, message, kind });
+function serverScan(stu, device, data) {
+  const p = data.split("|");
+  if (p.length !== 4 || p[0] !== "SS-QR") return R(0, "invalid", "Not a valid attendance QR.", "bad");
+  const [, course, token, slotS] = p, s = +slotS, cur = slotAt(now());
+  if (cur - s > 1 || s > cur) return R(1, "expired", "This QR has expired. Scan the code on the screen right now.", "bad");
+  if (!S.lecture.running) return R(2, "no_session", `The ${course} lecture is not running.`, "bad");
+  if (S.tokens.get(S.lecture.id + ":" + s) !== token) return R(3, "invalid", "QR not recognised for the current lecture.", "bad");
+  const key = stu.no + ":" + S.lecture.id, att = S.attempts.get(key);
+  if (att && att.completed) return R(4, "already_marked", `Your attendance for ${course} is already recorded.`, "bad");
+  if (!stu.enrolled) return R(5, "not_enrolled", `You are not enrolled in ${course}.`, "bad");
+  const other = S.deviceUsed.get(S.lecture.id + ":" + device);
+  if (other && other !== stu.no) { S.flags++; return R(6, "device_conflict", "This phone has already been used to mark another student present in this lecture. Use your own phone.", "bad"); }
+  if (!att) { S.attempts.set(key, { slot1: s, token1: token, completed: false }); return R(7, "first_scan", "Scan 1 recorded. Scan the next code when it changes.", "half"); }
+  if (token === att.token1) return R(7, "same_qr", `Same QR (#${att.slot1}). Wait for the code to change.`, "warn");
+  if (s <= att.slot1) return R(7, "old_qr", "Please scan the current QR.", "warn");
+  if (s !== att.slot1 + 1) { const was = att.slot1; att.slot1 = s; att.token1 = token; return R(7, "not_consecutive", `QR #${s} does not follow #${was}. Started again from this code.`, "warn"); }
+  att.completed = true; S.deviceUsed.set(S.lecture.id + ":" + device, stu.no);
+  return R(7, "success", "Attendance recorded!", "ok");
+}
+
+/* ── UI ───────────────────────────────────────────────────────────────── */
+const $ = id => document.getElementById(id);
+const hero = new Morph($("heroCanvas"), "#1e293b"), lect = new Morph($("lectCanvas"));
+const vf = $("vfCanvas"), vfx = vf.getContext("2d");
+const YOU = { no: "S/22/112", name: "You", enrolled: true }, FRIEND = { no: "S/22/114", name: "Friend", enrolled: true };
+let user = YOU, device = "your-phone", photo = null, busy = false;
+let heroSlot = -1, heroTok = {}, lectSlot = -1;
+
+function liveData() { const s = slotAt(now()), t = tokenFor(s); return t ? `SS-QR|${COURSE}|${t}|${s}` : null; }
+function setWho() { $("who").textContent = `👤 ${user.name} · ${device === "your-phone" ? "your phone" : "friend's phone"}${photo ? " · 📸 photo" : ""}`; }
+
+function tick(t) {
+  const n = now(), s = slotAt(n), left = (SLOT_MS - (n % SLOT_MS)) / 1000;
+  if (s !== heroSlot) { heroSlot = s; heroTok[s] = heroTok[s] || hex(16); hero.set(matrixFor(`SS-QR|DEMO|${heroTok[s]}|${s}`)); $("heroSlot").textContent = "#" + s; }
+  $("heroRing").setAttribute("stroke-dashoffset", (94.25 * (1 - left / 5)).toFixed(2));
+  if (S.lecture.running && s !== lectSlot) { lectSlot = s; lect.set(matrixFor(liveData())); $("lectSlot").textContent = "#" + s; }
+  $("lectCount").textContent = S.lecture.running ? left.toFixed(1) + "s" : "—";
+  hero.draw(t); lect.draw(t);
+  vfx.fillStyle = "#0b1020"; vfx.fillRect(0, 0, 240, 240);
+  const src = photo ? photo : (S.lecture.running ? $("lectCanvas") : null);
+  if (src) { vfx.save(); vfx.translate(120, 120); vfx.rotate(photo ? -.06 : Math.sin(t / 900) * .02); vfx.fillStyle = "#fff"; vfx.fillRect(-100, -100, 200, 200); vfx.drawImage(src, -95, -95, 190, 190); vfx.restore(); }
+  requestAnimationFrame(tick);
+}
+
+function stats() {
+  let done = 0, pend = 0;
+  for (const [k, a] of S.attempts) if (k.endsWith(":" + S.lecture.id)) a.completed ? done++ : pend++;
+  const set = (id, v) => { const el = $(id); if (el.textContent !== String(v)) { el.textContent = v; el.parentElement.classList.remove("bump"); void el.offsetWidth; el.parentElement.classList.add("bump"); } };
+  set("stDone", done); set("stPend", pend); set("stFlag", S.flags);
+}
+function stepper(stu) {
+  const a = S.attempts.get(stu.no + ":" + S.lecture.id);
+  $("s1").className = a ? "on" : ""; $("sl").className = a && a.completed ? "on" : "";
+  $("s2").className = a && a.completed ? "on" : (a ? "wait" : "");
+}
+function showMsg(r) {
+  const cls = { ok: "ok", half: "ok", warn: "warn", bad: "bad" }[r.kind] || "";
+  const title = r.kind === "ok" ? "🎉 Attendance recorded" : r.kind === "half" ? "✓ Scan 1 of 2" : r.status.replace(/_/g, " ");
+  $("msg").className = "msg " + cls; $("msg").innerHTML = `<b>${title}</b>${r.message}`;
+}
+async function animateChecks(r) {
+  const lis = [...$("checks").children];
+  lis.forEach(li => li.className = "");
+  $("seqCode").textContent = r.at === 7 ? r.status : "success";
+  for (let i = 0; i < lis.length; i++) {
+    await sleep(85);
+    if (i < r.at) lis[i].className = "pass";
+    else if (i === r.at) {
+      lis[i].className = r.kind === "bad" ? "fail" : r.kind === "warn" ? "warn" : (r.kind === "half" ? "warn" : "pass done");
+      if (r.kind === "half") lis[i].className = "pass done";
+    } else lis[i].className = "skip";
+  }
+}
+const sleep = ms => new Promise(res => setTimeout(res, ms));
+
+let lastScanSlot = -1;
+async function doScan(data) {
+  const d = data ?? (photo ? photo.data : liveData()) ?? "";
+  lastScanSlot = +d.split("|")[3] || slotAt(now());
+  const r = serverScan(user, device, d);
+  showMsg(r); stepper(user); stats(); await animateChecks(r);
+  return r;
+}
+
+/* story log */
+function say(text, cls = "") { const p = document.createElement("p"); p.className = cls; p.textContent = text; $("story").append(p); $("story").scrollTop = 1e6; }
+function clearStory() { $("story").innerHTML = ""; }
+function line(r) { say(`→ ${r.status}: ${r.message}`, r.kind === "bad" ? "bad" : r.kind === "warn" ? "warn" : "ok"); }
+
+async function waitNextCode(label = "Waiting for the code to change…") {
+  say(label, "ff");
+  while (slotAt(now()) <= lastScanSlot) await sleep(100);
+  await sleep(250);
+}
+async function fastForward(sec) { say(`⏩ ${sec} seconds later`, "ff"); offset += sec * 1000; await sleep(700); }
+function become(u, d, ph = null) { user = u; device = d; photo = ph; $("vf").classList.toggle("photo", !!ph); $("vfTag").textContent = ph ? "📸 Photo from WhatsApp" : "● Live camera"; setWho(); stepper(u); }
+function snapshot() {
+  const c = document.createElement("canvas"); c.width = c.height = $("lectCanvas").width;
+  c.getContext("2d").fillStyle = "#fff"; c.getContext("2d").fillRect(0, 0, c.width, c.height);
+  c.getContext("2d").drawImage($("lectCanvas"), 0, 0); c.data = liveData(); return c;
+}
+
+const SCEN = {
+  async normal() {
+    become(YOU, "your-phone"); say("You scan the code on the lecturer's screen.");
+    line(await doScan()); await waitNextCode(); say("The code changed. You scan again.");
+    line(await doScan());
+  },
+  async photo() {
+    become(YOU, "your-phone"); const pic = snapshot();
+    say("You photograph the screen and send it to a friend at home.");
+    await sleep(600); become(FRIEND, "friend-phone", pic);
+    say("Friend scans the photo."); line(await doScan());
+    await sleep(900); say("Friend scans the photo again (it's the only code they have)."); line(await doScan());
+    await fastForward(10); say("Friend tries once more."); line(await doScan());
+    say("The second scan needs the next code, which only exists on the live screen.", "ok");
+  },
+  async phone() {
+    become(YOU, "your-phone"); say("You check in normally on your phone.");
+    const a = await doScan(); line(a); if (a.status !== "already_marked") { await waitNextCode(); line(await doScan()); }
+    await sleep(700); become(FRIEND, "your-phone");
+    say("Your friend is absent and asks you to log in as them on your phone.");
+    await sleep(500); line(await doScan());
+    say("Blocked, and the lecturer's Flagged count goes up.", "ok");
+  },
+  async skip() {
+    become(FRIEND, "friend-phone"); S.attempts.delete(FRIEND.no + ":" + S.lecture.id);
+    say("Friend (in class) scans the first code."); line(await doScan());
+    await fastForward(10); say("…then scans a code 10 seconds later, skipping one."); line(await doScan());
+    say("Codes must be consecutive, so the server starts again from this code.", "ok");
+  },
+  async ended() {
+    become(FRIEND, "friend-phone"); const pic = snapshot(); become(FRIEND, "friend-phone", pic);
+    say("Friend keeps a code from the screen. The lecturer ends the lecture."); toggleLecture(false); await sleep(900);
+    line(await doScan());
+    say("Codes only work while their lecture is running.", "ok"); await sleep(1200); toggleLecture(true); say("(Lecture started again for the demo.)", "ff");
+    become(YOU, "your-phone");
+  },
+  async twice() {
+    become(YOU, "your-phone");
+    const a = S.attempts.get(YOU.no + ":" + S.lecture.id);
+    if (!a || !a.completed) { say("First, you check in."); line(await doScan()); await waitNextCode(); line(await doScan()); await sleep(600); }
+    say("You scan the screen again."); line(await doScan());
+  },
+};
+
+function lockUI(on) {
+  busy = on; document.querySelectorAll("#scen button, #btnScan, #btnLecture, #btnReset").forEach(b => b.disabled = on);
+}
+document.querySelectorAll("#scen button").forEach(b => b.onclick = async () => {
+  if (busy) return; lockUI(true); b.classList.add("run"); clearStory();
+  try { await SCEN[b.dataset.s](); } finally { b.classList.remove("run"); lockUI(false); }
+});
+$("btnScan").onclick = async () => { if (busy) return; lockUI(true); clearStory(); say(`${user.name} scans the ${photo ? "photo" : "screen"}.`); line(await doScan()); lockUI(false); };
+function toggleLecture(on) {
+  if (on && !S.lecture.running) { resetServer(); lectSlot = -1; }
+  else if (!on) S.lecture.running = false;
+  $("noLecture").classList.toggle("show", !S.lecture.running);
+  $("btnLecture").textContent = S.lecture.running ? "⏹ End lecture" : "▶ Start lecture";
+  $("lectState").textContent = COURSE + (S.lecture.running ? " · lecture running" : " · no lecture");
+  stats(); stepper(user);
+}
+$("btnLecture").onclick = () => toggleLecture(!S.lecture.running);
+$("btnReset").onclick = () => { offset = 0; S.lecture.running = false; toggleLecture(true); become(YOU, "your-phone"); $("msg").className = "msg"; $("msg").innerHTML = "<b>Ready</b>Point the camera at the lecturer's screen and scan."; [...$("checks").children].forEach(li => li.className = ""); clearStory(); say("Demo reset. New lecture started."); };
+
+/* timeline of slots */
+function buildTimeline() {
+  const s0 = slotAt(Date.now()), tl = $("tl");
+  const labels = ["Too old: expired", "Scan 1 ✓", "Scan 2 ✓", "Not made yet", "Not made yet"];
+  const times = ["10 s ago", "5 s ago", "now", "in 5 s", "in 10 s"];
+  tl.innerHTML = "";
+  for (let i = 0; i < 5; i++) {
+    const s = s0 + i - 2, c = document.createElement("canvas"); c.className = "mini"; c.width = c.height = 58;
+    const m = matrixFor(`SS-QR|${COURSE}|${hex(16)}|${s}`), n = m.length, k = 58 / n, x = c.getContext("2d");
+    x.fillStyle = "#fff"; x.fillRect(0, 0, 58, 58); x.fillStyle = "#0f172a";
+    m.forEach((row, r) => row.forEach((on, cc) => on && x.fillRect(cc * k, r * k, k + .3, k + .3)));
+    const d = document.createElement("div"); d.className = "slot" + (i === 1 ? " s1" : i === 2 ? " s2" : "");
+    d.innerHTML = `<small>${times[i]}</small><b>#${s}</b>`; d.append(c);
+    const lab = document.createElement("div"); lab.className = "lab"; lab.textContent = labels[i]; d.append(lab); tl.append(d);
+    if (i === 0) d.classList.add("x");
+    if (i > 2) { d.style.opacity = .45; lab.style.color = "var(--muted)"; }
+  }
+}
+
+/* lightbox */
+const lb = $("lb"); document.querySelectorAll("figure[data-full]").forEach(f => f.onclick = () => { $("lbimg").src = f.dataset.full; lb.showModal(); }); lb.onclick = () => lb.close();
+
+resetServer(); setWho(); buildTimeline(); stats(); requestAnimationFrame(tick);
+</script>
+</body>
+</html>
