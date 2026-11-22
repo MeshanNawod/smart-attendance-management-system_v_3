@@ -9,7 +9,7 @@
 // Comment out any feature you do NOT have hardware for.
 #define USE_FINGERPRINT     // Enable FM10A fingerprint sensor
 #define USE_RFID            // Enable MFRC522 RFID-RC522 reader
-#define USE_LCD             // Enable I2C LCD display (16x2 or 20x4)
+#define USE_LCD             // Enable I2C LCD display (16x4)
 #define USE_HW084           // Enable HW-084 (now using onboard ESP32 clock)
 #define USE_KEYPAD          // Enable 4×4 matrix keypad (install Keypad library)
 // ───────────────────────────────────────────────────────────
@@ -129,7 +129,7 @@ void pollKeypad() {
 #endif
 
 // ============================================================
-// ⚙️ SYSTEM & HARDWARE PIN MAPPING
+// SYSTEM & HARDWARE PIN MAPPING
 // ============================================================
 // Default Configuration Parameters
 const char* DEFAULT_SSID = "Card ekak daganin bn";
@@ -1761,7 +1761,7 @@ int scanSDAndImport() {
 
 void runEnrollment(int overrideSlot) {
   if (!fpOK) {
-    espPrintln("[ENROLL] ⚠ Fingerprint sensor not detected. Fix power (external 3.3V) and wiring.");
+    espPrintln("[ENROLL] WARNING: Fingerprint sensor not detected. Fix power (external 3.3V) and wiring.");
     lcdResult(IC_FAIL, "Sensor offline", "Check power and", "sensor wiring", "", 0);
     delay(2000);
     printMenu();
@@ -2122,7 +2122,7 @@ void reclaimRstForRfid() {
   // Verify the chip is alive
   byte ver = mfrc522.PCD_ReadRegister(MFRC522::VersionReg);
   if (ver == 0x00 || ver == 0xFF) {
-    espPrintln("[RFID] ⚠ reclaimRstForRfid: MFRC522 NOT responding after reset!");
+    espPrintln("[RFID] WARNING: reclaimRstForRfid: MFRC522 NOT responding after reset!");
   }
   i2cBusDirty = false;
 }
@@ -3293,7 +3293,7 @@ void deleteFingerprintSlot() {
 
 void wipeEntireDatabase() {
   espPrintln("\n=============================================");
-  espPrintln("    ⚠️  CRITICAL WIPE SENSOR DATABASE ⚠️    ");
+  espPrintln("    WARNING: CRITICAL WIPE OF SENSOR DATABASE    ");
   espPrintln("=============================================");
   espPrintln("This deletes all stored biometrics templates!");
   espPrintln("Type 'WIPE' to confirm or 'cancel' to exit:");
@@ -4079,7 +4079,7 @@ void setup() {
   }
 
   if (!fpOK) {
-    espPrintln("[SENSOR] ⚠ FM10A NOT DETECTED");
+    espPrintln("[SENSOR] WARNING: FM10A NOT DETECTED");
     espPrintln("[SENSOR] If it works alone but not with all components connected:");
     espPrintln("[SENSOR] → 3.3V rail overloaded. Use external 3.3V supply.");
     espPrintln("[SENSOR] → Verify wiring: VCC=3.3V, GND=GND, RX→D17, TX→D16, T-out→D35");
@@ -4125,7 +4125,7 @@ void setup() {
   mfrc522.PCD_AntennaOn();
   byte rfidVer = mfrc522.PCD_ReadRegister(MFRC522::VersionReg);
   if (rfidVer == 0x00 || rfidVer == 0xFF) {
-    espPrintln("[SENSOR] ⚠ MFRC522 NOT DETECTED on SPI bus!");
+    espPrintln("[SENSOR] WARNING: MFRC522 NOT DETECTED on SPI bus!");
   } else {
     char vbuf[48]; snprintf(vbuf, sizeof(vbuf), "[SENSOR] MFRC522 detected (firmware v0x%02X)", rfidVer);
     espPrintln(vbuf);
@@ -4180,7 +4180,7 @@ void setup() {
       mySerial.end();
     }
     if (!fpOK) {
-      espPrintln("[SENSOR] ⚠ FM10A still not detected after rail stabilization.");
+      espPrintln("[SENSOR] WARNING: FM10A still not detected after rail stabilization.");
       espPrintln("[SENSOR] → External 3.3V regulator likely required for reliable operation.");
     }
   }
@@ -4196,7 +4196,7 @@ void setup() {
     if (Wire.endTransmission() == 0) { lcdAddr = addrs[i]; break; }
   }
   if (lcdAddr == 0) {
-    espPrintln("[LCD] ⚠ No I2C LCD found. Checked: 0x27,0x3F,0x3E,0x23,0x21,0x25,0x26,0x20");
+    espPrintln("[LCD] WARNING: No I2C LCD found. Checked: 0x27,0x3F,0x3E,0x23,0x21,0x25,0x26,0x20");
     espPrintln("[LCD] Verify SDA/D21 and SCL/D22 wiring, or run I2C scanner to find the address.");
   } else {
     char buf[40]; snprintf(buf, sizeof(buf), "[LCD] Found display at 0x%02X", lcdAddr);
@@ -4721,7 +4721,7 @@ void loop() {
       static unsigned long lastSensorWarn = 0;
       if (millis() - lastSensorWarn > 10000) {
         lastSensorWarn = millis();
-        espPrintln("[ATTEND] ⚠ Both sensors disabled. FP=" + String(fpOK?"OK":"FAIL") + " RFID=" + String(enableRfid?"ON":"OFF"));
+        espPrintln("[ATTEND] WARNING: Both sensors disabled. FP=" + String(fpOK?"OK":"FAIL") + " RFID=" + String(enableRfid?"ON":"OFF"));
         espPrintln("[ATTEND] Enable RFID: SETCONFIG ENABLE_RFID=1  |  Fix FM10A: external 3.3V supply");
       }
     }
