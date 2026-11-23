@@ -12,13 +12,13 @@ A full-stack, multi-modal **attendance management system** combining IoT hardwar
 
 **Fingerprint · RFID · Face · Voice · QR · Manual**
 
-[![Project website](https://img.shields.io/badge/Project_website-Open-9b1c1c?style=for-the-badge&logo=githubpages&logoColor=white)](https://meshannawod.github.io/smart-attendance-management-system_v_3/)
+[![Project website](https://img.shields.io/badge/Project_website-Open-9b1c1c?style=for-the-badge&logo=githubpages&logoColor=white)](https://meshannawod.github.io/smart-attendance-management-system_v_3/) [![Instructables](https://img.shields.io/badge/Instructables-Build_guide-FAB306?style=for-the-badge&logo=instructables&logoColor=black)](https://www.instructables.com/Sentinel-Swarm-Smart-Attendance-System-With-ESP32-/)
 
 <img src="docs/images/admin-dashboard.png" alt="Admin dashboard with live attendance logs" width="900">
 
 </div>
 
-> **Versions:** this is **v3**, the complete system. Earlier stages: [v2](https://github.com/MeshanNawod/smart-attendance-management-system_v_2) (first PHP dashboard with face recognition) and [v1](https://github.com/MeshanNawod/smart-attendance-management-system_v_1) (deployment pipeline). Project website: **[meshannawod.github.io/smart-attendance-management-system_v_3](https://meshannawod.github.io/smart-attendance-management-system_v_3/)**.
+> **Versions:** this is **v3**, the complete system. Earlier stages: [v2](https://github.com/MeshanNawod/smart-attendance-management-system_v_2) (first PHP dashboard with face recognition) and [v1](https://github.com/MeshanNawod/smart-attendance-management-system_v_1) (deployment pipeline). Project website: **[meshannawod.github.io/smart-attendance-management-system_v_3](https://meshannawod.github.io/smart-attendance-management-system_v_3/)**. Step-by-step build on **[Instructables](https://www.instructables.com/Sentinel-Swarm-Smart-Attendance-System-With-ESP32-/)**.
 
 ---
 
